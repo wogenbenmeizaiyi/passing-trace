@@ -1,4 +1,16 @@
 <Solution>
+  <Folder Name="/Identity/">
+    <Project Path="Identity/PassingTrace.Identity.Application/PassingTrace.Identity.Application.csproj" />
+    <Project Path="Identity/PassingTrace.Identity.Authentication/PassingTrace.Identity.Authentication.csproj" />
+    <Project Path="Identity/PassingTrace.Identity.AuthorizationServer/PassingTrace.Identity.AuthorizationServer.csproj" />
+    <Project Path="Identity/PassingTrace.Identity.Domain/PassingTrace.Identity.Domain.csproj" />
+    <Project Path="Identity/PassingTrace.Identity.Endpoints/PassingTrace.Identity.Endpoints.csproj" />
+    <Project Path="Identity/PassingTrace.Identity.Infrastructure/PassingTrace.Identity.Infrastructure.csproj" />
+    <Project Path="Identity/PassingTrace.Identity.Sessions/PassingTrace.Identity.Sessions.csproj" />
+    <Project Path="Identity/PassingTrace.Identity.Users/PassingTrace.Identity.Users.csproj" />
+  </Folder>
+  <Folder Name="/解决方案项/">
+    <File Path="Directory.Build.props" />
+  </Folder>
   <Project Path="AppHost/AppHost.csproj" />
-  <Project Path="PassingTrace.Auth/PassingTrace.Auth.csproj" />
 </Solution>

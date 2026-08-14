@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <ItemGroup>
+    <ProjectReference Include="..\PassingTrace.Identity.Authentication\PassingTrace.Identity.Authentication.csproj" />
+    <ProjectReference Include="..\PassingTrace.Identity.Endpoints\PassingTrace.Identity.Endpoints.csproj" />
+    <ProjectReference Include="..\PassingTrace.Identity.Infrastructure\PassingTrace.Identity.Infrastructure.csproj" />
+  </ItemGroup>
+</Project>

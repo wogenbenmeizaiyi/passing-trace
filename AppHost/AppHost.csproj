@@ -2,14 +2,10 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net10.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-    <UserSecretsId>79ca282b-ccf9-4f81-8709-329101b5a897</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\PassingTrace.Auth\PassingTrace.Auth.csproj" />
+    <ProjectReference Include="..\Identity\PassingTrace.Identity.AuthorizationServer\PassingTrace.Identity.AuthorizationServer.csproj" />
   </ItemGroup>
 
 </Project>

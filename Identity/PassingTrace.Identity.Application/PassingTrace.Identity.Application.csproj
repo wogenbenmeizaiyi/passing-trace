@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\PassingTrace.Identity.Domain\PassingTrace.Identity.Domain.csproj" />
+  </ItemGroup>
+</Project>
