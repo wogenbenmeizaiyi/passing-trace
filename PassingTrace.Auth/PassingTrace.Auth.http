@@ -1,0 +1,6 @@
+@PassingTrace.Auth_HostAddress = http://localhost:5245
+
+GET {{PassingTrace.Auth_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

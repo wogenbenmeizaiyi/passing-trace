@@ -1,0 +1,35 @@
+# Visual Studio / IDE
+.vs/
+.idea/
+.vscode/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# .NET build outputs
+**/bin/
+**/obj/
+artifacts/
+TestResults/
+coverage/
+coverage.*
+
+# Local tooling and temporary review artifacts
+.codex-tmp/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+appsettings.*.local.json
+secrets*.json
+*.pfx
+*.p12
+*.pem
+*.key
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
