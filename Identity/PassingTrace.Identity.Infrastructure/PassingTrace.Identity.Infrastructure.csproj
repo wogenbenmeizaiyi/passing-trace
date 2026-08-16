@@ -1,7 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
-    <ProjectReference Include="..\PassingTrace.Identity.Application\PassingTrace.Identity.Application.csproj" />
-    <ProjectReference Include="..\PassingTrace.Identity.Sessions\PassingTrace.Identity.Sessions.csproj" />
-    <ProjectReference Include="..\PassingTrace.Identity.Users\PassingTrace.Identity.Users.csproj" />
+    <ProjectReference Include="..\PassingTrace.Identity.Domain\PassingTrace.Identity.Domain.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="Persistence\" />
   </ItemGroup>
 </Project>
