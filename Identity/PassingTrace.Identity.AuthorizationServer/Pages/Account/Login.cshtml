@@ -1,0 +1,27 @@
+@page "/account/login"
+@model Account.LoginModel
+@{
+    ViewData["Title"] = "登录";
+}
+
+<section class="card compact">
+    <p class="eyebrow">WELCOME BACK</p>
+    <h1>登录 PassingTrace</h1>
+    <p class="lede">使用你的唯一用户名和密码继续。</p>
+
+    <form method="post">
+        <input asp-for="ReturnUrl" type="hidden" />
+        <div asp-validation-summary="ModelOnly" class="validation"></div>
+
+        <label asp-for="Input.Username"></label>
+        <input asp-for="Input.Username" autocomplete="username" autofocus />
+        <span asp-validation-for="Input.Username" class="validation"></span>
+
+        <label asp-for="Input.Password"></label>
+        <input asp-for="Input.Password" autocomplete="current-password" />
+        <span asp-validation-for="Input.Password" class="validation"></span>
+
+        <button class="button full" type="submit">登录</button>
+    </form>
+    <p class="footnote">账号只能通过 PassingTrace Android 客户端首次创建。</p>
+</section>

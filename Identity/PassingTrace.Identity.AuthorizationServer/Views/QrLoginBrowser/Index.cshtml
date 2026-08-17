@@ -1,0 +1,61 @@
+@model PassingTrace.Identity.AuthorizationServer.Controllers.QrLoginPageModel
+@{
+    Layout = "~/Pages/Shared/_Layout.cshtml";
+    ViewData["Title"] = "手机扫码登录";
+}
+
+<section class="card compact qr-login" data-transaction-id="@Model.Id" data-poll-seconds="@Model.PollIntervalSeconds">
+    <p class="eyebrow">SCAN TO SIGN IN</p>
+    <h1>使用 PassingTrace 手机端扫码</h1>
+    <p class="lede">正在登录 <strong>@Model.ClientDisplayName</strong>。请在手机上确认网站与浏览器信息。</p>
+
+    <div class="qr-code" aria-label="PassingTrace 登录二维码">@Html.Raw(Model.Svg)</div>
+    <p id="qr-status" class="signed-in">等待手机确认……</p>
+
+    <form id="complete-form" method="post" action="/account/qr-login/@Model.Id/complete" hidden>
+        @Html.AntiForgeryToken()
+    </form>
+</section>
+
+<script>
+(() => {
+    const root = document.querySelector('.qr-login');
+    const status = document.getElementById('qr-status');
+    const form = document.getElementById('complete-form');
+    const id = root.dataset.transactionId;
+    const delay = Number(root.dataset.pollSeconds) * 1000;
+    let stopped = false;
+
+    async function poll() {
+        if (stopped) return;
+        try {
+            const response = await fetch(`/account/qr-login/${id}/status`, {
+                credentials: 'same-origin',
+                cache: 'no-store'
+            });
+            if (!response.ok) throw new Error('status');
+            const result = await response.json();
+            if (result.status === 'approved') {
+                stopped = true;
+                status.textContent = '已在手机上确认，正在完成登录……';
+                form.submit();
+                return;
+            }
+            if (result.status === 'rejected') {
+                stopped = true;
+                status.textContent = '手机已拒绝本次登录。';
+                return;
+            }
+            if (result.status === 'expired') {
+                stopped = true;
+                status.textContent = '二维码已过期，请返回应用重新登录。';
+                return;
+            }
+        } catch {
+            status.textContent = '暂时无法查询状态，正在重试……';
+        }
+        window.setTimeout(poll, delay);
+    }
+    window.setTimeout(poll, delay);
+})();
+</script>

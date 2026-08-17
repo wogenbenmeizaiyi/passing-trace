@@ -1,0 +1,24 @@
+@page
+@{
+    ViewData["Title"] = "Identity";
+}
+
+<section class="card">
+    <p class="eyebrow">IDENTITY SERVICE</p>
+    <h1>一个账号，进入 PassingTrace。</h1>
+    <p class="lede">这里负责统一登录，并向 PassingTrace 客户端和 API 签发标准 OpenID Connect 令牌。</p>
+
+    <div class="actions">
+        @if (User.Identity?.IsAuthenticated == true)
+        {
+            <span class="signed-in">已登录：@User.Identity.Name</span>
+            <a class="button secondary" href="/connect/logout">退出登录</a>
+        }
+        else
+        {
+            <p class="signed-in">请从 PassingTrace Android 客户端登录；Web 与桌面端使用手机扫码授权。</p>
+        }
+    </div>
+
+    <a class="metadata" href="/.well-known/openid-configuration">查看 OpenID Connect 配置</a>
+</section>

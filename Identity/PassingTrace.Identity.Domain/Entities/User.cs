@@ -1,44 +1,22 @@
-﻿using PassingTrace.Identity.Domain.Enums;
+using Microsoft.AspNetCore.Identity;
+using PassingTrace.Identity.Domain.Enums;
 
-namespace PassingTrace.Identity.Domain.Entities
+namespace PassingTrace.Identity.Domain.Entities;
+
+/// <summary>
+/// PassingTrace 的本地用户。用户名和密码能力由 ASP.NET Core Identity 提供。
+/// </summary>
+public sealed class User : IdentityUser<long>
 {
-    public sealed class User
-    {
-        public long Id { get; set; }
+    /// <summary>账号的业务状态；Disabled 用户即使凭据正确也不能继续授权。</summary>
+    public UserStatus Status { get; set; } = UserStatus.Active;
 
-        /// <summary>
-        /// 邮箱
-        /// </summary>
-        public string Email { get; set; } = null!;
+    /// <summary>账号创建时间，统一使用 UTC 时间。</summary>
+    public DateTimeOffset CreatedAt { get; set; }
 
-        /// <summary>
-        /// 登录密码。当前仅用于验证数据库链路，后续必须替换为安全的密码哈希。
-        /// </summary>
-        public string Password { get; set; } = null!;
+    /// <summary>账号业务数据最后更新时间，统一使用 UTC 时间。</summary>
+    public DateTimeOffset UpdatedAt { get; set; }
 
-        /// <summary>
-        /// 邮箱是否已验证
-        /// </summary>
-        public bool EmailVerified { get; set; }
-
-        /// <summary>
-        /// 用户状态
-        /// </summary>
-        public UserStatus Status { get; set; } = UserStatus.Active;
-
-        /// <summary>
-        /// Token 版本，用于强制所有登录失效
-        /// </summary>
-        public int TokenVersion { get; set; }
-
-        public DateTime CreatedAt { get; set; }
-
-        public DateTime UpdatedAt { get; set; }
-
-        /// <summary>
-        /// 最后登录时间
-        /// </summary>
-        public DateTime? LastLoginAt { get; set; }
-    }
-
+    /// <summary>最近一次用户名密码登录成功的时间。</summary>
+    public DateTimeOffset? LastLoginAt { get; set; }
 }

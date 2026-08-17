@@ -1,11 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
+    <ProjectReference Include="..\PassingTrace.Identity.Application\PassingTrace.Identity.Application.csproj" />
     <ProjectReference Include="..\PassingTrace.Identity.Domain\PassingTrace.Identity.Domain.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.11" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
+    <PackageReference Include="OpenIddict.EntityFrameworkCore" Version="7.6.0" />
   </ItemGroup>
   <ItemGroup>
-    <Folder Include="Persistence\" />
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 </Project>

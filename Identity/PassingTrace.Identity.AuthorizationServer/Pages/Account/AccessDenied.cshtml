@@ -1,0 +1,11 @@
+@page "/account/access-denied"
+@{
+    ViewData["Title"] = "无权访问";
+}
+
+<section class="card compact">
+    <p class="eyebrow">ACCESS DENIED</p>
+    <h1>当前账号无权访问。</h1>
+    <p class="lede">请返回客户端重新发起请求，或换一个账号登录。</p>
+    <a class="button" asp-page="/Index">返回首页</a>
+</section>
