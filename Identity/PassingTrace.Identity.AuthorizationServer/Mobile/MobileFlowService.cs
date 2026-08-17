@@ -17,6 +17,7 @@ namespace PassingTrace.Identity.AuthorizationServer.Mobile;
 public sealed class MobileFlowService(
     IdentityDbContext dbContext,
     UserManager<User> userManager,
+    SignInManager<User> signInManager,
     ILookupNormalizer normalizer,
     FirstPartyClientRegistry clients,
     IOptions<MobileRegistrationOptions> options,
@@ -164,6 +165,78 @@ public sealed class MobileFlowService(
             deviceSecret);
     }
 
+    public async Task<RegistrationResponse> PasswordLoginAsync(
+        MobilePasswordLoginRequest request,
+        Uri publicOrigin,
+        CancellationToken cancellationToken)
+    {
+        ValidateMobileAuthorizationRequest(
+            request.ClientId,
+            request.RedirectUri,
+            request.CodeChallenge);
+
+        var user = await userManager.FindByNameAsync(request.Username);
+        if (user is null || user.Status != UserStatus.Active)
+        {
+            throw InvalidCredentials();
+        }
+
+        var result = await signInManager.CheckPasswordSignInAsync(
+            user,
+            request.Password,
+            lockoutOnFailure: true);
+        if (!result.Succeeded)
+        {
+            throw InvalidCredentials();
+        }
+
+        var now = timeProvider.GetUtcNow();
+        var deviceSecret = SecretEncoding.Generate();
+        var deviceName = string.IsNullOrWhiteSpace(request.DeviceName)
+            ? "My Android"
+            : request.DeviceName.Trim()[..Math.Min(request.DeviceName.Trim().Length, 100)];
+        var device = new MobileDevice
+        {
+            Id = Guid.CreateVersion7(),
+            UserId = user.Id,
+            User = user,
+            DisplayName = deviceName,
+            SecretHash = SecretEncoding.Hash(deviceSecret),
+            CreatedAt = now,
+            LastUsedAt = now,
+            ConcurrencyToken = Guid.NewGuid()
+        };
+        dbContext.MobileDevices.Add(device);
+
+        var handoffSecret = SecretEncoding.Generate();
+        var handoff = new MobileAuthorizationTicket
+        {
+            Id = Guid.CreateVersion7(),
+            TicketHash = SecretEncoding.Hash(handoffSecret),
+            TicketType = MobileAuthorizationTicketType.RegistrationHandoff,
+            UserId = user.Id,
+            ClientId = request.ClientId,
+            RedirectUri = request.RedirectUri,
+            CodeChallenge = request.CodeChallenge,
+            State = request.State,
+            Nonce = request.Nonce,
+            CreatedAt = now,
+            ExpiresAt = now.AddSeconds(_options.TicketLifetimeSeconds),
+            ConcurrencyToken = Guid.NewGuid()
+        };
+        dbContext.MobileAuthorizationTickets.Add(handoff);
+
+        user.LastLoginAt = now;
+        user.UpdatedAt = now;
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return new RegistrationResponse(
+            BuildAuthorizeUrl(publicOrigin, handoff, "handoff_code", handoffSecret),
+            _options.TicketLifetimeSeconds,
+            device.Id,
+            deviceSecret);
+    }
+
     public async Task<AuthorizationLaunchResponse> CreateAuthorizationLaunchAsync(
         CreateAuthorizationLaunchRequest request,
         Uri publicOrigin,
@@ -279,6 +352,12 @@ public sealed class MobileFlowService(
             throw new MobileFlowException("invalid_bootstrap_code", "初始化注册码无效。", 403);
         }
     }
+
+    private static MobileFlowException InvalidCredentials() =>
+        new(
+            "invalid_credentials",
+            "用户名或密码错误，或账号暂时不可用。",
+            401);
 
     private static string ComputeIntentHash(MobileAuthorizationTicket intent)
     {

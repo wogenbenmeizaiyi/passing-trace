@@ -53,7 +53,7 @@ class AuthService {
        _http = httpClient ?? http.Client(),
        _appLinks = appLinks ?? AppLinks();
 
-  static const defaultIdentityUrl = 'http://10.0.2.2:56229';
+  static const defaultIdentityUrl = 'http://192.168.31.210:56229';
   static const _identityUrlKey = 'identity_url';
   static const _deviceIdKey = 'device_id';
   static const _deviceSecretKey = 'device_secret';
@@ -141,6 +141,48 @@ class AuthService {
       deviceSecret: registration['deviceSecret'] as String,
     );
     return session;
+  }
+
+  Future<AuthSession> loginWithPassword({
+    required String identityBaseUrl,
+    required String username,
+    required String password,
+    required String deviceName,
+  }) async {
+    final baseUrl = _normalizeBaseUrl(identityBaseUrl);
+    final pkce = _createPkce();
+    final state = _randomSecret(32);
+    final nonce = _randomSecret(32);
+    final response = await _postJson('$baseUrl/api/mobile/logins', {
+      'username': username,
+      'password': password,
+      'clientId': mobileClientId,
+      'redirectUri': mobileRedirectUri,
+      'codeChallenge': pkce.challenge,
+      'state': state,
+      'nonce': nonce,
+      'deviceName': deviceName,
+    });
+
+    await _storage.write(key: _identityUrlKey, value: baseUrl);
+    await _storage.write(
+      key: _deviceIdKey,
+      value: response['deviceId'] as String,
+    );
+    await _storage.write(
+      key: _deviceSecretKey,
+      value: response['deviceSecret'] as String,
+    );
+
+    return _authorize(
+      baseUrl: baseUrl,
+      authorizeUrl: Uri.parse(response['authorizeUrl'] as String),
+      verifier: pkce.verifier,
+      expectedState: state,
+      nonce: nonce,
+      deviceId: response['deviceId'] as String,
+      deviceSecret: response['deviceSecret'] as String,
+    );
   }
 
   Future<AuthSession> login(AuthSession current) async {
@@ -246,7 +288,7 @@ class AuthService {
     required String deviceId,
     required String deviceSecret,
   }) async {
-    final callbackFuture = _waitForCallback();
+    final callbackFuture = _waitForCallback(expectedState);
     if (!await launchUrl(authorizeUrl, mode: LaunchMode.externalApplication)) {
       throw const AuthException('无法打开系统浏览器。');
     }
@@ -274,7 +316,6 @@ class AuthService {
         codeVerifier: verifier,
         nonce: nonce,
         serviceConfiguration: _configuration(baseUrl),
-        scopes: mobileScopes,
         allowInsecureConnections: _allowsInsecure(baseUrl),
       ),
     );
@@ -291,16 +332,17 @@ class AuthService {
     );
   }
 
-  Future<Uri> _waitForCallback() async {
+  Future<Uri> _waitForCallback(String expectedState) async {
+    bool isExpectedCallback(Uri uri) =>
+        uri.scheme == 'com.passingtrace.mobile' &&
+        uri.path == '/oauth2redirect' &&
+        uri.queryParameters['state'] == expectedState;
+
     final initial = await _appLinks.getInitialLink();
-    if (initial != null && initial.scheme == 'com.passingtrace.mobile') {
+    if (initial != null && isExpectedCallback(initial)) {
       return initial;
     }
-    return _appLinks.uriLinkStream.firstWhere(
-      (uri) =>
-          uri.scheme == 'com.passingtrace.mobile' &&
-          uri.path == '/oauth2redirect',
-    );
+    return _appLinks.uriLinkStream.firstWhere(isExpectedCallback);
   }
 
   Future<AuthSession> _saveTokens(AuthSession base, TokenResponse token) async {
@@ -360,10 +402,7 @@ class AuthService {
   Uri _validateQrUri(String identityBaseUrl, String rawValue) {
     final uri = Uri.tryParse(rawValue.trim());
     final expected = Uri.parse(identityBaseUrl);
-    final developmentHttp =
-        kDebugMode &&
-        uri?.scheme == 'http' &&
-        (uri?.host == '10.0.2.2' || uri?.host == 'localhost');
+    final developmentHttp = kDebugMode && uri?.scheme == 'http';
     if (uri == null ||
         (uri.scheme != 'https' && !developmentHttp) ||
         uri.host != expected.host ||

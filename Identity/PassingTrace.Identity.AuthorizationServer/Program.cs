@@ -199,9 +199,9 @@ else
 {
     app.UseExceptionHandler("/error");
     app.UseHsts();
+    app.UseHttpsRedirection();
 }
 
-app.UseHttpsRedirection();
 app.UseStaticFiles();
 app.UseStatusCodePages();
 app.UseRouting();

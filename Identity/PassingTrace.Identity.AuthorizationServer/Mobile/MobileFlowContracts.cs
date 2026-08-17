@@ -17,6 +17,16 @@ public sealed record CompleteRegistrationRequest(
     [Required] string BootstrapCode,
     string DeviceName = "My Android");
 
+public sealed record MobilePasswordLoginRequest(
+    [Required] string Username,
+    [Required] string Password,
+    [Required] string ClientId,
+    [Required] string RedirectUri,
+    [Required] string CodeChallenge,
+    string? State,
+    string? Nonce,
+    string DeviceName = "My Android");
+
 public sealed record CreateAuthorizationLaunchRequest(
     [Required] string ClientId,
     [Required] string RedirectUri,

@@ -143,6 +143,48 @@ public sealed class IdentityFlowTests(IdentityWebApplicationFactory factory)
     }
 
     [Fact]
+    public async Task MobilePasswordLogin_BindsNewDevice_AndIssuesToken()
+    {
+        var username = Unique("mobile_login");
+        const string password = "a secure passing trace phrase";
+        using var registrationClient = CreateBrowserClient();
+        await RegisterMobileAsync(registrationClient, username);
+
+        using var loginClient = CreateBrowserClient();
+        var authorization = CreateAuthorizationRequest(
+            "passingtrace-mobile",
+            "com.passingtrace.mobile:/oauth2redirect",
+            includeApprovalScope: true);
+        var response = await loginClient.PostAsJsonAsync(
+            "/api/mobile/logins",
+            new
+            {
+                username,
+                password,
+                clientId = "passingtrace-mobile",
+                redirectUri = "com.passingtrace.mobile:/oauth2redirect",
+                codeChallenge = authorization.Challenge,
+                state = "mobile-password-login",
+                deviceName = "Second Android"
+            });
+        response.EnsureSuccessStatusCode();
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.NotEqual(Guid.Empty, body.GetProperty("deviceId").GetGuid());
+        Assert.False(string.IsNullOrWhiteSpace(body.GetProperty("deviceSecret").GetString()));
+
+        var grantResponse = await loginClient.GetAsync(body.GetProperty("authorizeUrl").GetString()!);
+        Assert.Equal(HttpStatusCode.Redirect, grantResponse.StatusCode);
+        var code = QueryHelpers.ParseQuery(grantResponse.Headers.Location!.Query)["code"].ToString();
+        var tokens = await ExchangeCodeAsync(
+            loginClient,
+            code,
+            authorization.Verifier,
+            "passingtrace-mobile",
+            "com.passingtrace.mobile:/oauth2redirect");
+        Assert.False(string.IsNullOrWhiteSpace(tokens.AccessToken));
+    }
+
+    [Fact]
     public async Task TokenEndpoint_RejectsWrongPkceVerifier()
     {
         using var client = CreateBrowserClient();

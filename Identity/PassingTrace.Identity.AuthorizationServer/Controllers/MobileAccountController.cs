@@ -24,6 +24,14 @@ public sealed class MobileAccountController(MobileFlowService mobileFlow) : Cont
             () => mobileFlow.CompleteRegistrationAsync(request, GetPublicOrigin(), cancellationToken),
             created: true);
 
+    [HttpPost("logins")]
+    [EnableRateLimiting("mobile-registration")]
+    public async Task<IActionResult> Login(
+        MobilePasswordLoginRequest request,
+        CancellationToken cancellationToken) =>
+        await ExecuteAsync(
+            () => mobileFlow.PasswordLoginAsync(request, GetPublicOrigin(), cancellationToken));
+
     [HttpPost("authorization-launches")]
     [EnableRateLimiting("mobile-launch")]
     public async Task<IActionResult> CreateAuthorizationLaunch(
