@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import 'auth_service.dart';
+import 'views/events_list_view.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -414,6 +415,20 @@ class _AccountHomeState extends State<AccountHome> {
     if (mounted) await _scan();
   }
 
+  Future<void> _openTimeline() async {
+    final navigator = Navigator.of(context);
+    if (navigator.canPop()) {
+      navigator.pop();
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 180));
+    if (!mounted) return;
+    await navigator.push(
+      MaterialPageRoute(
+        builder: (_) => EventsListView(auth: widget.auth, session: widget.session),
+      ),
+    );
+  }
+
   Future<void> _login() async {
     await _run(() async {
       final session = await widget.auth.login(widget.session);
@@ -520,6 +535,14 @@ class _AccountHomeState extends State<AccountHome> {
           ),
         ],
       ),
+      actions: [
+        IconButton(
+          tooltip: '时间线',
+          onPressed: _busy ? null : _openTimeline,
+          icon: const Icon(Icons.timeline_outlined),
+        ),
+        const SizedBox(width: 4),
+      ],
       bottom: const PreferredSize(
         preferredSize: Size.fromHeight(1),
         child: Divider(height: 1),
@@ -572,10 +595,11 @@ class _AccountHomeState extends State<AccountHome> {
             label: '首页',
             selected: true,
           ),
-          const _DrawerDestination(
+          _DrawerDestination(
             icon: Icons.timeline_outlined,
             selectedIcon: Icons.timeline,
             label: '时间线',
+            onTap: _busy ? null : _openTimeline,
           ),
           const _DrawerDestination(
             icon: Icons.auto_graph_outlined,
@@ -728,154 +752,173 @@ class _DrawerDestination extends StatelessWidget {
     required this.selectedIcon,
     required this.label,
     this.selected = false,
+    this.onTap,
   });
 
   final IconData icon;
   final IconData selectedIcon;
   final String label;
   final bool selected;
+  final VoidCallback? onTap;
 
   @override
-  Widget build(BuildContext context) => ListTile(
-    contentPadding: const EdgeInsets.symmetric(horizontal: 24),
-    leading: Icon(selected ? selectedIcon : icon),
-    title: Text(label),
-    selected: selected,
-    selectedColor: PassingTraceApp.coral,
-    onTap: () => Navigator.of(context).pop(),
-  );
+  Widget build(BuildContext context) {
+    final handler = onTap;
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+      leading: Icon(selected ? selectedIcon : icon),
+      title: Text(label),
+      selected: selected,
+      selectedColor: PassingTraceApp.coral,
+      onTap: handler ?? () => Navigator.of(context).pop(),
+    );
+  }
 }
 
 class _PassingTraceHome extends StatelessWidget {
   const _PassingTraceHome();
 
   @override
-  Widget build(BuildContext context) => SingleChildScrollView(
-    padding: const EdgeInsets.fromLTRB(24, 38, 24, 48),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'YOUR LIFE, IN CONTEXT',
-          style: TextStyle(
-            color: PassingTraceApp.coral,
-            fontSize: 12,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 2.3,
+  Widget build(BuildContext context) {
+    void openTimeline() {
+      final home = context.findAncestorStateOfType<_AccountHomeState>();
+      home?._openTimeline();
+    }
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(24, 38, 24, 48),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'YOUR LIFE, IN CONTEXT',
+            style: TextStyle(
+              color: PassingTraceApp.coral,
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 2.3,
+            ),
           ),
-        ),
-        const SizedBox(height: 22),
-        const Text(
-          '把生活留下来，',
-          style: TextStyle(
-            color: PassingTraceApp.ink,
-            fontFamily: 'serif',
-            fontSize: 38,
-            height: 1.15,
-            fontWeight: FontWeight.w500,
+          const SizedBox(height: 22),
+          const Text(
+            '把生活留下来，',
+            style: TextStyle(
+              color: PassingTraceApp.ink,
+              fontFamily: 'serif',
+              fontSize: 38,
+              height: 1.15,
+              fontWeight: FontWeight.w500,
+            ),
           ),
-        ),
-        const Text(
-          '看见时间的形状。',
-          style: TextStyle(
-            color: PassingTraceApp.coral,
-            fontFamily: 'serif',
-            fontSize: 38,
-            height: 1.15,
-            fontWeight: FontWeight.w500,
+          const Text(
+            '看见时间的形状。',
+            style: TextStyle(
+              color: PassingTraceApp.coral,
+              fontFamily: 'serif',
+              fontSize: 38,
+              height: 1.15,
+              fontWeight: FontWeight.w500,
+            ),
           ),
-        ),
-        const SizedBox(height: 20),
-        Text(
-          '记录经历，也写下计划。PassingTrace 会将零散的文字整理成只属于你的时间线与生活洞察。',
-          style: TextStyle(
-            color: PassingTraceApp.ink.withValues(alpha: 0.62),
-            height: 1.8,
-            fontSize: 15,
+          const SizedBox(height: 20),
+          Text(
+            '记录经历，也写下计划。PassingTrace 会将零散的文字整理成只属于你的时间线与生活洞察。',
+            style: TextStyle(
+              color: PassingTraceApp.ink.withValues(alpha: 0.62),
+              height: 1.8,
+              fontSize: 15,
+            ),
           ),
-        ),
-        const SizedBox(height: 34),
-        const _PrivateSpaceCard(),
-        const SizedBox(height: 42),
-        const Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'AUGUST 2026',
-                  style: TextStyle(
-                    color: PassingTraceApp.coral,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 1.8,
+          const SizedBox(height: 34),
+          const _PrivateSpaceCard(),
+          const SizedBox(height: 36),
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: openTimeline,
+              borderRadius: BorderRadius.circular(20),
+              child: Container(
+                padding: const EdgeInsets.all(22),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.55),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: PassingTraceApp.ink.withValues(alpha: 0.12),
                   ),
                 ),
-                SizedBox(height: 8),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 48,
+                      height: 48,
+                      alignment: Alignment.center,
+                      decoration: const BoxDecoration(
+                        color: PassingTraceApp.coral,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.timeline,
+                        color: Colors.white,
+                        size: 24,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '我的时间线',
+                            style: TextStyle(
+                              fontFamily: 'serif',
+                              fontSize: 20,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          SizedBox(height: 4),
+                          Text(
+                            '查看、记录、编辑你留下的痕迹和计划',
+                            style: TextStyle(fontSize: 12, color: Colors.black54),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Icon(Icons.arrow_forward, size: 18),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 28),
+          Container(
+            padding: const EdgeInsets.all(24),
+            color: PassingTraceApp.ink,
+            child: const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.auto_awesome, color: PassingTraceApp.coral),
+                SizedBox(height: 16),
                 Text(
-                  '最近的轨迹',
+                  '“你在这个月去过 3 个新地点，步行记录比上月同期多了 28%。”',
                   style: TextStyle(
+                    color: Colors.white,
                     fontFamily: 'serif',
-                    fontSize: 28,
-                    fontWeight: FontWeight.w600,
+                    fontSize: 21,
+                    height: 1.6,
                   ),
+                ),
+                SizedBox(height: 14),
+                Text(
+                  '基于你的私人数据生成',
+                  style: TextStyle(color: Colors.white54, fontSize: 12),
                 ),
               ],
             ),
-            Text('按发生时间整理', style: TextStyle(fontSize: 12)),
-          ],
-        ),
-        const SizedBox(height: 18),
-        const Divider(height: 1),
-        const _TimelineItem(
-          day: '17',
-          category: '城市漫步',
-          title: '傍晚沿着河岸走了很久',
-          detail: '杭州 · 6.2 km',
-        ),
-        const _TimelineItem(
-          day: '12',
-          category: '第一次',
-          title: '在巷口发现一家安静的小店',
-          detail: '咖啡 · ¥36',
-        ),
-        const _TimelineItem(
-          day: '03',
-          category: '计划完成',
-          title: '读完搁置许久的那本书',
-          detail: '阅读 · 9 天',
-        ),
-        const SizedBox(height: 28),
-        Container(
-          padding: const EdgeInsets.all(24),
-          color: PassingTraceApp.ink,
-          child: const Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(Icons.auto_awesome, color: PassingTraceApp.coral),
-              SizedBox(height: 16),
-              Text(
-                '“你在这个月去过 3 个新地点，步行记录比上月同期多了 28%。”',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontFamily: 'serif',
-                  fontSize: 21,
-                  height: 1.6,
-                ),
-              ),
-              SizedBox(height: 14),
-              Text(
-                '基于你的私人数据生成',
-                style: TextStyle(color: Colors.white54, fontSize: 12),
-              ),
-            ],
           ),
-        ),
-      ],
-    ),
-  );
+        ],
+      ),
+    );
+  }
 }
 
 class _PrivateSpaceCard extends StatelessWidget {
@@ -915,84 +958,6 @@ class _PrivateSpaceCard extends StatelessWidget {
           '通过左上角菜单使用“扫一扫”，即可批准网页和桌面端登录。',
           style: TextStyle(color: Colors.white70, height: 1.6),
         ),
-      ],
-    ),
-  );
-}
-
-class _TimelineItem extends StatelessWidget {
-  const _TimelineItem({
-    required this.day,
-    required this.category,
-    required this.title,
-    required this.detail,
-  });
-
-  final String day;
-  final String category;
-  final String title;
-  final String detail;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(vertical: 20),
-    decoration: BoxDecoration(
-      border: Border(bottom: BorderSide(color: Theme.of(context).dividerColor)),
-    ),
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 52,
-          child: Column(
-            children: [
-              Text(
-                day,
-                style: const TextStyle(
-                  fontFamily: 'serif',
-                  fontSize: 28,
-                  height: 1,
-                ),
-              ),
-              const SizedBox(height: 5),
-              const Text('八月', style: TextStyle(fontSize: 11)),
-            ],
-          ),
-        ),
-        const SizedBox(width: 18),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                category,
-                style: const TextStyle(
-                  color: PassingTraceApp.coral,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 7),
-              Text(
-                title,
-                style: const TextStyle(
-                  fontFamily: 'serif',
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                detail,
-                style: TextStyle(
-                  color: PassingTraceApp.ink.withValues(alpha: 0.52),
-                  fontSize: 12,
-                ),
-              ),
-            ],
-          ),
-        ),
-        const Icon(Icons.arrow_outward, size: 18),
       ],
     ),
   );

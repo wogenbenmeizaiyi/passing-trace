@@ -20,6 +20,15 @@ var identity = builder.AddProject<Projects.PassingTrace_Identity_AuthorizationSe
     .WithReference(identityDatabase)
     .WaitFor(identityDatabase);
 
+// 业务 API 使用独立数据库，并通过 Identity 的发现文档离线验证 Access Token。
+var traceDatabase = postgres.AddDatabase("trace");
+
+var api = builder.AddProject<Projects.PassingTrace_Events_Api>("passingtrace-events-api")
+    .WithReference(traceDatabase)
+    .WithEnvironment("Identity__Authority", identity.GetEndpoint("https"))
+    .WaitFor(identity)
+    .WaitFor(traceDatabase);
+
 // Vue 仍是独立进程；AppHost 只负责统一启动、端口和 Identity 地址注入。
 builder.AddViteApp("passingtrace-web", "../passingtrace-web")
     .WithPnpm()

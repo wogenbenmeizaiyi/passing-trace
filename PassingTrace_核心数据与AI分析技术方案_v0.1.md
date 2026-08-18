@@ -20,6 +20,14 @@
 
 ## 1. 目标与范围
 
+PassingTrace 的产品形态是「手机优先」的个人痕迹系统，类似微信、抖音：**手机 App 是主要客户端**，承载日常的记录、查看、洞察与 AI 问答；**Web 是辅助访问端**，让用户在电脑上也能浏览和操作，但登录依赖已登录的手机扫码批准。
+
+这一形态直接决定了身份链路的设计：
+
+- 手机 App 通过安装引导码完成首次注册，成为该用户的主身份设备。
+- 用户想在电脑（Web）上使用时，用手机扫描网页二维码批准登录，Web 获得自己独立的 Token。
+- 记录、AI 洞察等核心体验优先在手机端交付；Web 复用同一套业务 API，功能可阶段性对齐，但不作为主入口。
+
 PassingTrace 第一阶段的产品目标不是做“日记 + 社交”，而是做一个能够长期积累个人事件数据，并通过 AI 对过去、现在和未来进行理解与分析的个人痕迹系统。
 
 核心目标：
@@ -841,7 +849,7 @@ V1 不应为了形式上的分布式而过早引入大量服务。建议只保�
 
 ```mermaid
 flowchart LR
-    Client["Web / Mobile Client"]
+    Client["手机 App（主客户端）\nWeb（辅助，扫码批准登录）"]
     API["PassingTrace API\n模块化单体"]
     Identity["身份与隐私"]
     Event["Event / Plan / Timeline"]
@@ -1891,49 +1899,37 @@ AI 解释指标与少量证据
 
 ## 25. 与当前 .NET 项目的代码映射
 
-当前项目只有 Aspire AppHost 和一个名为 `PassingTrace.Auth` 的 Web API 模板。目标实现不应把全部业务继续塞入一个名为 Auth 的项目，也不需要把每个逻辑模块拆成微服务。
+当前项目已从单一 Auth 模板演进为按业务域组织的模块化单体：Identity（身份域）与 Events（记录域）各自独立，Core 与 Infrastructure 作为跨域共用层。目标实现既不把全部业务塞进一个项目，也不把每个逻辑模块拆成微服务。
 
-推荐逐步调整为：
+当前与规划中的目录结构：
 
 ```text
 PassingTrace.slnx
 ├─ AppHost
-│  └─ 本地编排 API、Worker、PostgreSQL、对象存储和遥测
-├─ PassingTrace.Api
-│  ├─ API 边界
-│  ├─ Identity / Privacy
-│  ├─ Events / Plans / Timeline / Media
-│  ├─ Search / Questions / Insights / Milestones / Notifications
-│  └─ 只包含同步请求与应用编排
-├─ PassingTrace.Worker
-│  ├─ SemanticParseHandler
-│  ├─ EntityNormalizeHandler
-│  ├─ InsightRefreshHandler
-│  ├─ MilestoneRefreshHandler
-│  ├─ NotificationHandler
-│  └─ Export / Deletion / Cleanup / Recompute Handler
-├─ PassingTrace.Core
-│  ├─ 模块领域模型
-│  ├─ Command / Query Handler 接口
-│  ├─ 状态机与业务规则
-│  └─ 领域事件
-├─ PassingTrace.Infrastructure
-│  ├─ PostgreSQL / EF Core 或 Npgsql 实现
-│  ├─ Outbox 与任务租约
-│  ├─ 对象存储
-│  ├─ AI Provider Adapter
-│  └─ 邮件与遥测 Adapter
-├─ PassingTrace.Contracts
-│  ├─ API Request / Response
-│  ├─ SemanticEnvelope JSON Schema
-│  └─ 领域事件 Schema
-├─ PassingTrace.Tests.Unit
-└─ PassingTrace.Tests.Integration
+│  └─ 本地编排 PostgreSQL、Identity、Events API、Vue 与遥测
+├─ Identity
+│  ├─ PassingTrace.Identity.Domain
+│  ├─ PassingTrace.Identity.Application
+│  ├─ PassingTrace.Identity.Infrastructure
+│  └─ PassingTrace.Identity.AuthorizationServer   # 授权服务器（OpenIddict + Identity）
+├─ Events
+│  └─ PassingTrace.Events.Api                     # 记录域 API（Event / Plan / Timeline / Media）
+├─ PassingTrace.Core                              # 跨域共用：领域模型 + 端口接口
+├─ PassingTrace.Infrastructure                    # 跨域共用：单库持久化 + Outbox + 对象存储 + AI Adapter
+├─ PassingTrace.Contracts                         # 跨域共用：API 合同 + SemanticEnvelope + 领域事件 Schema
+├─ Ai（规划）
+│  ├─ PassingTrace.Ai.Api                         # AI 问答 / 搜索 / Insight 查询
+│  └─ PassingTrace.Ai.Worker                      # SemanticParse / Normalize / Insight / Milestone 处理
+├─ tests
+│  └─ PassingTrace.Identity.IntegrationTests
+├─ passingtrace-web
+├─ passingtrace-mobile
+└─ passingtrace-sso-demo
 ```
 
 ### 25.1 代码组织规则
 
-- `Api` 不直接操作 DbContext 执行业务逻辑，而是调用模块 Command / Query。
+- 各域 Api 不直接操作 DbContext 执行业务逻辑，而是调用 Core 的端口接口与用例。
 - `Worker` 与 API 复用 Core 中的业务规则，但使用独立服务身份和任务上下文。
 - Core 不依赖 ASP.NET Core、数据库、对象存储或具体 AI SDK。
 - Infrastructure 实现端口，不把供应商类型泄露到领域模型。
@@ -1941,12 +1937,23 @@ PassingTrace.slnx
 - 模块之间通过应用接口和领域事件协作，不共享可任意修改的 Repository。
 - 每个关键状态机、统计口径和 Semantic Schema 都必须有单元或契约测试。
 
-### 25.2 当前骨架的处理建议
+### 25.2 当前状态与后续建议
 
-- 将 `PassingTrace.Auth` 改造成或替换为 `PassingTrace.Api`；认证只是 API 内的一个模块。
-- 删除 WeatherForecast 示例，建立最小健康检查和版本化 API。
-- 在 AppHost 中加入 PostgreSQL、API 和 Worker；对象存储可先使用 S3 兼容开发资源。
-- 第一批代码先实现账户上下文、Event Source revision、Outbox 和 Worker 骨架，不先实现开放式 AI 问答。
+已完成：
+
+- `Identity` 域独立：注册、登录、扫码登录、授权码 + PKCE、Refresh Token 与移动授权（M02）。
+- `Events` 域建立 `PassingTrace.Events.Api`：Event 创建、游标分页、Source 修订与软删除（M04 核心闭环）。
+- `PassingTrace.Core` 提供 Event / SourceRevision 领域模型与 `IEventRepository` 端口；`PassingTrace.Infrastructure` 提供 `TraceDbContext` 与仓储实现（M17）。
+- `Events.Api` 通过 JwtBearer + `passingtrace-api` audience 离线验证 Identity 签发的 Token，不引用 Identity 程序集。
+- AppHost 已编排 PostgreSQL（identity / trace 两库）、Identity、Events API 与 Vue。
+
+后续建议：
+
+- 补 Events 域集成测试（对应验收场景 1/2/3/9）。
+- 建立 Outbox 与 `Ai.Worker` 骨架，为异步 Semantic 解析预留可靠任务通道（M10）。
+- 实现 Plan 生命周期状态机（M05）与时间线（M06）。
+- 对象存储可先使用 S3 兼容开发资源（M07）。
+- 暂不实现开放式 AI 问答（M12）。
 
 ---
 

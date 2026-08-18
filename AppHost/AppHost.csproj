@@ -12,6 +12,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Identity\PassingTrace.Identity.AuthorizationServer\PassingTrace.Identity.AuthorizationServer.csproj" />
+    <ProjectReference Include="..\Events\PassingTrace.Events.Api\PassingTrace.Events.Api.csproj" />
   </ItemGroup>
 
 </Project>

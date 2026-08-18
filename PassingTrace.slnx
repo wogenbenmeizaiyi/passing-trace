@@ -9,6 +9,7 @@
     <File Path="Directory.Build.props" />
     <File Path="Identity/PassingTrace.Identity_后端技术实现说明_v1.0.md" />
     <File Path="Identity/PassingTrace.Identity_单点登录接入说明_v1.0.md" />
+    <File Path="Events/PassingTrace.Events_接口文档_v1.0.md" />
   </Folder>
   <Folder Name="/Tests/">
     <Project Path="tests/PassingTrace.Identity.IntegrationTests/PassingTrace.Identity.IntegrationTests.csproj" />
@@ -22,4 +23,9 @@
     <File Path="passingtrace-sso-demo/vite.config.ts" />
     <File Path="passingtrace-sso-demo/README.md" />
   </Folder>
+  <Folder Name="/Events/">
+    <Project Path="Events/PassingTrace.Events.Api/PassingTrace.Events.Api.csproj" />
+  </Folder>
+  <Project Path="PassingTrace.Core/PassingTrace.Core.csproj" />
+  <Project Path="PassingTrace.Infrastructure/PassingTrace.Infrastructure.csproj" />
 </Solution>

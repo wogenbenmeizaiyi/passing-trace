@@ -34,6 +34,7 @@ const moments = [
         ><span class="brand-mark">P</span><span>PassingTrace</span></RouterLink
       >
       <nav class="nav-links" aria-label="主导航">
+        <RouterLink to="/events">记录</RouterLink>
         <a href="#timeline">时间线</a><a href="#insight">洞察</a>
       </nav>
       <div class="account-actions">
@@ -44,7 +45,11 @@ const moments = [
           </button></template
         >
         <template v-else
-          ><button class="button button-dark compact-button" :disabled="auth.busy" @click="auth.login">
+          ><button
+            class="button button-dark compact-button"
+            :disabled="auth.busy"
+            @click="auth.login"
+          >
             手机扫码登录
           </button></template
         >
@@ -81,6 +86,7 @@ const moments = [
             <div class="avatar">{{ auth.username.slice(0, 1).toUpperCase() }}</div>
             <h2>欢迎回来，{{ auth.username }}</h2>
             <p>身份已由 PassingTrace Identity 确认。</p>
+            <RouterLink to="/events" class="inline-link">查看我的记录 <span>→</span></RouterLink>
             <dl class="session-details">
               <div>
                 <dt>令牌到期</dt>

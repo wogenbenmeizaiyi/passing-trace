@@ -56,14 +56,21 @@ async function logoutIdentity() {
 
 <template>
   <div class="lab-shell">
-    <header>
-      <a class="brand" :href="mainWebUrl"><span>PT</span> PassingTrace</a>
-      <div class="client-chip"><i></i> Client B · 独立站点</div>
+    <header class="topbar">
+      <a class="brand" :href="mainWebUrl" aria-label="返回 PassingTrace 主站">
+        <span class="brand-mark">P</span>
+        <span>PassingTrace</span>
+      </a>
+      <span class="kicker" style="margin: 0">SSO · 验证站</span>
+      <div class="client-chip">
+        <i></i>
+        Client B · 独立站点
+      </div>
     </header>
 
     <main>
       <section class="intro">
-        <p class="kicker">SINGLE SIGN-ON PROOF</p>
+        <p class="eyebrow">SINGLE SIGN-ON PROOF</p>
         <h1>这是另一个网站，<br /><em>但认识同一个你。</em></h1>
         <p class="lede">
           本页运行在 5174，拥有独立的 Client ID 和 Token 存储。它唯一共享的是 Identity 域中不可被
@@ -73,26 +80,32 @@ async function logoutIdentity() {
 
       <section class="topology" aria-label="SSO 拓扑">
         <article>
-          <span>01</span><strong>主站 Client A</strong><code>localhost:5173</code
-          ><small>passingtrace-web</small>
+          <span>01</span>
+          <strong>主站 Client A</strong>
+          <code>localhost:5173</code>
+          <small>passingtrace-web</small>
         </article>
         <div class="link-line"><b>共享 Identity Cookie</b><i></i></div>
         <article class="identity-node">
-          <span>ID</span><strong>Identity</strong><code>localhost:56228</code
-          ><small>用户名与密码只在这里</small>
+          <span>ID</span>
+          <strong>Identity</strong>
+          <code>localhost:56228</code>
+          <small>用户名与密码只在这里</small>
         </article>
         <div class="link-line"><b>独立 Authorization Code</b><i></i></div>
         <article class="active-node">
-          <span>02</span><strong>验证站 Client B</strong><code>localhost:5174</code
-          ><small>passingtrace-sso-demo</small>
+          <span>02</span>
+          <strong>验证站 Client B</strong>
+          <code>localhost:5174</code>
+          <small>passingtrace-sso-demo</small>
         </article>
       </section>
 
       <section class="verification-grid">
         <article class="test-panel">
           <div class="panel-head">
-            <span>验证步骤</span
-            ><span class="status-dot" :class="{ online: isAuthenticated }"></span>
+            <span>验证步骤</span>
+            <span class="status-dot" :class="{ online: isAuthenticated }"></span>
           </div>
           <ol>
             <li>
@@ -118,23 +131,28 @@ async function logoutIdentity() {
             </li>
           </ol>
           <div class="actions">
-            <a class="secondary-button" :href="mainWebUrl" target="_blank" rel="noopener"
-              >打开主站 ↗</a
-            >
+            <a class="secondary-button" :href="mainWebUrl" target="_blank" rel="noopener">
+              打开主站 ↗
+            </a>
             <button class="primary-button" :disabled="busy" @click="startSso">
-              {{ isAuthenticated ? '重新验证 SSO' : '发起 SSO 授权' }} →
+              {{ isAuthenticated ? '重新验证 SSO' : '发起 SSO 授权' }}
+              <span aria-hidden="true">→</span>
             </button>
           </div>
-          <p v-if="error" class="error" role="alert">{{ error }}</p>
+          <p v-if="error" class="error" role="alert">
+            {{ error }}<button @click="error = ''">关闭</button>
+          </p>
         </article>
 
         <article class="result-panel" :class="{ success: isAuthenticated }">
           <template v-if="busy">
-            <div class="loader"></div>
+            <div class="loader" aria-hidden="true"></div>
+            <p class="kicker">CLIENT B · CALLBACK</p>
             <h2>正在读取本站会话</h2>
+            <p>校验本地 sessionStorage 中的 Token 状态。</p>
           </template>
           <template v-else-if="isAuthenticated">
-            <div class="success-mark">✓</div>
+            <div class="success-mark" aria-hidden="true">✓</div>
             <p class="kicker">SSO VERIFIED</p>
             <h2>单点登录成功</h2>
             <p v-if="ssoSucceeded" class="elapsed">
@@ -147,15 +165,16 @@ async function logoutIdentity() {
               </div>
             </dl>
             <div class="token-note">
-              <i></i><span>Client B 已获得自己的 JWT<br />主站 Token 仍留在 Client A</span>
+              <i></i>
+              <span>Client B 已获得自己的 JWT<br />主站 Token 仍留在 Client A</span>
             </div>
             <div class="result-actions">
-              <button @click="clearLocalToken">仅清除本站 Token</button
-              ><button @click="logoutIdentity">退出 Identity SSO</button>
+              <button @click="clearLocalToken">仅清除本站 Token</button>
+              <button @click="logoutIdentity">退出 Identity SSO</button>
             </div>
           </template>
           <template v-else>
-            <div class="empty-mark">?</div>
+            <div class="empty-mark" aria-hidden="true">?</div>
             <p class="kicker">WAITING FOR AUTHORIZATION</p>
             <h2>本站还没有 Token</h2>
             <p>
@@ -168,8 +187,8 @@ async function logoutIdentity() {
     </main>
 
     <footer>
-      <span>独立 Origin：{{ currentOrigin }}</span
-      ><span>Authority：{{ identityAuthority }}</span>
+      <span>独立 Origin：{{ currentOrigin }}</span>
+      <span>Authority：{{ identityAuthority }}</span>
     </footer>
   </div>
 </template>

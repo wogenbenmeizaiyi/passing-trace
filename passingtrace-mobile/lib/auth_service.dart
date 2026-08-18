@@ -54,7 +54,11 @@ class AuthService {
        _appLinks = appLinks ?? AppLinks();
 
   static const defaultIdentityUrl = 'http://192.168.31.210:56229';
+  /// 默认 Events API 地址：与 Identity 默认地址共用 LAN 主机，端口切换到
+  /// `PassingTrace.Events.Api` 的 HTTP profile（见 launchSettings.json）。
+  static const defaultEventsApiUrl = 'http://192.168.31.210:54934';
   static const _identityUrlKey = 'identity_url';
+  static const _eventsApiUrlKey = 'events_api_url';
   static const _deviceIdKey = 'device_id';
   static const _deviceSecretKey = 'device_secret';
   static const _accessTokenKey = 'access_token';
@@ -278,6 +282,23 @@ class AuthService {
   }
 
   Future<void> clearLocalAccount() => _storage.deleteAll();
+
+  /// 读取已保存的 Events API 地址；若未保存则回落到默认值。
+  Future<String> getEventsApiBaseUrl() async {
+    final stored = await _storage.read(key: _eventsApiUrlKey);
+    if (stored == null || stored.isEmpty) return defaultEventsApiUrl;
+    return _normalizeBaseUrl(stored);
+  }
+
+  /// 持久化一个新的 Events API 地址。空字符串视作"重置为默认值"。
+  Future<void> setEventsApiBaseUrl(String? value) async {
+    if (value == null || value.trim().isEmpty) {
+      await _storage.delete(key: _eventsApiUrlKey);
+      return;
+    }
+    final normalized = _normalizeBaseUrl(value);
+    await _storage.write(key: _eventsApiUrlKey, value: normalized);
+  }
 
   Future<AuthSession> _authorize({
     required String baseUrl,

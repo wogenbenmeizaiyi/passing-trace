@@ -1,8 +1,4 @@
-import {
-  UserManager,
-  WebStorageStateStore,
-  type UserManagerSettings,
-} from 'oidc-client-ts'
+import { UserManager, WebStorageStateStore, type UserManagerSettings } from 'oidc-client-ts'
 
 const authority = (import.meta.env.VITE_IDENTITY_AUTHORITY ?? 'https://localhost:56228').replace(
   /\/$/,
