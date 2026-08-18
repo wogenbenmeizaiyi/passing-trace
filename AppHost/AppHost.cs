@@ -31,7 +31,7 @@ var api = builder.AddProject<Projects.PassingTrace_Events_Api>("passingtrace-eve
 
 // Vue 仍是独立进程；AppHost 只负责统一启动、端口和 Identity 地址注入。
 builder.AddViteApp("passingtrace-web", "../passingtrace-web")
-    .WithPnpm()
+    .WithPnpm(installArgs: ["--config.confirmModulesPurge=false"])
     .WithEndpoint("http", endpoint => endpoint.Port = 5173)
     .WithEnvironment("VITE_IDENTITY_AUTHORITY", identity.GetEndpoint("https"))
     .WithReference(identity)
@@ -40,7 +40,7 @@ builder.AddViteApp("passingtrace-web", "../passingtrace-web")
 
 // 第二个独立 Origin/Client ID 用于从界面验证浏览器 SSO，而不是共享前端 Token。
 builder.AddViteApp("passingtrace-sso-demo", "../passingtrace-sso-demo")
-    .WithPnpm()
+    .WithPnpm(installArgs: ["--config.confirmModulesPurge=false"])
     .WithEndpoint("http", endpoint => endpoint.Port = 5174)
     .WithEnvironment("VITE_IDENTITY_AUTHORITY", identity.GetEndpoint("https"))
     .WithEnvironment("VITE_MAIN_WEB_URL", "http://localhost:5173")

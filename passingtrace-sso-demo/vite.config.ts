@@ -10,6 +10,12 @@ export default defineConfig({
     host: 'localhost',
     port: Number(process.env.PORT ?? 5174),
     strictPort: true,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:54934',
+        changeOrigin: true,
+      },
+    },
   },
   plugins: [
     vue(),

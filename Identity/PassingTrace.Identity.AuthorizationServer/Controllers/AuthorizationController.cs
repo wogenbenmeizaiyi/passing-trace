@@ -11,6 +11,7 @@ using PassingTrace.Identity.Domain.Enums;
 using PassingTrace.Identity.AuthorizationServer.Mobile;
 using PassingTrace.Identity.AuthorizationServer.QrLogin;
 using PassingTrace.Identity.AuthorizationServer.Setup;
+using PassingTrace.Identity.AuthorizationServer.Development;
 using static OpenIddict.Abstractions.OpenIddictConstants;
 
 namespace PassingTrace.Identity.AuthorizationServer.Controllers;
@@ -26,7 +27,8 @@ public sealed class AuthorizationController(
     UserManager<User> userManager,
     FirstPartyClientRegistry clients,
     MobileFlowService mobileFlow,
-    QrLoginService qrLogin) : Controller
+    QrLoginService qrLogin,
+    DevelopmentAutoLoginService developmentAutoLogin) : Controller
 {
     [HttpGet("~/connect/authorize")]
     [HttpPost("~/connect/authorize")]
@@ -77,39 +79,49 @@ public sealed class AuthorizationController(
                 QueryString.Create(
                     Request.HasFormContentType ? Request.Form : Request.Query);
 
+            // 后端开发阶段：非移动客户端在配置开启时用固定账号自动登录，跳过扫码。
             if (!clients.IsMobile(request.ClientId!))
             {
-                var created = await qrLogin.CreateAsync(
-                    request.ClientId!,
-                    authorizeRequest,
-                    HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-                    Request.Headers.UserAgent.ToString(),
+                user = await developmentAutoLogin.TryLoginAsync(
                     HttpContext.RequestAborted);
-                var cookieName = QrLoginService.CookieName(created.Id);
-                Response.Cookies.Append(cookieName, created.BrowserBinding, new CookieOptions
+            }
+
+            if (user is null)
+            {
+                if (!clients.IsMobile(request.ClientId!))
                 {
-                    HttpOnly = true,
-                    IsEssential = true,
-                    SameSite = SameSiteMode.Lax,
-                    Secure = Request.IsHttps,
-                    Expires = created.ExpiresAt,
-                    Path = $"/account/qr-login/{created.Id}"
+                    var created = await qrLogin.CreateAsync(
+                        request.ClientId!,
+                        authorizeRequest,
+                        HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                        Request.Headers.UserAgent.ToString(),
+                        HttpContext.RequestAborted);
+                    var cookieName = QrLoginService.CookieName(created.Id);
+                    Response.Cookies.Append(cookieName, created.BrowserBinding, new CookieOptions
+                    {
+                        HttpOnly = true,
+                        IsEssential = true,
+                        SameSite = SameSiteMode.Lax,
+                        Secure = Request.IsHttps,
+                        Expires = created.ExpiresAt,
+                        Path = $"/account/qr-login/{created.Id}"
+                    });
+                    return Redirect($"/account/qr-login/{created.Id}?code={Uri.EscapeDataString(created.Code)}");
+                }
+
+                var launchTicket = request.GetParameter("launch_ticket").ToString();
+                if (!await mobileFlow.IsValidLoginLaunchAsync(
+                    launchTicket,
+                    HttpContext.RequestAborted))
+                {
+                    return ForbidWithError(Errors.InvalidRequest, "缺少有效的移动设备启动票据。");
+                }
+
+                return Challenge(new AuthenticationProperties
+                {
+                    RedirectUri = authorizeRequest
                 });
-                return Redirect($"/account/qr-login/{created.Id}?code={Uri.EscapeDataString(created.Code)}");
             }
-
-            var launchTicket = request.GetParameter("launch_ticket").ToString();
-            if (!await mobileFlow.IsValidLoginLaunchAsync(
-                launchTicket,
-                HttpContext.RequestAborted))
-            {
-                return ForbidWithError(Errors.InvalidRequest, "缺少有效的移动设备启动票据。");
-            }
-
-            return Challenge(new AuthenticationProperties
-            {
-                RedirectUri = authorizeRequest
-            });
         }
 
         if (user.Status != UserStatus.Active ||

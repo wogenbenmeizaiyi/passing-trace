@@ -2,6 +2,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using OpenIddict.Abstractions;
 using OpenIddict.Validation.AspNetCore;
+using PassingTrace.Identity.AuthorizationServer.Development;
 using PassingTrace.Identity.AuthorizationServer.Mobile;
 using PassingTrace.Identity.AuthorizationServer.QrLogin;
 using PassingTrace.Identity.AuthorizationServer.Setup;
@@ -28,8 +29,11 @@ public static class ApplicationServicesExtensions
             configuration.GetSection(MobileRegistrationOptions.SectionName));
         services.Configure<QrLoginOptions>(
             configuration.GetSection(QrLoginOptions.SectionName));
+        services.Configure<DevelopmentAutoLoginOptions>(
+            configuration.GetSection(DevelopmentAutoLoginOptions.SectionName));
         services.AddScoped<MobileFlowService>();
         services.AddScoped<QrLoginService>();
+        services.AddScoped<DevelopmentAutoLoginService>();
         services.AddControllersWithViews();
         services.AddRazorPages();
 

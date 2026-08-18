@@ -44,6 +44,23 @@ public sealed class QrLoginService(
         };
         dbContext.QrLoginTransactions.Add(entity);
         await dbContext.SaveChangesAsync(cancellationToken);
+
+        // Dev-only：若配置开启，则用指定用户立刻批准该事务，浏览器轮询直接看到 Approved。
+        if (_options.DevAutoApprove && !string.IsNullOrWhiteSpace(_options.DevApproveUsername))
+        {
+            var approver = await dbContext.Users
+                .AsNoTracking()
+                .FirstOrDefaultAsync(u => u.UserName == _options.DevApproveUsername, cancellationToken);
+            if (approver is not null)
+            {
+                entity.Status = QrLoginStatus.Approved;
+                entity.ApprovedUserId = approver.Id;
+                entity.ApprovedAt = timeProvider.GetUtcNow();
+                entity.ConcurrencyToken = Guid.NewGuid();
+                await dbContext.SaveChangesAsync(cancellationToken);
+            }
+        }
+
         return new CreatedQrLogin(entity.Id, code, binding, entity.ExpiresAt);
     }
 

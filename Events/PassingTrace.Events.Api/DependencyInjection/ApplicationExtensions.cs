@@ -13,7 +13,9 @@ public static class ApplicationExtensions
     {
         services.AddSingleton(TimeProvider.System);
         services.AddScoped<EventService>();
-        services.AddControllers();
+        // 保留 action 名中的 Async 后缀，使 CreatedAtAction(nameof(...)) 生成的路由能匹配。
+        services.AddControllers(options =>
+            options.SuppressAsyncSuffixInActionNames = false);
 
         services.AddProblemDetails();
         services.AddExceptionHandler<DomainExceptionHandler>();

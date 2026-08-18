@@ -39,8 +39,8 @@ public sealed class EventService(IEventRepository repository, TimeProvider clock
             command.Kind,
             command.Title,
             command.RawContent,
-            command.HappenedAt,
-            command.PlannedAt,
+            ToUtc(command.HappenedAt),
+            ToUtc(command.PlannedAt),
             NormalizeTimezone(command.Timezone),
             command.IdempotencyKey,
             now);
@@ -50,8 +50,8 @@ public sealed class EventService(IEventRepository repository, TimeProvider clock
             1,
             command.Title,
             command.RawContent,
-            command.HappenedAt,
-            command.PlannedAt,
+            ToUtc(command.HappenedAt),
+            ToUtc(command.PlannedAt),
             now));
 
         repository.Add(evt);
@@ -97,8 +97,8 @@ public sealed class EventService(IEventRepository repository, TimeProvider clock
 
         evt.Title = command.Title;
         evt.RawContent = command.RawContent;
-        evt.HappenedAt = command.HappenedAt;
-        evt.PlannedAt = command.PlannedAt;
+        evt.HappenedAt = ToUtc(command.HappenedAt);
+        evt.PlannedAt = ToUtc(command.PlannedAt);
         evt.Timezone = NormalizeTimezone(command.Timezone);
         evt.CurrentSourceRevision = nextRevision;
         evt.UpdatedAt = now;
@@ -108,8 +108,8 @@ public sealed class EventService(IEventRepository repository, TimeProvider clock
             nextRevision,
             command.Title,
             command.RawContent,
-            command.HappenedAt,
-            command.PlannedAt,
+            ToUtc(command.HappenedAt),
+            ToUtc(command.PlannedAt),
             now));
 
         await repository.SaveChangesAsync(cancellationToken);
@@ -170,9 +170,12 @@ public sealed class EventService(IEventRepository repository, TimeProvider clock
         return evt.EventKind == command.Kind &&
             evt.Title == command.Title &&
             evt.RawContent == command.RawContent &&
-            evt.HappenedAt == command.HappenedAt &&
-            evt.PlannedAt == command.PlannedAt;
+            evt.HappenedAt == ToUtc(command.HappenedAt) &&
+            evt.PlannedAt == ToUtc(command.PlannedAt);
     }
+
+    /// <summary>归一化为 UTC，满足 Npgsql timestamp with time zone 只接受 Offset=0 的要求。</summary>
+    private static DateTimeOffset? ToUtc(DateTimeOffset? value) => value?.ToUniversalTime();
 
     private static string NormalizeTimezone(string timezone)
     {

@@ -215,8 +215,53 @@ public sealed class IdentityFlowTests(IdentityWebApplicationFactory factory)
     }
 
     [Fact]
-    public async Task WebClient_LogoutAcceptsRegisteredCallbackAndReturnsState()
+    public async Task DevelopmentAutoLogin_BypassesQr_AndIssuesWebToken()
     {
+        using var devFactory = factory.WithWebHostBuilder(builder =>
+        {
+            builder.UseSetting("DevelopmentAutoLogin:Enabled", "true");
+            builder.UseSetting("DevelopmentAutoLogin:Username", "dev_auto");
+            builder.UseSetting("DevelopmentAutoLogin:Password", "PassingTrace-Dev-2026!");
+        });
+        using var client = devFactory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false,
+            HandleCookies = true,
+            BaseAddress = new Uri("https://localhost")
+        });
+
+        var grantRequest = CreateAuthorizationRequest(
+            "passingtrace-web",
+            "http://localhost:5173/auth/callback");
+        var response = await client.GetAsync(grantRequest.Uri);
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        var location = response.Headers.Location
+            ?? throw new InvalidOperationException("缺少回调地址。");
+        Assert.DoesNotContain("/account/qr-login/", location.OriginalString);
+
+        var code = QueryHelpers.ParseQuery(location.Query)["code"].ToString();
+        Assert.False(string.IsNullOrWhiteSpace(code));
+        var tokens = await ExchangeCodeAsync(
+            client,
+            code,
+            grantRequest.Verifier,
+            "passingtrace-web",
+            "http://localhost:5173/auth/callback");
+        Assert.False(string.IsNullOrWhiteSpace(tokens.AccessToken));
+        Assert.Equal(
+            "passingtrace-web",
+            new JsonWebToken(tokens.AccessToken).GetClaim("client_id").Value);
+
+        // 自动登录写入了 Identity Cookie：再次发起同一授权请求仍直接出码，不再进扫码页。
+        var again = await client.GetAsync(grantRequest.Uri);
+        Assert.Equal(HttpStatusCode.Redirect, again.StatusCode);
+        Assert.DoesNotContain("/account/qr-login/", again.Headers.Location!.OriginalString);
+        Assert.False(string.IsNullOrWhiteSpace(
+            QueryHelpers.ParseQuery(again.Headers.Location.Query)["code"].ToString()));
+    }
+
+    [Fact]
+    public async Task WebClient_LogoutAcceptsRegisteredCallbackAndReturnsState()    {
         using var client = CreateBrowserClient();
         await RegisterMobileAsync(client, Unique("logout"));
         var grant = await AuthorizeWithCookieAsync(

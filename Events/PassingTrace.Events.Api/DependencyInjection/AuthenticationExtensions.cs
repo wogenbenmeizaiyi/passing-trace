@@ -21,7 +21,8 @@ public static class AuthenticationExtensions
                 options.Authority = configuration["Identity:Authority"];
                 options.Audience = IdentityConstants.ApiAudience;
                 options.MapInboundClaims = false;
-                options.RequireHttpsMetadata = true;
+                options.RequireHttpsMetadata =
+                    configuration.GetValue<bool?>("Identity:RequireHttpsMetadata") ?? true;
             });
 
         services.AddAuthorizationBuilder()
