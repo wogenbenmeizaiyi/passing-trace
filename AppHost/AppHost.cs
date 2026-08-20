@@ -5,7 +5,8 @@ var postgresPassword = builder.AddParameter(
     "postgres-password",
     secret: true);
 
-
+var redis = builder.AddRedis("redis")
+    .WithLifetime(ContainerLifetime.Persistent);
 // 持久化容器便于本地开发保留账号、客户端和授权数据。
 var postgres = builder.AddPostgres("postgres")
     .WithHostPort(5432)
@@ -25,9 +26,11 @@ var traceDatabase = postgres.AddDatabase("trace");
 
 var api = builder.AddProject<Projects.PassingTrace_Events_Api>("passingtrace-events-api")
     .WithReference(traceDatabase)
+    .WithReference(redis)
     .WithEnvironment("Identity__Authority", identity.GetEndpoint("https"))
     .WaitFor(identity)
-    .WaitFor(traceDatabase);
+    .WaitFor(traceDatabase)
+    .WaitFor(redis);
 
 // Vue 仍是独立进程；AppHost 只负责统一启动、端口和 Identity 地址注入。
 builder.AddViteApp("passingtrace-web", "../passingtrace-web")
@@ -47,5 +50,13 @@ builder.AddViteApp("passingtrace-sso-demo", "../passingtrace-sso-demo")
     .WithReference(identity)
     .WaitFor(identity)
     .WithExternalHttpEndpoints();
+
+
+//var caddy = builder.AddContainer("caddy", "caddy","latest")
+//    .WithBindMount("./Caddyfile", "/etc/caddy/Caddyfile")
+//    .WithBindMount("./web-dist", "/srv")
+//    .WithHttpEndpoint(port: 80, targetPort: 80)
+//    .WithHttpsEndpoint(port: 443, targetPort: 443);
+
 
 builder.Build().Run();

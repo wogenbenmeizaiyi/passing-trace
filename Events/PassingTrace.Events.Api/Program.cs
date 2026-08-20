@@ -1,12 +1,18 @@
+using PassingTrace.Core.Events;
 using PassingTrace.Events.Api.DependencyInjection;
-using PassingTrace.Infrastructure.DependencyInjection;
+using PassingTrace.Infrastructure;
+using PassingTrace.Infrastructure.Persistence;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.AddRedisClient("redis");
+builder.AddNpgsqlDbContext<TraceDbContext>("trace");
 builder.Services
-    .AddTraceInfrastructure(builder.Configuration)
     .AddTraceAuthentication(builder.Configuration)
     .AddTraceApplication();
+
+builder.Services.AddScoped<IEventRepository, EventRepository>();
+
 
 var app = builder.Build();
 await app.ConfigureTracePipelineAsync();

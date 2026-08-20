@@ -1,4 +1,5 @@
 using PassingTrace.Core.Events;
+using StackExchange.Redis;
 
 namespace PassingTrace.Events.Api.Events;
 
@@ -6,8 +7,11 @@ namespace PassingTrace.Events.Api.Events;
 /// Event 应用编排：封装创建、查询、修改 Source 与软删除用例，
 /// 不直接接触 DbContext。
 /// </summary>
+/// 
 public sealed class EventService(IEventRepository repository, TimeProvider clock)
 {
+
+
     /// <summary>创建 Event 并写入初始 Source 修订，幂等键冲突时复用或拒绝。</summary>
     public async Task<Event> CreateAsync(
         CreateEventCommand command,

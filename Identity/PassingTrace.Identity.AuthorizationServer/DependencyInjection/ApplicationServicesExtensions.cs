@@ -1,5 +1,3 @@
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
 using OpenIddict.Abstractions;
 using OpenIddict.Validation.AspNetCore;
 using PassingTrace.Identity.AuthorizationServer.Development;

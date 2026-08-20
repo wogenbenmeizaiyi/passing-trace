@@ -23,7 +23,7 @@ public static class ServiceCollectionExtensions
         services.AddDbContext<TraceDbContext>(options =>
             options.UseNpgsql(connectionString));
 
-        services.AddScoped<IEventRepository, EventRepository>();
+
 
         return services;
     }
