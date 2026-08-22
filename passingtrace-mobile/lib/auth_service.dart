@@ -53,10 +53,10 @@ class AuthService {
        _http = httpClient ?? http.Client(),
        _appLinks = appLinks ?? AppLinks();
 
-  static const defaultIdentityUrl = 'http://192.168.31.210:56229';
-  /// 默认 Events API 地址：与 Identity 默认地址共用 LAN 主机，端口切换到
+  static const defaultIdentityUrl = 'http://154.36.164.76:56229';
+  /// 默认 Events API 地址：与 Identity 默认地址共用同一外网主机，端口切换到
   /// `PassingTrace.Events.Api` 的 HTTP profile（见 launchSettings.json）。
-  static const defaultEventsApiUrl = 'http://192.168.31.210:54934';
+  static const defaultEventsApiUrl = 'http://154.36.164.76:54934';
   static const _identityUrlKey = 'identity_url';
   static const _eventsApiUrlKey = 'events_api_url';
   static const _deviceIdKey = 'device_id';

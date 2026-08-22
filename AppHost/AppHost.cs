@@ -1,4 +1,8 @@
+using Microsoft.Extensions.Hosting;
+
 var builder = DistributedApplication.CreateBuilder(args);
+
+builder.AddKubernetesEnvironment("k8s");
 
 // 密码由 Aspire 参数系统提供，不写入源码或 appsettings。
 var postgresPassword = builder.AddParameter(
@@ -32,31 +36,37 @@ var api = builder.AddProject<Projects.PassingTrace_Events_Api>("passingtrace-eve
     .WaitFor(traceDatabase)
     .WaitFor(redis);
 
-// Vue 仍是独立进程；AppHost 只负责统一启动、端口和 Identity 地址注入。
-builder.AddViteApp("passingtrace-web", "../passingtrace-web")
-    .WithPnpm(installArgs: ["--config.confirmModulesPurge=false"])
-    .WithEndpoint("http", endpoint => endpoint.Port = 5173)
-    .WithEnvironment("VITE_IDENTITY_AUTHORITY", identity.GetEndpoint("https"))
-    .WithReference(identity)
-    .WaitFor(identity)
-    .WithExternalHttpEndpoints();
+if (builder.Environment.IsProduction())
+{
+    builder.AddContainer(
+            "passingtrace-web",
+            "passingtrace-web")
+        .WithHttpEndpoint(port: 80, targetPort: 80);
 
-// 第二个独立 Origin/Client ID 用于从界面验证浏览器 SSO，而不是共享前端 Token。
-builder.AddViteApp("passingtrace-sso-demo", "../passingtrace-sso-demo")
-    .WithPnpm(installArgs: ["--config.confirmModulesPurge=false"])
-    .WithEndpoint("http", endpoint => endpoint.Port = 5174)
-    .WithEnvironment("VITE_IDENTITY_AUTHORITY", identity.GetEndpoint("https"))
-    .WithEnvironment("VITE_MAIN_WEB_URL", "http://localhost:5173")
-    .WithReference(identity)
-    .WaitFor(identity)
-    .WithExternalHttpEndpoints();
+    builder.AddContainer(
+            "passingtrace-sso-demo",
+            "passingtrace-sso-demo")
+        .WithHttpEndpoint(port: 80, targetPort: 80);
+}
+else
+{
+    builder.AddViteApp("passingtrace-web", "../passingtrace-web")
+        .WithPnpm(installArgs: ["--config.confirmModulesPurge=false"])
+        .WithEndpoint("http", endpoint => endpoint.Port = 5173)
+        .WithEnvironment("VITE_IDENTITY_AUTHORITY", identity.GetEndpoint("https"))
+        .WithReference(identity)
+        .WaitFor(identity)
+        .WithExternalHttpEndpoints();
 
-
-//var caddy = builder.AddContainer("caddy", "caddy","latest")
-//    .WithBindMount("./Caddyfile", "/etc/caddy/Caddyfile")
-//    .WithBindMount("./web-dist", "/srv")
-//    .WithHttpEndpoint(port: 80, targetPort: 80)
-//    .WithHttpsEndpoint(port: 443, targetPort: 443);
+    builder.AddViteApp("passingtrace-sso-demo", "../passingtrace-sso-demo")
+        .WithPnpm(installArgs: ["--config.confirmModulesPurge=false"])
+        .WithEndpoint("http", endpoint => endpoint.Port = 5174)
+        .WithEnvironment("VITE_IDENTITY_AUTHORITY", identity.GetEndpoint("https"))
+        .WithEnvironment("VITE_MAIN_WEB_URL", "http://localhost:5173")
+        .WithReference(identity)
+        .WaitFor(identity)
+        .WithExternalHttpEndpoints();
+}
 
 
 builder.Build().Run();
