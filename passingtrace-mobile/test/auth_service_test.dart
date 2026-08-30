@@ -28,6 +28,12 @@ void main() {
     expect(exception.toString(), '登录已过期');
   });
 
+  test('USB 调试默认地址指向 adb reverse 端口', () {
+    expect(AuthService.defaultIdentityUrl, 'http://localhost:56229');
+    expect(AuthService.defaultEventsApiUrl, 'http://localhost:54934');
+    expect(minimumPasswordLength, 8);
+  });
+
   group('AuthService Events API 地址', () {
     const channel = MethodChannel(
       'plugins.it_nomads.com/flutter_secure_storage',

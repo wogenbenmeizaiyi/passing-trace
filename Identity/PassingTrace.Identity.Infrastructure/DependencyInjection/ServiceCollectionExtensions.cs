@@ -36,7 +36,7 @@ public static class ServiceCollectionExtensions
                 options.User.AllowedUserNameCharacters = UsernamePolicy.AllowedCharacters;
                 options.User.RequireUniqueEmail = false;
 
-                options.Password.RequiredLength = 12;
+                options.Password.RequiredLength = 8;
                 options.Password.RequiredUniqueChars = 1;
                 options.Password.RequireDigit = false;
                 options.Password.RequireLowercase = false;

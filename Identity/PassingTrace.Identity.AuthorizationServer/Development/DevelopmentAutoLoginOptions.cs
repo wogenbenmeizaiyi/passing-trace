@@ -14,6 +14,6 @@ public sealed class DevelopmentAutoLoginOptions
     /// <summary>固定账号用户名，需符合 <c>UsernamePolicy</c> 规则。</summary>
     public string? Username { get; init; }
 
-    /// <summary>固定账号密码，需满足 Identity 密码策略（至少 12 位）。</summary>
+    /// <summary>固定账号密码，需满足 Identity 密码策略（至少 8 位）。</summary>
     public string? Password { get; init; }
 }

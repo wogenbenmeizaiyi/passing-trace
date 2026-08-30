@@ -13,6 +13,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 const mobileClientId = 'passingtrace-mobile';
 const mobileRedirectUri = 'com.passingtrace.mobile:/oauth2redirect';
+const minimumPasswordLength = 8;
 const mobileScopes = <String>[
   'openid',
   'profile',
@@ -54,11 +55,19 @@ class AuthService {
        _http = httpClient ?? http.Client(),
        _appLinks = appLinks ?? AppLinks();
 
-  static const defaultIdentityUrl = 'http://154.36.164.76:56229';
+  // Android 真机通过 `adb reverse tcp:56229 tcp:56229` 访问本机 Identity。
+  // 其他环境可通过 `--dart-define=PASSINGTRACE_IDENTITY_URL=...` 覆盖。
+  static const defaultIdentityUrl = String.fromEnvironment(
+    'PASSINGTRACE_IDENTITY_URL',
+    defaultValue: 'http://localhost:56229',
+  );
 
   /// 默认 Events API 地址：与 Identity 默认地址共用同一外网主机，端口切换到
   /// `PassingTrace.Events.Api` 的 HTTP profile（见 launchSettings.json）。
-  static const defaultEventsApiUrl = 'http://154.36.164.76:54934';
+  static const defaultEventsApiUrl = String.fromEnvironment(
+    'PASSINGTRACE_EVENTS_API_URL',
+    defaultValue: 'http://localhost:54934',
+  );
   static const _identityUrlKey = 'identity_url';
   static const _eventsApiUrlKey = 'events_api_url';
   static const _deviceIdKey = 'device_id';

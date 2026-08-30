@@ -215,6 +215,23 @@ public sealed class IdentityFlowTests(IdentityWebApplicationFactory factory)
     }
 
     [Fact]
+    public async Task Registration_RequiresAtLeastEightPasswordCharacters()
+    {
+        using var client = CreateBrowserClient();
+        var tooShort = await BeginAndCompleteRegistrationAsync(
+            client,
+            Unique("short_password"),
+            "1234567");
+        Assert.Equal(HttpStatusCode.BadRequest, tooShort.StatusCode);
+
+        var accepted = await BeginAndCompleteRegistrationAsync(
+            client,
+            Unique("eight_password"),
+            "12345678");
+        Assert.Equal(HttpStatusCode.Created, accepted.StatusCode);
+    }
+
+    [Fact]
     public async Task DevelopmentAutoLogin_BypassesQr_AndIssuesWebToken()
     {
         using var devFactory = factory.WithWebHostBuilder(builder =>

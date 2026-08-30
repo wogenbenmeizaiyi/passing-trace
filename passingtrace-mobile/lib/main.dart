@@ -173,6 +173,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
   Future<void> _submit() => _creating ? _register() : _login();
 
   void _showError(Object error) {
+    debugPrint('Mobile account action failed: $error');
     if (!mounted) return;
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text(error.toString())));
@@ -307,8 +308,8 @@ class _RegistrationPageState extends State<RegistrationPage> {
                     ),
                     validator: (value) {
                       if (value == null || value.isEmpty) return '请输入密码';
-                      if (_creating && value.length < 12) {
-                        return '密码至少需要 12 个字符';
+                      if (_creating && value.length < minimumPasswordLength) {
+                        return '密码至少需要 $minimumPasswordLength 个字符';
                       }
                       return null;
                     },
