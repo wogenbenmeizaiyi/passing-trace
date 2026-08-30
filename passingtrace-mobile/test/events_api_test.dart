@@ -58,10 +58,7 @@ void main() {
       final mock = MockClient((request) async {
         captured.add(request);
         return http.Response(
-          jsonEncode({
-            'items': <Map<String, dynamic>>[],
-            'nextCursor': null,
-          }),
+          jsonEncode({'items': <Map<String, dynamic>>[], 'nextCursor': null}),
           200,
           headers: {'content-type': 'application/json'},
         );
@@ -243,15 +240,15 @@ void main() {
     });
 
     test('业务错误抛 EventApiException 并保留 ProblemDetails', () async {
-      final mock = MockClient((_) async => http.Response(
-            jsonEncode({
-              'status': 409,
-              'title': '版本冲突',
-              'detail': '内容已被他人修改。',
-            }),
-            409,
-            headers: const {'content-type': 'application/problem+json; charset=utf-8'},
-          ));
+      final mock = MockClient(
+        (_) async => http.Response(
+          jsonEncode({'status': 409, 'title': '版本冲突', 'detail': '内容已被他人修改。'}),
+          409,
+          headers: const {
+            'content-type': 'application/problem+json; charset=utf-8',
+          },
+        ),
+      );
       final client = EventApiClient(
         auth: _FakeAuthService('t'),
         baseUrl: 'https://events.test',
@@ -320,11 +317,13 @@ void main() {
     });
 
     test('401 重试后仍 401 抛 EventApiException', () async {
-      final mock = MockClient((_) async => http.Response(
-            jsonEncode({'status': 401, 'title': 'expired'}),
-            401,
-            headers: {'content-type': 'application/problem+json'},
-          ));
+      final mock = MockClient(
+        (_) async => http.Response(
+          jsonEncode({'status': 401, 'title': 'expired'}),
+          401,
+          headers: {'content-type': 'application/problem+json'},
+        ),
+      );
       final auth = _FakeAuthService('access-renewed');
       final client = EventApiClient(
         auth: auth,
@@ -333,8 +332,9 @@ void main() {
       );
       expect(
         () => client.get(_session('stale'), 1),
-        throwsA(isA<EventApiException>()
-            .having((e) => e.status, 'status', 401)),
+        throwsA(
+          isA<EventApiException>().having((e) => e.status, 'status', 401),
+        ),
       );
       client.close();
     });

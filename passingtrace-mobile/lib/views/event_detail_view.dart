@@ -1,11 +1,14 @@
 // 详情页：拉取并展示 Event 完整字段，编辑 / 删除入口。
 
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:video_player/video_player.dart';
 
 import '../auth_service.dart';
 import '../events/event_datetime.dart';
 import '../events/event_model.dart';
 import '../events/events_api.dart';
+import '../events/media_api.dart';
 import '../main.dart';
 import 'event_form_view.dart';
 import 'event_widgets.dart';
@@ -28,6 +31,7 @@ class EventDetailView extends StatefulWidget {
 
 class _EventDetailViewState extends State<EventDetailView> {
   late EventApiClient _api;
+  late MediaApiClient _mediaApi;
   EventModel? _event;
   String? _error;
   bool _loading = true;
@@ -42,13 +46,17 @@ class _EventDetailViewState extends State<EventDetailView> {
   Future<void> _initApi() async {
     final baseUrl = await widget.auth.getEventsApiBaseUrl();
     if (!mounted) return;
-    setState(() => _api = EventApiClient(auth: widget.auth, baseUrl: baseUrl));
+    setState(() {
+      _api = EventApiClient(auth: widget.auth, baseUrl: baseUrl);
+      _mediaApi = MediaApiClient(auth: widget.auth, baseUrl: baseUrl);
+    });
     await _load();
   }
 
   @override
   void dispose() {
     _api.close();
+    _mediaApi.close();
     super.dispose();
   }
 
@@ -104,7 +112,9 @@ class _EventDetailViewState extends State<EventDetailView> {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            style: FilledButton.styleFrom(backgroundColor: PassingTraceApp.coral),
+            style: FilledButton.styleFrom(
+              backgroundColor: PassingTraceApp.coral,
+            ),
             child: const Text('删除'),
           ),
         ],
@@ -147,7 +157,11 @@ class _EventDetailViewState extends State<EventDetailView> {
       appBar: AppBar(
         title: const Text(
           '记录详情',
-          style: TextStyle(fontFamily: 'serif', fontWeight: FontWeight.w600, fontSize: 19),
+          style: TextStyle(
+            fontFamily: 'serif',
+            fontWeight: FontWeight.w600,
+            fontSize: 19,
+          ),
         ),
         actions: [
           if (_event != null)
@@ -210,14 +224,51 @@ class _EventDetailViewState extends State<EventDetailView> {
             const SizedBox(height: 16),
             Text(
               event.rawContent!,
-              style: const TextStyle(
-                fontSize: 15,
-                height: 1.85,
+              style: const TextStyle(fontSize: 15, height: 1.85),
+            ),
+          ],
+          if (event.media.isNotEmpty) ...[
+            const SizedBox(height: 24),
+            const Text(
+              '附件',
+              style: TextStyle(
+                fontFamily: 'serif',
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 10),
+            for (final media in event.media) _buildMedia(media),
+          ],
+          if (event.semanticStatus != null) ...[
+            const SizedBox(height: 24),
+            Container(
+              padding: const EdgeInsets.all(16),
+              color: PassingTraceApp.coral.withValues(alpha: 0.08),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.auto_awesome, size: 18),
+                      SizedBox(width: 8),
+                      Text(
+                        'AI 分析',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(event.semanticSummary ?? '状态：${event.semanticStatus}'),
+                ],
               ),
             ),
           ],
           const SizedBox(height: 28),
-          _DetailRow(label: event.kind == EventKind.plan ? '计划时间' : '发生时间', value: time),
+          _DetailRow(
+            label: event.kind == EventKind.plan ? '计划时间' : '发生时间',
+            value: time,
+          ),
           _DetailRow(label: '时区', value: event.timezone),
           if (event.completedAt != null)
             _DetailRow(label: '完成时间', value: formatLocal(event.completedAt)),
@@ -241,6 +292,137 @@ class _EventDetailViewState extends State<EventDetailView> {
       ),
     );
   }
+
+  Widget _buildMedia(MediaAssetModel media) => Card(
+    elevation: 0,
+    child: ListTile(
+      leading: Icon(
+        media.kind == MediaKind.image
+            ? Icons.image_outlined
+            : media.kind == MediaKind.video
+            ? Icons.play_circle_outline
+            : Icons.description_outlined,
+      ),
+      title: Text(media.fileName, maxLines: 1, overflow: TextOverflow.ellipsis),
+      subtitle: Text(_formatBytes(media.size)),
+      trailing: const Icon(Icons.open_in_new, size: 18),
+      onTap: () => _openMedia(media),
+    ),
+  );
+
+  Future<void> _openMedia(MediaAssetModel media) async {
+    try {
+      final url = await _mediaApi.access(widget.session, media.id);
+      if (!mounted) return;
+      if (media.kind == MediaKind.image) {
+        await showDialog<void>(
+          context: context,
+          builder: (_) => Dialog.fullscreen(
+            backgroundColor: Colors.black,
+            child: Stack(
+              children: [
+                Center(child: InteractiveViewer(child: Image.network('$url'))),
+                SafeArea(
+                  child: IconButton(
+                    color: Colors.white,
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      } else if (media.kind == MediaKind.video) {
+        await showDialog<void>(
+          context: context,
+          builder: (_) => _VideoDialog(url: url),
+        );
+      } else if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
+        throw StateError('系统中没有可处理该文件的应用。');
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('打开附件失败：$error')));
+      }
+    }
+  }
+
+  static String _formatBytes(int size) {
+    if (size >= 1024 * 1024 * 1024) {
+      return '${(size / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
+    }
+    if (size >= 1024 * 1024) {
+      return '${(size / (1024 * 1024)).toStringAsFixed(1)} MB';
+    }
+    if (size >= 1024) return '${(size / 1024).toStringAsFixed(1)} KB';
+    return '$size B';
+  }
+}
+
+class _VideoDialog extends StatefulWidget {
+  const _VideoDialog({required this.url});
+  final Uri url;
+
+  @override
+  State<_VideoDialog> createState() => _VideoDialogState();
+}
+
+class _VideoDialogState extends State<_VideoDialog> {
+  late final VideoPlayerController _controller;
+  late final Future<void> _ready;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = VideoPlayerController.networkUrl(widget.url);
+    _ready = _controller.initialize().then((_) => _controller.play());
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Dialog(
+    backgroundColor: Colors.black,
+    child: FutureBuilder<void>(
+      future: _ready,
+      builder: (_, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const SizedBox(
+            height: 240,
+            child: Center(child: CircularProgressIndicator()),
+          );
+        }
+        return Stack(
+          alignment: Alignment.bottomCenter,
+          children: [
+            AspectRatio(
+              aspectRatio: _controller.value.aspectRatio,
+              child: VideoPlayer(_controller),
+            ),
+            VideoProgressIndicator(_controller, allowScrubbing: true),
+            Center(
+              child: IconButton.filled(
+                onPressed: () => setState(() {
+                  _controller.value.isPlaying
+                      ? _controller.pause()
+                      : _controller.play();
+                }),
+                icon: Icon(
+                  _controller.value.isPlaying ? Icons.pause : Icons.play_arrow,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    ),
+  );
 }
 
 class _DetailRow extends StatelessWidget {
@@ -268,10 +450,7 @@ class _DetailRow extends StatelessWidget {
         Expanded(
           child: Text(
             value,
-            style: const TextStyle(
-              fontSize: 14,
-              fontFamily: 'serif',
-            ),
+            style: const TextStyle(fontSize: 14, fontFamily: 'serif'),
           ),
         ),
       ],

@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 using PassingTrace.Core.Events;
+using PassingTrace.Events.Api.Media;
 
 namespace PassingTrace.Events.Api.Common;
 
@@ -17,10 +18,13 @@ public sealed class DomainExceptionHandler : IExceptionHandler
         (int status, string title) = exception switch
         {
             EventNotFoundException => (StatusCodes.Status404NotFound, "资源不存在"),
+            MediaAssetNotFoundException => (StatusCodes.Status404NotFound, "附件不存在"),
             ConcurrencyException => (StatusCodes.Status409Conflict, "版本冲突"),
             IdempotencyConflictException => (StatusCodes.Status409Conflict, "幂等冲突"),
             DomainValidationException => (StatusCodes.Status400BadRequest, "请求不合法"),
             PreconditionRequiredException => (StatusCodes.Status428PreconditionRequired, "缺少前置条件"),
+            KeyNotFoundException => (StatusCodes.Status404NotFound, "资源不存在"),
+            ArgumentException => (StatusCodes.Status400BadRequest, "请求不合法"),
             _ => (0, string.Empty),
         };
 

@@ -20,6 +20,7 @@
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.11" />
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
     <PackageVersion Include="Npgsql.OpenTelemetry" Version="10.0.3" />
+    <PackageVersion Include="Pgvector.EntityFrameworkCore" Version="0.3.0" />
     <!-- OpenIddict -->
     <PackageVersion Include="OpenIddict.AspNetCore" Version="7.6.0" />
     <PackageVersion Include="OpenIddict.EntityFrameworkCore" Version="7.6.0" />
@@ -29,11 +30,19 @@
     <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.17.0" />
     <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.17.0" />
     <PackageVersion Include="OpenTelemetry.Instrumentation.Http" Version="1.17.0" />
+    <!-- AI / 对象存储 / 媒体处理 -->
+    <PackageVersion Include="AWSSDK.S3" Version="4.0.102.4" />
+    <PackageVersion Include="Microsoft.Agents.AI" Version="1.19.0" />
+    <PackageVersion Include="Microsoft.Extensions.AI" Version="10.9.0" />
+    <PackageVersion Include="Microsoft.Extensions.AI.OpenAI" Version="10.9.0" />
+    <PackageVersion Include="SkiaSharp" Version="4.151.1" />
     <!-- 其他 -->
     <PackageVersion Include="QRCoder" Version="1.8.0" />
     <!-- 测试 -->
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.0.1" />
     <PackageVersion Include="xunit" Version="2.9.3" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
+    <PackageVersion Include="Testcontainers.PostgreSql" Version="4.14.0" />
+    <PackageVersion Include="Testcontainers.Minio" Version="4.14.0" />
   </ItemGroup>
 </Project>

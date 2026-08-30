@@ -54,6 +54,7 @@ class AuthService {
        _appLinks = appLinks ?? AppLinks();
 
   static const defaultIdentityUrl = 'http://154.36.164.76:56229';
+
   /// 默认 Events API 地址：与 Identity 默认地址共用同一外网主机，端口切换到
   /// `PassingTrace.Events.Api` 的 HTTP profile（见 launchSettings.json）。
   static const defaultEventsApiUrl = 'http://154.36.164.76:54934';

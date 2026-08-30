@@ -3,6 +3,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 
 import 'auth_service.dart';
 import 'views/events_list_view.dart';
+import 'views/assistant_view.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -424,7 +425,21 @@ class _AccountHomeState extends State<AccountHome> {
     if (!mounted) return;
     await navigator.push(
       MaterialPageRoute(
-        builder: (_) => EventsListView(auth: widget.auth, session: widget.session),
+        builder: (_) =>
+            EventsListView(auth: widget.auth, session: widget.session),
+      ),
+    );
+  }
+
+  Future<void> _openAssistant() async {
+    final navigator = Navigator.of(context);
+    if (navigator.canPop()) navigator.pop();
+    await Future<void>.delayed(const Duration(milliseconds: 180));
+    if (!mounted) return;
+    await navigator.push(
+      MaterialPageRoute(
+        builder: (_) =>
+            AssistantView(auth: widget.auth, session: widget.session),
       ),
     );
   }
@@ -601,10 +616,11 @@ class _AccountHomeState extends State<AccountHome> {
             label: '时间线',
             onTap: _busy ? null : _openTimeline,
           ),
-          const _DrawerDestination(
+          _DrawerDestination(
             icon: Icons.auto_graph_outlined,
             selectedIcon: Icons.auto_graph,
             label: '生活洞察',
+            onTap: _busy ? null : _openAssistant,
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
@@ -878,7 +894,10 @@ class _PassingTraceHome extends StatelessWidget {
                           SizedBox(height: 4),
                           Text(
                             '查看、记录、编辑你留下的痕迹和计划',
-                            style: TextStyle(fontSize: 12, color: Colors.black54),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.black54,
+                            ),
                           ),
                         ],
                       ),

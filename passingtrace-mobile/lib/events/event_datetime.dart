@@ -56,7 +56,13 @@ String offsetForTimezone(DateTime probe, String timezone) {
 String? toIsoWithOffset(String wallClock, String timezone) {
   final parts = _parseWallClock(wallClock);
   if (parts == null) return null;
-  final probe = DateTime.utc(parts.year, parts.month, parts.day, parts.hour, parts.minute);
+  final probe = DateTime.utc(
+    parts.year,
+    parts.month,
+    parts.day,
+    parts.hour,
+    parts.minute,
+  );
   final offset = offsetForTimezone(probe, timezone);
   String two(int n) => n.toString().padLeft(2, '0');
   final y = parts.year.toString().padLeft(4, '0');

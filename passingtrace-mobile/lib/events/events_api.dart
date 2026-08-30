@@ -59,15 +59,9 @@ class EventApiClient {
     final fresh = await auth.ensureFreshToken(session);
     final token = fresh.accessToken;
     if (token == null || token.isEmpty) {
-      throw const EventApiException(
-        status: 401,
-        message: '登录状态已失效，请重新登录。',
-      );
+      throw const EventApiException(status: 401, message: '登录状态已失效，请重新登录。');
     }
-    return {
-      'Authorization': 'Bearer $token',
-      'Accept': 'application/json',
-    };
+    return {'Authorization': 'Bearer $token', 'Accept': 'application/json'};
   }
 
   Future<http.Response> _send(
@@ -104,10 +98,7 @@ class EventApiClient {
       try {
         await auth.ensureFreshToken(session);
       } catch (_) {
-        throw const EventApiException(
-          status: 401,
-          message: '登录状态已失效，请重新登录。',
-        );
+        throw const EventApiException(status: 401, message: '登录状态已失效，请重新登录。');
       }
       return _send(
         session,
@@ -121,7 +112,11 @@ class EventApiClient {
     return response;
   }
 
-  T _decode<T>(http.Response response, Set<int> success, T Function(dynamic) parse) {
+  T _decode<T>(
+    http.Response response,
+    Set<int> success,
+    T Function(dynamic) parse,
+  ) {
     if (success.contains(response.statusCode)) {
       if (response.body.isEmpty) {
         return parse(null);
@@ -139,7 +134,8 @@ class EventApiClient {
     } catch (_) {
       problem = null;
     }
-    final message = problem?.detail ?? problem?.title ?? '请求失败：${response.statusCode}';
+    final message =
+        problem?.detail ?? problem?.title ?? '请求失败：${response.statusCode}';
     throw EventApiException(
       status: response.statusCode,
       message: message,
@@ -165,11 +161,9 @@ class EventApiClient {
       'to': to,
     });
     final response = await _send(session, 'GET', uri);
-    return _decode(
-      response,
-      const {200},
-      (raw) => EventPage.fromJson(raw as Map<String, dynamic>),
-    );
+    return _decode(response, const {
+      200,
+    }, (raw) => EventPage.fromJson(raw as Map<String, dynamic>));
   }
 
   Future<EventModel> get(AuthSession session, int id) async {
@@ -178,11 +172,9 @@ class EventApiClient {
     }
     final uri = _resolve('/api/v1/events/$id');
     final response = await _send(session, 'GET', uri);
-    return _decode(
-      response,
-      const {200},
-      (raw) => EventModel.fromJson(raw as Map<String, dynamic>),
-    );
+    return _decode(response, const {
+      200,
+    }, (raw) => EventModel.fromJson(raw as Map<String, dynamic>));
   }
 
   Future<EventModel> create(
@@ -194,6 +186,7 @@ class EventApiClient {
     DateTime? plannedAt,
     required String timezone,
     required String idempotencyKey,
+    List<String> mediaIds = const [],
   }) async {
     if (idempotencyKey.isEmpty) {
       throw ArgumentError.value(idempotencyKey, 'idempotencyKey', '幂等键不能为空');
@@ -205,6 +198,7 @@ class EventApiClient {
       'happenedAt': happenedAt?.toUtc().toIso8601String(),
       'plannedAt': plannedAt?.toUtc().toIso8601String(),
       'timezone': timezone,
+      'mediaIds': mediaIds,
     };
     final uri = _resolve('/api/v1/events');
     final response = await _send(
@@ -214,11 +208,9 @@ class EventApiClient {
       body: body,
       extraHeaders: {'Idempotency-Key': idempotencyKey},
     );
-    return _decode(
-      response,
-      const {201},
-      (raw) => EventModel.fromJson(raw as Map<String, dynamic>),
-    );
+    return _decode(response, const {
+      201,
+    }, (raw) => EventModel.fromJson(raw as Map<String, dynamic>));
   }
 
   Future<EventModel> update(
@@ -230,6 +222,7 @@ class EventApiClient {
     DateTime? plannedAt,
     required String timezone,
     required int version,
+    List<String> mediaIds = const [],
   }) async {
     if (version < 0) {
       throw ArgumentError.value(version, 'version', 'version 必须为非负整数');
@@ -240,6 +233,7 @@ class EventApiClient {
       'happenedAt': happenedAt?.toUtc().toIso8601String(),
       'plannedAt': plannedAt?.toUtc().toIso8601String(),
       'timezone': timezone,
+      'mediaIds': mediaIds,
     };
     final uri = _resolve('/api/v1/events/$id');
     final response = await _send(
@@ -249,14 +243,16 @@ class EventApiClient {
       body: body,
       extraHeaders: {'If-Match': '$version'},
     );
-    return _decode(
-      response,
-      const {200},
-      (raw) => EventModel.fromJson(raw as Map<String, dynamic>),
-    );
+    return _decode(response, const {
+      200,
+    }, (raw) => EventModel.fromJson(raw as Map<String, dynamic>));
   }
 
-  Future<void> remove(AuthSession session, int id, {required int version}) async {
+  Future<void> remove(
+    AuthSession session,
+    int id, {
+    required int version,
+  }) async {
     if (version < 0) {
       throw ArgumentError.value(version, 'version', 'version 必须为非负整数');
     }
@@ -279,7 +275,8 @@ class EventApiClient {
     } catch (_) {
       problem = null;
     }
-    final message = problem?.detail ?? problem?.title ?? '删除失败：${response.statusCode}';
+    final message =
+        problem?.detail ?? problem?.title ?? '删除失败：${response.statusCode}';
     throw EventApiException(
       status: response.statusCode,
       message: message,

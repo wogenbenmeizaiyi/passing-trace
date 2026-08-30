@@ -131,7 +131,8 @@ class _EventsListViewState extends State<EventsListView> {
   Future<void> _openCreate() async {
     final created = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
-        builder: (_) => EventFormView(auth: widget.auth, session: widget.session),
+        builder: (_) =>
+            EventFormView(auth: widget.auth, session: widget.session),
       ),
     );
     if (created == true && mounted) await _reload();
@@ -159,7 +160,11 @@ class _EventsListViewState extends State<EventsListView> {
       appBar: AppBar(
         title: const Text(
           '时间线',
-          style: TextStyle(fontFamily: 'serif', fontWeight: FontWeight.w600, fontSize: 19),
+          style: TextStyle(
+            fontFamily: 'serif',
+            fontWeight: FontWeight.w600,
+            fontSize: 19,
+          ),
         ),
         actions: [
           IconButton(

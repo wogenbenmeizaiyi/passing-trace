@@ -3,6 +3,8 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 
 import { eventsApi } from '@/api/events'
+import { mediaApi } from '@/api/media'
+import { aiApi, type SemanticResult } from '@/api/ai'
 import { HttpError } from '@/api/http-client'
 import {
   EventKind,
@@ -24,6 +26,9 @@ const error = ref<string | null>(null)
 const confirmDelete = ref(false)
 const deleting = ref(false)
 const editMode = ref(false)
+const mediaUrls = ref<Record<string, string>>({})
+const semantic = ref<SemanticResult | null>(null)
+const reparsing = ref(false)
 
 let activeController: AbortController | null = null
 
@@ -45,6 +50,14 @@ async function load() {
   error.value = null
   try {
     item.value = await eventsApi.get(eventId.value, { signal: controller.signal })
+    const accesses = await Promise.all(
+      item.value.media.map(async (media) => {
+        const access = await mediaApi.access(media.id, { signal: controller.signal })
+        return [media.id, access.url] as const
+      }),
+    )
+    mediaUrls.value = Object.fromEntries(accesses)
+    semantic.value = await aiApi.getSemantic(item.value.id)
   } catch (reason) {
     if (controller.signal.aborted) return
     if (reason instanceof HttpError && reason.status === 404) {
@@ -57,6 +70,20 @@ async function load() {
     item.value = null
   } finally {
     if (!controller.signal.aborted) loading.value = false
+  }
+}
+
+async function reparse() {
+  if (!item.value || reparsing.value) return
+  reparsing.value = true
+  try {
+    await aiApi.reparse(item.value.id)
+    semantic.value = {
+      ...(semantic.value ?? (await aiApi.getSemantic(item.value.id))),
+      status: 'Pending',
+    }
+  } finally {
+    reparsing.value = false
   }
 }
 
@@ -120,6 +147,7 @@ onUnmounted(() => {
       >
       <nav class="nav-links" aria-label="主导航">
         <RouterLink to="/events">记录</RouterLink>
+        <RouterLink to="/assistant">AI 助手</RouterLink>
       </nav>
       <div class="account-actions">
         <template v-if="auth.isAuthenticated"
@@ -208,6 +236,42 @@ onUnmounted(() => {
           <p class="section-label">原始记录</p>
           <p v-if="item.rawContent" class="raw-content-body">{{ item.rawContent }}</p>
           <p v-else class="raw-content-empty">（未填写正文）</p>
+        </section>
+
+        <section v-if="item.media.length" class="media-section">
+          <p class="section-label">附件</p>
+          <div class="media-grid">
+            <figure v-for="media in item.media" :key="media.id" :class="{ file: media.kind === 3 }">
+              <img v-if="media.kind === 1" :src="mediaUrls[media.id]" :alt="media.fileName" />
+              <video
+                v-else-if="media.kind === 2"
+                :src="mediaUrls[media.id]"
+                controls
+                preload="metadata"
+              />
+              <a v-else :href="mediaUrls[media.id]" target="_blank" rel="noopener">下载文件</a>
+              <figcaption>
+                {{ media.fileName }} · {{ (media.size / 1024 / 1024).toFixed(1) }}MB
+              </figcaption>
+            </figure>
+          </div>
+        </section>
+
+        <section class="semantic-card" :data-status="semantic?.status ?? item.semanticStatus">
+          <div>
+            <p class="section-label">AI 分析 · {{ semantic?.status ?? item.semanticStatus }}</p>
+            <p v-if="semantic?.summary ?? item.semanticSummary">
+              {{ semantic?.summary ?? item.semanticSummary }}
+            </p>
+            <p v-else>Worker 会在后台分析正文与图片，记录保存不需要等待。</p>
+            <small v-if="semantic?.model"
+              >{{ semantic.model }} · {{ semantic.pipelineVersion }}</small
+            >
+            <small v-if="semantic?.error" class="semantic-error">{{ semantic.error }}</small>
+          </div>
+          <button class="text-button" :disabled="reparsing" @click="reparse">
+            {{ reparsing ? '已排队' : '重新分析' }}
+          </button>
         </section>
 
         <section class="source-meta">
@@ -345,6 +409,61 @@ onUnmounted(() => {
   color: rgba(36, 35, 31, 0.4);
   font-size: 13px;
 }
+.media-section {
+  margin-bottom: 36px;
+}
+.media-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.media-grid figure {
+  margin: 0;
+  border: 1px solid var(--line);
+  background: rgba(245, 240, 230, 0.42);
+}
+.media-grid img,
+.media-grid video {
+  display: block;
+  width: 100%;
+  max-height: 420px;
+  object-fit: contain;
+  background: #171713;
+}
+.media-grid figure.file {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 18px;
+}
+.media-grid figure.file a {
+  color: var(--red);
+}
+.media-grid figcaption {
+  padding: 8px 10px;
+  color: rgba(36, 35, 31, 0.55);
+  font-size: 11px;
+}
+.semantic-card {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 36px;
+  padding: 20px;
+  border-left: 3px solid var(--sage);
+  background: rgba(117, 129, 104, 0.08);
+}
+.semantic-card p {
+  margin: 5px 0;
+  line-height: 1.7;
+}
+.semantic-card small {
+  display: block;
+  color: rgba(36, 35, 31, 0.48);
+}
+.semantic-card .semantic-error {
+  color: #b33225;
+}
 .source-meta {
   border-top: 1px solid var(--line);
   padding-top: 24px;
@@ -409,6 +528,9 @@ onUnmounted(() => {
   }
   .source,
   .source-meta dl {
+    grid-template-columns: 1fr;
+  }
+  .media-grid {
     grid-template-columns: 1fr;
   }
   .detail-header {

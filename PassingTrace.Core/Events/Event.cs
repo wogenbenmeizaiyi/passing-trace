@@ -1,5 +1,8 @@
 namespace PassingTrace.Core.Events;
 
+using PassingTrace.Core.Media;
+using PassingTrace.Core.Ai;
+
 /// <summary>
 /// Event 聚合根，Trace 与 Plan 统一抽象。Event 表保存当前 Source 值，
 /// 每次修改写入一条 <see cref="SourceRevision"/> 历史快照并递增版本。
@@ -18,7 +21,7 @@ public sealed class Event
     /// <summary>生命周期状态。</summary>
     public EventStatus Status { get; set; }
 
-    /// <summary>当前 Source 的标题，可为空但标题与原文不能同时为空。</summary>
+    /// <summary>当前 Source 的标题，可为空；标题、原文、附件至少存在一种。</summary>
     public string? Title { get; set; }
 
     /// <summary>当前 Source 的用户原始自然语言，AI 不得覆盖。</summary>
@@ -62,6 +65,12 @@ public sealed class Event
 
     /// <summary>Source 修订历史。</summary>
     public List<SourceRevision> SourceRevisions { get; set; } = [];
+
+    /// <summary>当前 Source 使用的附件。</summary>
+    public List<EventMediaAsset> MediaAssets { get; set; } = [];
+
+    /// <summary>该 Event 的不可变语义分析历史。</summary>
+    public List<EventSemanticRun> SemanticRuns { get; set; } = [];
 
     /// <summary>
     /// 创建新 Event。Trace 默认已完成，Plan 默认待执行。

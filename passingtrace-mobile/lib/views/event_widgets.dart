@@ -67,11 +67,7 @@ class _PillBadge extends StatelessWidget {
 }
 
 class EventCard extends StatelessWidget {
-  const EventCard({
-    super.key,
-    required this.event,
-    required this.onTap,
-  });
+  const EventCard({super.key, required this.event, required this.onTap});
 
   final EventModel event;
   final VoidCallback onTap;
@@ -81,7 +77,9 @@ class EventCard extends StatelessWidget {
     final title = event.title?.isNotEmpty == true
         ? event.title!
         : (event.rawContent?.isNotEmpty == true ? event.rawContent! : '（无标题）');
-    final summary = event.rawContent?.isNotEmpty == true ? event.rawContent! : '';
+    final summary = event.rawContent?.isNotEmpty == true
+        ? event.rawContent!
+        : '';
     final timeText = _timeLabel(event);
     return InkWell(
       onTap: onTap,

@@ -113,6 +113,7 @@ onUnmounted(() => {
       >
       <nav class="nav-links" aria-label="主导航">
         <RouterLink to="/events">记录</RouterLink>
+        <RouterLink to="/assistant">AI 助手</RouterLink>
       </nav>
       <div class="account-actions">
         <template v-if="auth.isAuthenticated"
@@ -199,6 +200,8 @@ onUnmounted(() => {
             </div>
             <h2 class="event-title">{{ item.title ?? '（无标题）' }}</h2>
             <p class="event-summary">{{ summary(item) }}</p>
+            <span v-if="item.media.length" class="media-count">附件 {{ item.media.length }}</span>
+            <span class="semantic-state">AI {{ item.semanticStatus }}</span>
             <span class="event-foot">
               <span>#{{ item.id }}</span>
               <span>{{ item.timezone }}</span>
@@ -352,6 +355,13 @@ onUnmounted(() => {
   margin-top: 8px;
   font-size: 11px;
   color: rgba(36, 35, 31, 0.4);
+}
+.media-count,
+.semantic-state {
+  display: inline-block;
+  margin: 8px 8px 0 0;
+  color: rgba(36, 35, 31, 0.48);
+  font-size: 10px;
 }
 .events-footer {
   display: flex;

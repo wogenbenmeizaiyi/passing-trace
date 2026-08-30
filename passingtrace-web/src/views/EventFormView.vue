@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 
 import { eventsApi } from '@/api/events'
+import { mediaApi } from '@/api/media'
 import { HttpError } from '@/api/http-client'
 import {
   EventKind,
@@ -10,6 +11,7 @@ import {
   EventStatus,
   type EventKind as EventKindT,
   type EventResponse,
+  type MediaResponse,
   type UpdateEventRequest,
 } from '@/api/events-types'
 import { useAuthStore } from '@/stores/auth'
@@ -43,6 +45,15 @@ const loading = ref(false)
 const submitting = ref(false)
 const error = ref<string | null>(null)
 const fieldErrors = ref<Record<string, string>>({})
+interface AttachmentDraft {
+  key: string
+  file?: File
+  media?: MediaResponse
+  progress: number
+  uploading: boolean
+  error?: string
+}
+const attachments = ref<AttachmentDraft[]>([])
 
 /** 创建时生成一次，重试复用；成功后丢弃。 */
 let idempotencyKey: string | null = null
@@ -51,8 +62,11 @@ let activeController: AbortController | null = null
 
 function validate(): boolean {
   const errors: Record<string, string> = {}
-  if (!form.value.title.trim() && !form.value.rawContent.trim()) {
-    errors['content'] = '标题与正文至少需要填写一项。'
+  if (!form.value.title.trim() && !form.value.rawContent.trim() && attachments.value.length === 0) {
+    errors['content'] = '标题、正文和附件至少需要一项。'
+  }
+  if (attachments.value.some((item) => item.uploading || !item.media)) {
+    errors['media'] = '请等待所有附件上传成功，失败的附件可重试或移除。'
   }
   if (!form.value.timezone.trim()) {
     errors['timezone'] = '请填写 IANA 时区名，例如 Asia/Tokyo。'
@@ -89,6 +103,10 @@ async function load() {
       when: toDatetimeLocal(item.kind === EventKind.Plan ? item.plannedAt : item.happenedAt),
       timezone: item.timezone,
     }
+    attachments.value = item.media
+      .slice()
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map((media) => ({ key: media.id, media, progress: 100, uploading: false }))
   } catch (reason) {
     if (controller.signal.aborted) return
     if (reason instanceof HttpError && reason.status === 404) {
@@ -122,6 +140,7 @@ async function submit() {
           ? { plannedAt: isoWhen, happenedAt: null }
           : { happenedAt: isoWhen, plannedAt: null }),
         timezone: form.value.timezone.trim(),
+        mediaIds: attachments.value.map((item) => item.media!.id),
       }
       const created = await eventsApi.create(payload, idempotencyKey)
       idempotencyKey = null
@@ -138,6 +157,7 @@ async function submit() {
           ? { plannedAt: isoWhen, happenedAt: null }
           : { happenedAt: isoWhen, plannedAt: null }),
         timezone: form.value.timezone.trim(),
+        mediaIds: attachments.value.map((item) => item.media!.id),
       }
       const updated = await eventsApi.update(loaded.value.id, payload, loaded.value.version)
       loaded.value = updated
@@ -168,6 +188,54 @@ async function submit() {
   } finally {
     submitting.value = false
   }
+}
+
+async function selectFiles(event: Event) {
+  const input = event.target as HTMLInputElement
+  const files = [...(input.files ?? [])]
+  input.value = ''
+  if (attachments.value.length + files.length > 10) {
+    fieldErrors.value.media = '每条记录最多 10 个附件。'
+    return
+  }
+  for (const file of files) {
+    const draft: AttachmentDraft = {
+      key: `${file.name}-${file.lastModified}-${crypto.randomUUID()}`,
+      file,
+      progress: 0,
+      uploading: false,
+    }
+    attachments.value.push(draft)
+    void uploadAttachment(draft)
+  }
+}
+
+async function uploadAttachment(draft: AttachmentDraft) {
+  if (!draft.file || draft.uploading) return
+  draft.uploading = true
+  draft.error = undefined
+  try {
+    draft.media = await mediaApi.upload(draft.file, (progress) => {
+      draft.progress = progress.percent
+    })
+    draft.progress = 100
+    delete fieldErrors.value.media
+  } catch (reason) {
+    draft.error = reason instanceof Error ? reason.message : '上传失败。'
+  } finally {
+    draft.uploading = false
+  }
+}
+
+function removeAttachment(index: number) {
+  attachments.value.splice(index, 1)
+}
+
+function moveAttachment(index: number, direction: -1 | 1) {
+  const target = index + direction
+  if (target < 0 || target >= attachments.value.length) return
+  const [item] = attachments.value.splice(index, 1)
+  if (item) attachments.value.splice(target, 0, item)
 }
 
 const kindOptions = [
@@ -209,6 +277,7 @@ onUnmounted(() => {
       >
       <nav class="nav-links" aria-label="主导航">
         <RouterLink to="/events">记录</RouterLink>
+        <RouterLink to="/assistant">AI 助手</RouterLink>
       </nav>
       <div class="account-actions">
         <template v-if="auth.isAuthenticated"
@@ -294,6 +363,54 @@ onUnmounted(() => {
             />
           </label>
           <p v-if="fieldErrors.content" class="field-error">{{ fieldErrors.content }}</p>
+
+          <fieldset class="form-field media-field">
+            <legend>图片、视频或文件</legend>
+            <label class="media-picker">
+              <input type="file" multiple @change="selectFiles" />
+              <span>＋ 选择附件</span>
+              <small>最多 10 个；图片 20MB、视频 1GB、其他文件 200MB</small>
+            </label>
+            <ol v-if="attachments.length" class="attachment-list">
+              <li v-for="(item, index) in attachments" :key="item.key">
+                <span class="attachment-icon">{{
+                  item.media?.kind === 1 ? '图' : item.media?.kind === 2 ? '影' : '件'
+                }}</span>
+                <span class="attachment-name">{{ item.media?.fileName ?? item.file?.name }}</span>
+                <span v-if="item.uploading" class="attachment-progress">{{ item.progress }}%</span>
+                <span v-else-if="item.error" class="attachment-error">{{ item.error }}</span>
+                <button
+                  v-if="item.error"
+                  type="button"
+                  class="text-button"
+                  @click="uploadAttachment(item)"
+                >
+                  重试
+                </button>
+                <button
+                  type="button"
+                  class="text-button"
+                  :disabled="index === 0"
+                  @click="moveAttachment(index, -1)"
+                >
+                  ↑
+                </button>
+                <button
+                  type="button"
+                  class="text-button"
+                  :disabled="index === attachments.length - 1"
+                  @click="moveAttachment(index, 1)"
+                >
+                  ↓
+                </button>
+                <button type="button" class="text-button danger" @click="removeAttachment(index)">
+                  移除
+                </button>
+                <progress v-if="item.uploading" :value="item.progress" max="100" />
+              </li>
+            </ol>
+            <p v-if="fieldErrors.media" class="field-error">{{ fieldErrors.media }}</p>
+          </fieldset>
 
           <label class="form-field">
             <span class="field-label">{{ whenLabel }}</span>
@@ -434,6 +551,78 @@ onUnmounted(() => {
   margin: 0;
   color: #b33225;
   font-size: 12px;
+}
+.media-picker {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border: 1px dashed rgba(36, 35, 31, 0.28);
+  cursor: pointer;
+}
+.media-picker input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.media-picker span {
+  color: var(--red);
+  font-weight: 700;
+}
+.media-picker small {
+  color: rgba(36, 35, 31, 0.48);
+}
+.attachment-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.attachment-list li {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+}
+.attachment-icon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  background: var(--ink);
+  color: white;
+  font-size: 11px;
+}
+.attachment-name {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+.attachment-progress {
+  color: var(--sage);
+  font-size: 12px;
+}
+.attachment-error {
+  max-width: 180px;
+  color: #b33225;
+  font-size: 11px;
+}
+.attachment-list progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  height: 3px;
+}
+.text-button.danger {
+  color: #b33225;
 }
 .radio-row {
   display: flex;

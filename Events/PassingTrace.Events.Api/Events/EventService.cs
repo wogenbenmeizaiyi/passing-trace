@@ -1,5 +1,7 @@
 using PassingTrace.Core.Events;
-using StackExchange.Redis;
+using PassingTrace.Core.Media;
+using PassingTrace.Events.Api.Ai;
+using PassingTrace.Events.Api.Media;
 
 namespace PassingTrace.Events.Api.Events;
 
@@ -8,8 +10,29 @@ namespace PassingTrace.Events.Api.Events;
 /// 不直接接触 DbContext。
 /// </summary>
 /// 
-public sealed class EventService(IEventRepository repository, TimeProvider clock)
+public sealed class EventService
 {
+    private readonly IEventRepository _repository;
+    private readonly TimeProvider _clock;
+    private readonly IEventMediaService _mediaService;
+    private readonly IAnalysisOutbox _outbox;
+
+    public EventService(IEventRepository repository, TimeProvider clock)
+        : this(repository, clock, new NoopEventMediaService(), new NoopAnalysisOutbox())
+    {
+    }
+
+    public EventService(
+        IEventRepository repository,
+        TimeProvider clock,
+        IEventMediaService mediaService,
+        IAnalysisOutbox outbox)
+    {
+        _repository = repository;
+        _clock = clock;
+        _mediaService = mediaService;
+        _outbox = outbox;
+    }
 
 
     /// <summary>创建 Event 并写入初始 Source 修订，幂等键冲突时复用或拒绝。</summary>
@@ -17,11 +40,12 @@ public sealed class EventService(IEventRepository repository, TimeProvider clock
         CreateEventCommand command,
         CancellationToken cancellationToken)
     {
-        EnsureContent(command.Title, command.RawContent);
+        var media = await _mediaService.ResolveAsync(command.UserId, command.MediaIds, cancellationToken);
+        EnsureContent(command.Title, command.RawContent, media.Count);
 
         if (!string.IsNullOrWhiteSpace(command.IdempotencyKey))
         {
-            var existing = await repository.FindByIdempotencyKeyAsync(
+            var existing = await _repository.FindByIdempotencyKeyAsync(
                 command.UserId,
                 command.IdempotencyKey,
                 cancellationToken);
@@ -37,7 +61,7 @@ public sealed class EventService(IEventRepository repository, TimeProvider clock
             }
         }
 
-        var now = clock.GetUtcNow();
+        var now = _clock.GetUtcNow();
         var evt = Event.Create(
             command.UserId,
             command.Kind,
@@ -49,17 +73,21 @@ public sealed class EventService(IEventRepository repository, TimeProvider clock
             command.IdempotencyKey,
             now);
 
-        evt.SourceRevisions.Add(SourceRevision.Create(
+        var revision = SourceRevision.Create(
             evt.Id,
             1,
             command.Title,
             command.RawContent,
             ToUtc(command.HappenedAt),
             ToUtc(command.PlannedAt),
-            now));
+            now);
+        evt.SourceRevisions.Add(revision);
+        _mediaService.ReplaceCurrent(evt, revision, media, now);
+        _outbox.EnqueueEvent(evt, 1, now);
+        await _outbox.IncrementWatermarkAsync(command.UserId, now, cancellationToken);
 
-        repository.Add(evt);
-        await repository.SaveChangesAsync(cancellationToken);
+        _repository.Add(evt);
+        await _repository.SaveChangesAsync(cancellationToken);
         return evt;
     }
 
@@ -69,7 +97,7 @@ public sealed class EventService(IEventRepository repository, TimeProvider clock
         long eventId,
         CancellationToken cancellationToken)
     {
-        return repository.FindAsync(userId, eventId, cancellationToken);
+        return _repository.FindAsync(userId, eventId, cancellationToken);
     }
 
     /// <summary>按条件查询 Event 列表。</summary>
@@ -77,7 +105,7 @@ public sealed class EventService(IEventRepository repository, TimeProvider clock
         EventListQuery query,
         CancellationToken cancellationToken)
     {
-        return repository.ListAsync(query, cancellationToken);
+        return _repository.ListAsync(query, cancellationToken);
     }
 
     /// <summary>修改 Source：递增修订版本并追加历史快照。</summary>
@@ -85,9 +113,10 @@ public sealed class EventService(IEventRepository repository, TimeProvider clock
         UpdateEventCommand command,
         CancellationToken cancellationToken)
     {
-        EnsureContent(command.Title, command.RawContent);
+        var media = await _mediaService.ResolveAsync(command.UserId, command.MediaIds, cancellationToken);
+        EnsureContent(command.Title, command.RawContent, media.Count);
 
-        var evt = await repository.FindAsync(
+        var evt = await _repository.FindAsync(
                 command.UserId,
                 command.EventId,
                 cancellationToken)
@@ -96,7 +125,7 @@ public sealed class EventService(IEventRepository repository, TimeProvider clock
         EnsureActive(evt, command.UserId);
         EnsureVersion(evt, command.ExpectedVersion);
 
-        var now = clock.GetUtcNow();
+        var now = _clock.GetUtcNow();
         var nextRevision = evt.CurrentSourceRevision + 1;
 
         evt.Title = command.Title;
@@ -107,16 +136,20 @@ public sealed class EventService(IEventRepository repository, TimeProvider clock
         evt.CurrentSourceRevision = nextRevision;
         evt.UpdatedAt = now;
 
-        evt.SourceRevisions.Add(SourceRevision.Create(
+        var revision = SourceRevision.Create(
             evt.Id,
             nextRevision,
             command.Title,
             command.RawContent,
             ToUtc(command.HappenedAt),
             ToUtc(command.PlannedAt),
-            now));
+            now);
+        evt.SourceRevisions.Add(revision);
+        _mediaService.ReplaceCurrent(evt, revision, media, now);
+        _outbox.EnqueueEvent(evt, nextRevision, now);
+        await _outbox.IncrementWatermarkAsync(command.UserId, now, cancellationToken);
 
-        await repository.SaveChangesAsync(cancellationToken);
+        await _repository.SaveChangesAsync(cancellationToken);
         return evt;
     }
 
@@ -127,7 +160,7 @@ public sealed class EventService(IEventRepository repository, TimeProvider clock
         uint expectedVersion,
         CancellationToken cancellationToken)
     {
-        var evt = await repository.FindAsync(userId, eventId, cancellationToken)
+        var evt = await _repository.FindAsync(userId, eventId, cancellationToken)
             ?? throw new EventNotFoundException(userId, eventId);
 
         if (evt.DeletedAt is not null)
@@ -137,19 +170,22 @@ public sealed class EventService(IEventRepository repository, TimeProvider clock
 
         EnsureVersion(evt, expectedVersion);
 
-        var now = clock.GetUtcNow();
+        var now = _clock.GetUtcNow();
         evt.DeletedAt = now;
         evt.UpdatedAt = now;
 
-        await repository.SaveChangesAsync(cancellationToken);
+        _outbox.EnqueueEvent(evt, evt.CurrentSourceRevision, now, messageType: "event.deleted");
+        await _outbox.IncrementWatermarkAsync(userId, now, cancellationToken);
+        await _repository.SaveChangesAsync(cancellationToken);
     }
 
-    private static void EnsureContent(string? title, string? rawContent)
+    private static void EnsureContent(string? title, string? rawContent, int mediaCount)
     {
         if (string.IsNullOrWhiteSpace(title) &&
-            string.IsNullOrWhiteSpace(rawContent))
+            string.IsNullOrWhiteSpace(rawContent) &&
+            mediaCount == 0)
         {
-            throw new DomainValidationException("标题与原文不能同时为空。");
+            throw new DomainValidationException("标题、原文和附件不能同时为空。");
         }
     }
 
@@ -175,7 +211,9 @@ public sealed class EventService(IEventRepository repository, TimeProvider clock
             evt.Title == command.Title &&
             evt.RawContent == command.RawContent &&
             evt.HappenedAt == ToUtc(command.HappenedAt) &&
-            evt.PlannedAt == ToUtc(command.PlannedAt);
+            evt.PlannedAt == ToUtc(command.PlannedAt) &&
+            evt.MediaAssets.OrderBy(x => x.SortOrder).Select(x => x.MediaAssetId)
+                .SequenceEqual(command.MediaIds ?? []);
     }
 
     /// <summary>归一化为 UTC，满足 Npgsql timestamp with time zone 只接受 Offset=0 的要求。</summary>
@@ -184,5 +222,34 @@ public sealed class EventService(IEventRepository repository, TimeProvider clock
     private static string NormalizeTimezone(string timezone)
     {
         return string.IsNullOrWhiteSpace(timezone) ? "UTC" : timezone;
+    }
+
+    private sealed class NoopEventMediaService : IEventMediaService
+    {
+        public Task<IReadOnlyList<MediaAsset>> ResolveAsync(long userId, IReadOnlyList<Guid>? mediaIds, CancellationToken cancellationToken)
+        {
+            if (mediaIds is { Count: > 0 })
+            {
+                throw new InvalidOperationException("未配置附件服务。");
+            }
+            return Task.FromResult<IReadOnlyList<MediaAsset>>([]);
+        }
+
+        public void ReplaceCurrent(Event evt, SourceRevision revision, IReadOnlyList<MediaAsset> media, DateTimeOffset now)
+        {
+        }
+    }
+
+    private sealed class NoopAnalysisOutbox : IAnalysisOutbox
+    {
+        public void EnqueueEvent(Event evt, int sourceRevision, DateTimeOffset now, int priority = 100, string messageType = "event.analyze")
+        {
+        }
+
+        public void EnqueueMedia(long userId, Guid mediaAssetId, DateTimeOffset now, int priority = 100)
+        {
+        }
+
+        public Task IncrementWatermarkAsync(long userId, DateTimeOffset now, CancellationToken cancellationToken) => Task.CompletedTask;
     }
 }

@@ -11,7 +11,9 @@ void main() {
   });
 
   group('AuthService Events API 地址', () {
-    const channel = MethodChannel('plugins.it_nomads.com/flutter_secure_storage');
+    const channel = MethodChannel(
+      'plugins.it_nomads.com/flutter_secure_storage',
+    );
     final store = <String, String>{};
 
     setUp(() {
@@ -19,36 +21,36 @@ void main() {
       store.clear();
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(channel, (call) async {
-        switch (call.method) {
-          case 'readAll':
-            return Map<String, String>.from(store);
-          case 'read':
-            final args = (call.arguments as Map?)?.cast<String, Object?>();
-            final key = args?['key'] as String?;
-            return key == null ? null : store[key];
-          case 'write':
-            final args = (call.arguments as Map?)?.cast<String, Object?>();
-            final key = args?['key'] as String?;
-            final value = args?['value'] as String?;
-            if (key != null) {
-              if (value == null) {
-                store.remove(key);
-              } else {
-                store[key] = value;
-              }
+            switch (call.method) {
+              case 'readAll':
+                return Map<String, String>.from(store);
+              case 'read':
+                final args = (call.arguments as Map?)?.cast<String, Object?>();
+                final key = args?['key'] as String?;
+                return key == null ? null : store[key];
+              case 'write':
+                final args = (call.arguments as Map?)?.cast<String, Object?>();
+                final key = args?['key'] as String?;
+                final value = args?['value'] as String?;
+                if (key != null) {
+                  if (value == null) {
+                    store.remove(key);
+                  } else {
+                    store[key] = value;
+                  }
+                }
+                return null;
+              case 'delete':
+                final args = (call.arguments as Map?)?.cast<String, Object?>();
+                final key = args?['key'] as String?;
+                if (key != null) store.remove(key);
+                return null;
+              case 'deleteAll':
+                store.clear();
+                return null;
             }
             return null;
-          case 'delete':
-            final args = (call.arguments as Map?)?.cast<String, Object?>();
-            final key = args?['key'] as String?;
-            if (key != null) store.remove(key);
-            return null;
-          case 'deleteAll':
-            store.clear();
-            return null;
-        }
-        return null;
-      });
+          });
     });
 
     tearDown(() {

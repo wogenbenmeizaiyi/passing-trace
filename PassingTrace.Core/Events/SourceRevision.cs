@@ -1,5 +1,7 @@
 namespace PassingTrace.Core.Events;
 
+using PassingTrace.Core.Media;
+
 /// <summary>
 /// Source 修订快照。每次修改 Source 追加一条，旧值永不原地覆盖，
 /// 以便追溯 AI 语义所依据的事实版本。
@@ -32,6 +34,9 @@ public sealed class SourceRevision
 
     /// <summary>所属 Event 导航。</summary>
     public Event Event { get; set; } = null!;
+
+    /// <summary>该修订对应的附件快照。</summary>
+    public List<SourceRevisionMedia> MediaAssets { get; set; } = [];
 
     /// <summary>构造一条 Source 修订快照。</summary>
     public static SourceRevision Create(

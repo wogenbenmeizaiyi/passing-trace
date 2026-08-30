@@ -54,6 +54,9 @@ class EventModel {
     required this.version,
     required this.createdAt,
     required this.updatedAt,
+    this.media = const [],
+    this.semanticStatus,
+    this.semanticSummary,
   });
 
   final int id;
@@ -75,6 +78,9 @@ class EventModel {
   final int version;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final List<MediaAssetModel> media;
+  final String? semanticStatus;
+  final String? semanticSummary;
 
   EventModel copyWith({
     EventKind? kind,
@@ -89,6 +95,9 @@ class EventModel {
     int? version,
     DateTime? createdAt,
     DateTime? updatedAt,
+    List<MediaAssetModel>? media,
+    String? semanticStatus,
+    String? semanticSummary,
   }) => EventModel(
     id: id,
     kind: kind ?? this.kind,
@@ -103,6 +112,9 @@ class EventModel {
     version: version ?? this.version,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
+    media: media ?? this.media,
+    semanticStatus: semanticStatus ?? this.semanticStatus,
+    semanticSummary: semanticSummary ?? this.semanticSummary,
   );
 
   factory EventModel.fromJson(Map<String, dynamic> json) => EventModel(
@@ -119,6 +131,11 @@ class EventModel {
     version: (json['version'] as num).toInt(),
     createdAt: _parseDate(json['createdAt'])!,
     updatedAt: _parseDate(json['updatedAt'])!,
+    media: (json['media'] as List<dynamic>? ?? const [])
+        .map((raw) => MediaAssetModel.fromJson(raw as Map<String, dynamic>))
+        .toList(growable: false),
+    semanticStatus: json['semanticStatus'] as String?,
+    semanticSummary: json['semanticSummary'] as String?,
   );
 
   static DateTime? _parseDate(Object? value) {
@@ -126,6 +143,51 @@ class EventModel {
     if (value is String && value.isEmpty) return null;
     return DateTime.parse(value as String);
   }
+}
+
+enum MediaKind {
+  image(1),
+  video(2),
+  file(3);
+
+  const MediaKind(this.value);
+  final int value;
+
+  static MediaKind fromValue(int value) => MediaKind.values.firstWhere(
+    (kind) => kind.value == value,
+    orElse: () => MediaKind.file,
+  );
+}
+
+class MediaAssetModel {
+  const MediaAssetModel({
+    required this.id,
+    required this.fileName,
+    required this.kind,
+    required this.contentType,
+    required this.size,
+    required this.status,
+    required this.sortOrder,
+  });
+
+  final String id;
+  final String fileName;
+  final MediaKind kind;
+  final String contentType;
+  final int size;
+  final int status;
+  final int sortOrder;
+
+  factory MediaAssetModel.fromJson(Map<String, dynamic> json) =>
+      MediaAssetModel(
+        id: json['id'] as String,
+        fileName: json['fileName'] as String,
+        kind: MediaKind.fromValue((json['kind'] as num).toInt()),
+        contentType: json['contentType'] as String,
+        size: (json['size'] as num).toInt(),
+        status: (json['status'] as num).toInt(),
+        sortOrder: (json['sortOrder'] as num).toInt(),
+      );
 }
 
 /// 列表分页响应。`nextCursor` 为 `null` 表示没有下一页。

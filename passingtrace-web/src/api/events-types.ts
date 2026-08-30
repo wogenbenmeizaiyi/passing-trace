@@ -21,6 +21,19 @@ export const EventVisibility = {
 
 export type EventVisibility = (typeof EventVisibility)[keyof typeof EventVisibility]
 
+export const MediaKind = { Image: 1, Video: 2, File: 3 } as const
+export type MediaKind = (typeof MediaKind)[keyof typeof MediaKind]
+
+export interface MediaResponse {
+  id: string
+  fileName: string
+  kind: MediaKind
+  contentType: string
+  size: number
+  status: number
+  sortOrder: number
+}
+
 /** UI 展示用的中文文案。 */
 export const EventKindLabel: Record<EventKind, string> = {
   [EventKind.Trace]: '痕迹',
@@ -55,6 +68,9 @@ export interface EventResponse {
   createdAt: string
   /** ISO 8601 带偏移。 */
   updatedAt: string
+  media: MediaResponse[]
+  semanticStatus: string
+  semanticSummary: string | null
 }
 
 export interface CreateEventRequest {
@@ -64,6 +80,7 @@ export interface CreateEventRequest {
   happenedAt?: string | null
   plannedAt?: string | null
   timezone: string
+  mediaIds?: string[]
 }
 
 export interface UpdateEventRequest {
@@ -72,6 +89,7 @@ export interface UpdateEventRequest {
   happenedAt?: string | null
   plannedAt?: string | null
   timezone: string
+  mediaIds?: string[]
 }
 
 export interface EventPage {

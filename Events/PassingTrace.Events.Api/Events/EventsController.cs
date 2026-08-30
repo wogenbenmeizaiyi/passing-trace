@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PassingTrace.Events.Api.Common;
+using PassingTrace.Events.Api.Media;
 using PassingTrace.Events.Api.Security;
 using PassingTrace.Core.Events;
 
@@ -27,7 +28,8 @@ public sealed class EventsController(EventService service) : ControllerBase
             request.HappenedAt,
             request.PlannedAt,
             request.Timezone ?? "UTC",
-            idempotencyKey);
+            idempotencyKey,
+            request.MediaIds);
 
         var evt = await service.CreateAsync(command, cancellationToken);
 
@@ -99,7 +101,8 @@ public sealed class EventsController(EventService service) : ControllerBase
             request.RawContent,
             request.HappenedAt,
             request.PlannedAt,
-            request.Timezone ?? "UTC");
+            request.Timezone ?? "UTC",
+            request.MediaIds);
 
         var evt = await service.UpdateSourceAsync(command, cancellationToken);
 
@@ -136,6 +139,22 @@ public sealed class EventsController(EventService service) : ControllerBase
 
     private static EventResponse ToResponse(Event evt)
     {
+        var semantic = evt.SemanticRuns
+            .Where(x => x.SourceRevision == evt.CurrentSourceRevision)
+            .OrderByDescending(x => x.CreatedAt)
+            .FirstOrDefault();
+        var media = evt.MediaAssets
+            .OrderBy(x => x.SortOrder)
+            .Select(x => new MediaResponse(
+                x.MediaAsset.Id,
+                x.MediaAsset.OriginalFileName,
+                x.MediaAsset.Kind,
+                x.MediaAsset.VerifiedMimeType ?? x.MediaAsset.DeclaredMimeType,
+                x.MediaAsset.ActualSize ?? x.MediaAsset.ExpectedSize,
+                x.MediaAsset.Status,
+                x.SortOrder))
+            .ToArray();
+
         return new EventResponse(
             evt.Id,
             evt.EventKind,
@@ -150,6 +169,9 @@ public sealed class EventsController(EventService service) : ControllerBase
             evt.CurrentSourceRevision,
             evt.RowVersion,
             evt.CreatedAt,
-            evt.UpdatedAt);
+            evt.UpdatedAt,
+            media,
+            semantic?.Status.ToString() ?? "Pending",
+            semantic?.Summary);
     }
 }

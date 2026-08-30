@@ -28,6 +28,9 @@
   <Folder Name="/Events/">
     <Project Path="Events/PassingTrace.Events.Api/PassingTrace.Events.Api.csproj" />
   </Folder>
+  <Folder Name="/AI/">
+    <Project Path="Ai/PassingTrace.Ai.Worker/PassingTrace.Ai.Worker.csproj" />
+  </Folder>
   <Project Path="PassingTrace.Core/PassingTrace.Core.csproj" />
   <Project Path="PassingTrace.Infrastructure/PassingTrace.Infrastructure.csproj" />
 </Solution>

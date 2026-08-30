@@ -13,6 +13,10 @@ public sealed class EventRepository(TraceDbContext dbContext) : IEventRepository
     {
         return await dbContext.Events
             .Include(e => e.SourceRevisions)
+                .ThenInclude(r => r.MediaAssets)
+            .Include(e => e.MediaAssets)
+                .ThenInclude(link => link.MediaAsset)
+            .Include(e => e.SemanticRuns)
             .AsSplitQuery()
             .FirstOrDefaultAsync(
                 e => e.Id == eventId && e.UserId == userId,
@@ -25,6 +29,8 @@ public sealed class EventRepository(TraceDbContext dbContext) : IEventRepository
         CancellationToken cancellationToken)
     {
         return await dbContext.Events
+            .Include(e => e.MediaAssets)
+                .ThenInclude(link => link.MediaAsset)
             .AsNoTracking()
             .FirstOrDefaultAsync(
                 e => e.UserId == userId && e.IdempotencyKey == idempotencyKey,
@@ -36,6 +42,10 @@ public sealed class EventRepository(TraceDbContext dbContext) : IEventRepository
         CancellationToken cancellationToken)
     {
         var events = dbContext.Events
+            .Include(e => e.MediaAssets)
+                .ThenInclude(link => link.MediaAsset)
+            .Include(e => e.SemanticRuns)
+            .AsSplitQuery()
             .AsNoTracking()
             .Where(e => e.UserId == query.UserId);
 

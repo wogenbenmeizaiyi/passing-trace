@@ -6,6 +6,7 @@ import EventDetailView from '@/views/EventDetailView.vue'
 import EventFormView from '@/views/EventFormView.vue'
 import EventsListView from '@/views/EventsListView.vue'
 import HomeView from '@/views/HomeView.vue'
+import AssistantView from '@/views/AssistantView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -15,6 +16,7 @@ const router = createRouter({
     { path: '/events/new', name: 'events-new', component: EventFormView },
     { path: '/events/:id', name: 'events-detail', component: EventDetailView },
     { path: '/events/:id/edit', name: 'events-edit', component: EventFormView },
+    { path: '/assistant', name: 'assistant', component: AssistantView },
     { path: '/auth/callback', name: 'auth-callback', component: AuthCallbackView },
     {
       path: '/auth/logout-callback',
