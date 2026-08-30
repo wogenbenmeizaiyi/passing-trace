@@ -75,7 +75,6 @@ class EventApiClient {
     Uri uri, {
     Object? body,
     Map<String, String>? extraHeaders,
-    bool retryOn401 = true,
   }) async {
     Future<http.Response> doRequest(Map<String, String> headers) {
       final encoded = body == null ? null : jsonEncode(body);
@@ -97,22 +96,19 @@ class EventApiClient {
     if (extraHeaders != null) headers.addAll(extraHeaders);
 
     final response = await doRequest(headers);
-    if (response.statusCode == 401 && retryOn401) {
-      // 重试一次：`ensureFreshToken` 会判定过期并走 refresh token 续期。
-      // 续期成功时拿到的就是新 session；重试仍 401 才视为真正过期。
+    if (response.statusCode == 401) {
+      // API 拒绝了当前 access token 时强制刷新一次，并用返回的
+      // 新 token 直接重试。不再递归传入旧 session，避免重复使用已轮换的
+      // refresh token。
+      late final AuthSession refreshed;
       try {
-        await auth.ensureFreshToken(session);
+        refreshed = await auth.ensureFreshToken(session, forceRefresh: true);
       } catch (_) {
         throw const EventApiException(status: 401, message: '登录状态已失效，请重新登录。');
       }
-      return _send(
-        session,
-        method,
-        uri,
-        body: body,
-        extraHeaders: extraHeaders,
-        retryOn401: false,
-      );
+      final retryHeaders = Map<String, String>.from(headers)
+        ..['Authorization'] = 'Bearer ${refreshed.accessToken}';
+      return doRequest(retryHeaders);
     }
     return response;
   }

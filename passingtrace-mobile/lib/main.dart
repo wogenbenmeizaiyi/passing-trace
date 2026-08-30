@@ -87,7 +87,7 @@ class _AccountGateState extends State<AccountGate> {
     if (_loading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
-    if (_session == null) {
+    if (_session == null || !_session!.hasToken) {
       return RegistrationPage(
         auth: _auth,
         onRegistered: (session) => setState(() => _session = session),
@@ -417,22 +417,6 @@ class _AccountHomeState extends State<AccountHome> {
     if (mounted) await _scan();
   }
 
-  Future<void> _openTimeline() async {
-    final navigator = Navigator.of(context);
-    if (navigator.canPop()) {
-      navigator.pop();
-    }
-    await Future<void>.delayed(const Duration(milliseconds: 180));
-    if (!mounted) return;
-    final sessionExpired = await navigator.push<bool>(
-      MaterialPageRoute(
-        builder: (_) =>
-            EventsListView(auth: widget.auth, session: widget.session),
-      ),
-    );
-    await _restoreAfterSessionExpiry(sessionExpired);
-  }
-
   Future<void> _openAssistant() async {
     final navigator = Navigator.of(context);
     if (navigator.canPop()) navigator.pop();
@@ -457,14 +441,6 @@ class _AccountHomeState extends State<AccountHome> {
     }
     widget.onSessionChanged(restored);
     _message('登录状态已过期，请重新登录。');
-  }
-
-  Future<void> _login() async {
-    await _run(() async {
-      final session = await widget.auth.login(widget.session);
-      widget.onSessionChanged(session);
-      _message('登录成功，Token 已安全保存。');
-    });
   }
 
   Future<void> _scan() async {
@@ -554,45 +530,22 @@ class _AccountHomeState extends State<AccountHome> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    drawer: _buildDrawer(),
-    appBar: AppBar(
-      titleSpacing: 0,
-      title: const Row(
-        children: [
-          _BrandMark(size: 30),
-          SizedBox(width: 10),
-          Text(
-            'PassingTrace',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-          ),
-        ],
+  Widget build(BuildContext context) => Stack(
+    children: [
+      EventsListView(
+        auth: widget.auth,
+        session: widget.session,
+        drawer: _buildDrawer(),
+        onSessionExpired: () => _restoreAfterSessionExpiry(true),
       ),
-      actions: [
-        IconButton(
-          tooltip: '时间线',
-          onPressed: _busy ? null : _openTimeline,
-          icon: const Icon(Icons.timeline_outlined),
+      if (_busy)
+        const Positioned(
+          left: 0,
+          right: 0,
+          top: 0,
+          child: LinearProgressIndicator(minHeight: 3),
         ),
-        const SizedBox(width: 4),
-      ],
-      bottom: const PreferredSize(
-        preferredSize: Size.fromHeight(1),
-        child: Divider(height: 1),
-      ),
-    ),
-    body: Stack(
-      children: [
-        const _PassingTraceHome(),
-        if (_busy)
-          const Positioned(
-            left: 0,
-            right: 0,
-            top: 0,
-            child: LinearProgressIndicator(minHeight: 3),
-          ),
-      ],
-    ),
+    ],
   );
 
   Widget _buildDrawer() => Drawer(
@@ -622,17 +575,12 @@ class _AccountHomeState extends State<AccountHome> {
           ),
           const Divider(height: 1),
           const SizedBox(height: 10),
-          const _DrawerDestination(
-            icon: Icons.home_outlined,
-            selectedIcon: Icons.home,
-            label: '首页',
-            selected: true,
-          ),
           _DrawerDestination(
-            icon: Icons.timeline_outlined,
-            selectedIcon: Icons.timeline,
-            label: '时间线',
-            onTap: _busy ? null : _openTimeline,
+            icon: Icons.article_outlined,
+            selectedIcon: Icons.article,
+            label: '我的记录',
+            selected: true,
+            onTap: () => Navigator.of(context).pop(),
           ),
           _DrawerDestination(
             icon: Icons.auto_graph_outlined,
@@ -691,51 +639,6 @@ class _AccountHomeState extends State<AccountHome> {
           ),
           const Spacer(),
           const Divider(height: 1),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(22, 16, 22, 10),
-            child: Row(
-              children: [
-                Icon(
-                  widget.session.hasToken
-                      ? Icons.verified_user_outlined
-                      : Icons.phonelink_lock_outlined,
-                  color: PassingTraceApp.sage,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        widget.session.hasToken ? '手机账号已登录' : '设备凭据已建立',
-                        style: const TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                      Text(
-                        '设备 ${widget.session.deviceId}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: PassingTraceApp.ink.withValues(alpha: 0.58),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          if (!widget.session.hasToken)
-            ListTile(
-              leading: const Icon(Icons.login),
-              title: const Text('登录账号'),
-              onTap: _busy
-                  ? null
-                  : () {
-                      Navigator.of(context).pop();
-                      _login();
-                    },
-            ),
           ListTile(
             leading: const Icon(Icons.logout),
             title: const Text('退出此设备'),
@@ -807,197 +710,6 @@ class _DrawerDestination extends StatelessWidget {
       onTap: handler ?? () => Navigator.of(context).pop(),
     );
   }
-}
-
-class _PassingTraceHome extends StatelessWidget {
-  const _PassingTraceHome();
-
-  @override
-  Widget build(BuildContext context) {
-    void openTimeline() {
-      final home = context.findAncestorStateOfType<_AccountHomeState>();
-      home?._openTimeline();
-    }
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(24, 38, 24, 48),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'YOUR LIFE, IN CONTEXT',
-            style: TextStyle(
-              color: PassingTraceApp.coral,
-              fontSize: 12,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 2.3,
-            ),
-          ),
-          const SizedBox(height: 22),
-          const Text(
-            '把生活留下来，',
-            style: TextStyle(
-              color: PassingTraceApp.ink,
-              fontFamily: 'serif',
-              fontSize: 38,
-              height: 1.15,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const Text(
-            '看见时间的形状。',
-            style: TextStyle(
-              color: PassingTraceApp.coral,
-              fontFamily: 'serif',
-              fontSize: 38,
-              height: 1.15,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(height: 20),
-          Text(
-            '记录经历，也写下计划。PassingTrace 会将零散的文字整理成只属于你的时间线与生活洞察。',
-            style: TextStyle(
-              color: PassingTraceApp.ink.withValues(alpha: 0.62),
-              height: 1.8,
-              fontSize: 15,
-            ),
-          ),
-          const SizedBox(height: 34),
-          const _PrivateSpaceCard(),
-          const SizedBox(height: 36),
-          Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: openTimeline,
-              borderRadius: BorderRadius.circular(20),
-              child: Container(
-                padding: const EdgeInsets.all(22),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.55),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: PassingTraceApp.ink.withValues(alpha: 0.12),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 48,
-                      height: 48,
-                      alignment: Alignment.center,
-                      decoration: const BoxDecoration(
-                        color: PassingTraceApp.coral,
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.timeline,
-                        color: Colors.white,
-                        size: 24,
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    const Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '我的时间线',
-                            style: TextStyle(
-                              fontFamily: 'serif',
-                              fontSize: 20,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          SizedBox(height: 4),
-                          Text(
-                            '查看、记录、编辑你留下的痕迹和计划',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.black54,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const Icon(Icons.arrow_forward, size: 18),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 28),
-          Container(
-            padding: const EdgeInsets.all(24),
-            color: PassingTraceApp.ink,
-            child: const Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(Icons.auto_awesome, color: PassingTraceApp.coral),
-                SizedBox(height: 16),
-                Text(
-                  '“你在这个月去过 3 个新地点，步行记录比上月同期多了 28%。”',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontFamily: 'serif',
-                    fontSize: 21,
-                    height: 1.6,
-                  ),
-                ),
-                SizedBox(height: 14),
-                Text(
-                  '基于你的私人数据生成',
-                  style: TextStyle(color: Colors.white54, fontSize: 12),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _PrivateSpaceCard extends StatelessWidget {
-  const _PrivateSpaceCard();
-
-  @override
-  Widget build(BuildContext context) => Container(
-    width: double.infinity,
-    padding: const EdgeInsets.all(26),
-    color: PassingTraceApp.sage,
-    child: const Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('私人空间', style: TextStyle(color: Colors.white70, fontSize: 12)),
-        SizedBox(height: 34),
-        Text(
-          '01',
-          style: TextStyle(
-            color: Colors.white54,
-            fontFamily: 'serif',
-            fontSize: 28,
-            fontStyle: FontStyle.italic,
-          ),
-        ),
-        SizedBox(height: 18),
-        Text(
-          '一个账号，连接所有\nPassingTrace 客户端。',
-          style: TextStyle(
-            color: Colors.white,
-            fontFamily: 'serif',
-            fontSize: 24,
-            height: 1.45,
-          ),
-        ),
-        SizedBox(height: 14),
-        Text(
-          '通过左上角菜单使用“扫一扫”，即可批准网页和桌面端登录。',
-          style: TextStyle(color: Colors.white70, height: 1.6),
-        ),
-      ],
-    ),
-  );
 }
 
 class QrScannerPage extends StatefulWidget {

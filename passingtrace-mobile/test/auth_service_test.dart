@@ -21,6 +21,33 @@ class _InvalidGrantAppAuth extends FlutterAppAuth {
   }
 }
 
+class _RecordingAppAuth extends FlutterAppAuth {
+  _RecordingAppAuth(this.responses);
+
+  final List<TokenResponse> responses;
+  final List<TokenRequest> requests = [];
+
+  @override
+  Future<TokenResponse> token(TokenRequest request) async {
+    requests.add(request);
+    return responses.removeAt(0);
+  }
+}
+
+TokenResponse _token(
+  String accessToken,
+  String refreshToken, {
+  Duration lifetime = const Duration(minutes: 15),
+}) => TokenResponse(
+  accessToken,
+  refreshToken,
+  DateTime.now().toUtc().add(lifetime),
+  'id-$accessToken',
+  'Bearer',
+  mobileScopes,
+  null,
+);
+
 void main() {
   test('AuthException exposes a safe user-facing message', () {
     const exception = AuthException('登录已过期');
@@ -150,6 +177,90 @@ void main() {
       expect(store, isNot(contains('refresh_token')));
       expect(store, isNot(contains('id_token')));
       expect(store, isNot(contains('access_token_expires_at')));
+    });
+
+    test('刷新后旧页面传入的 session 会复用最新令牌', () async {
+      store.addAll({
+        'identity_url': 'http://localhost:56229',
+        'device_id': 'device-1',
+        'device_secret': 'secret-1',
+        'access_token': 'access-old',
+        'refresh_token': 'refresh-old',
+        'access_token_expires_at': DateTime.now()
+            .subtract(const Duration(minutes: 1))
+            .toUtc()
+            .toIso8601String(),
+      });
+      final appAuth = _RecordingAppAuth([_token('access-new', 'refresh-new')]);
+      final rotatingAuth = AuthService(
+        storage: const FlutterSecureStorage(),
+        appAuth: appAuth,
+      );
+      final stale = (await rotatingAuth.restore())!;
+
+      final refreshed = await rotatingAuth.ensureFreshToken(stale);
+      final reused = await rotatingAuth.ensureFreshToken(stale);
+
+      expect(refreshed.accessToken, 'access-new');
+      expect(reused.accessToken, 'access-new');
+      expect(appAuth.requests, hasLength(1));
+      expect(store['refresh_token'], 'refresh-new');
+    });
+
+    test('密码登录的 handoff 直接取回授权码，不打开外部浏览器', () async {
+      String? state;
+      final client = MockClient((request) async {
+        if (request.url.path == '/api/mobile/logins') {
+          final body = jsonDecode(request.body) as Map<String, dynamic>;
+          state = body['state'] as String;
+          final authorizeUrl = Uri(
+            scheme: 'http',
+            host: 'localhost',
+            port: 56229,
+            path: '/connect/authorize',
+            queryParameters: {
+              'handoff_code': 'one-time-handoff',
+              'state': state,
+            },
+          );
+          return http.Response(
+            jsonEncode({
+              'authorizeUrl': authorizeUrl.toString(),
+              'deviceId': 'device-2',
+              'deviceSecret': 'secret-2',
+            }),
+            200,
+          );
+        }
+        if (request.url.path == '/connect/authorize') {
+          expect(request.followRedirects, isFalse);
+          final callback = Uri(
+            scheme: 'com.passingtrace.mobile',
+            path: '/oauth2redirect',
+            queryParameters: {'code': 'authorization-code', 'state': state},
+          );
+          return http.Response('', 302, headers: {'location': '$callback'});
+        }
+        fail('意外请求：${request.method} ${request.url}');
+      });
+      final appAuth = _RecordingAppAuth([
+        _token('access-login', 'refresh-login'),
+      ]);
+      final directAuth = AuthService(
+        storage: const FlutterSecureStorage(),
+        appAuth: appAuth,
+        httpClient: client,
+      );
+
+      final session = await directAuth.loginWithPassword(
+        identityBaseUrl: 'http://localhost:56229',
+        username: 'owner',
+        password: 'password',
+        deviceName: 'Android',
+      );
+
+      expect(session.accessToken, 'access-login');
+      expect(appAuth.requests.single.authorizationCode, 'authorization-code');
     });
 
     test('服务端 invalid_device 被识别为设备凭据失效', () async {

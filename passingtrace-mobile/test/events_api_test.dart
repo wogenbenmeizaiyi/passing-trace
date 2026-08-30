@@ -14,7 +14,10 @@ class _FakeAuthService extends AuthService {
   int refreshCalls = 0;
 
   @override
-  Future<AuthSession> ensureFreshToken(AuthSession current) async {
+  Future<AuthSession> ensureFreshToken(
+    AuthSession current, {
+    bool forceRefresh = false,
+  }) async {
     refreshCalls += 1;
     return AuthSession(
       identityBaseUrl: current.identityBaseUrl,
@@ -30,7 +33,10 @@ class _FakeAuthService extends AuthService {
 
 class _ExpiredAuthService extends AuthService {
   @override
-  Future<AuthSession> ensureFreshToken(AuthSession current) async {
+  Future<AuthSession> ensureFreshToken(
+    AuthSession current, {
+    bool forceRefresh = false,
+  }) async {
     throw const AuthSessionExpiredException();
   }
 }
@@ -301,7 +307,7 @@ void main() {
       client.close();
     });
 
-    test('401 触发一次 ensureFreshToken 后重试', () async {
+    test('401 强制刷新并用新 Token 重试一次', () async {
       var calls = 0;
       final mock = MockClient((request) async {
         calls += 1;
@@ -342,7 +348,7 @@ void main() {
       final event = await client.get(_session('stale'), 1);
       expect(event.id, 1);
       expect(calls, 2);
-      expect(auth.refreshCalls, greaterThanOrEqualTo(2));
+      expect(auth.refreshCalls, 2);
       client.close();
     });
 

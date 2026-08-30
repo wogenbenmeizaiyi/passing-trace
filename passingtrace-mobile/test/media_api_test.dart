@@ -37,7 +37,10 @@ base class _MemoryPlatformFile extends PlatformFile {
 
 class _FakeAuthService extends AuthService {
   @override
-  Future<AuthSession> ensureFreshToken(AuthSession current) async => current;
+  Future<AuthSession> ensureFreshToken(
+    AuthSession current, {
+    bool forceRefresh = false,
+  }) async => current;
 }
 
 AuthSession _session() => AuthSession(

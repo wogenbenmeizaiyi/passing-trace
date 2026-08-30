@@ -81,6 +81,8 @@ class AuthService {
   final FlutterAppAuth _appAuth;
   final http.Client _http;
   final AppLinks _appLinks;
+  AuthSession? _latestSession;
+  Future<AuthSession>? _refreshInFlight;
 
   Future<AuthSession?> restore() async {
     final values = await _storage.readAll();
@@ -89,7 +91,7 @@ class AuthService {
     if (deviceId == null || deviceSecret == null) return null;
 
     final expiresText = values[_expiresAtKey];
-    return AuthSession(
+    final session = AuthSession(
       identityBaseUrl: values[_identityUrlKey] ?? defaultIdentityUrl,
       deviceId: deviceId,
       deviceSecret: deviceSecret,
@@ -100,6 +102,8 @@ class AuthService {
           ? null
           : DateTime.tryParse(expiresText),
     );
+    _latestSession = session;
+    return session;
   }
 
   Future<AuthSession> register({
@@ -228,17 +232,39 @@ class AuthService {
     );
   }
 
-  Future<AuthSession> ensureFreshToken(AuthSession current) async {
-    final expiry = current.accessTokenExpiration;
-    if (current.hasToken &&
+  Future<AuthSession> ensureFreshToken(
+    AuthSession current, {
+    bool forceRefresh = false,
+  }) async {
+    final effective = _latestFor(current);
+    final expiry = effective.accessTokenExpiration;
+    if (!forceRefresh &&
+        effective.hasToken &&
         expiry != null &&
         expiry.isAfter(
           DateTime.now().toUtc().add(const Duration(minutes: 1)),
         )) {
-      return current;
+      return effective;
     }
-    if (current.refreshToken == null) return login(current);
+    if (effective.refreshToken == null) return login(effective);
 
+    // 多个页面可能同时发现令牌即将过期。Refresh Token 启用轮换后，同一
+    // refresh token 只能可靠使用一次，因此所有调用必须共享同一个刷新任务。
+    final inFlight = _refreshInFlight;
+    if (inFlight != null) return inFlight;
+
+    final refresh = _refresh(effective);
+    _refreshInFlight = refresh;
+    try {
+      return await refresh;
+    } finally {
+      if (identical(_refreshInFlight, refresh)) {
+        _refreshInFlight = null;
+      }
+    }
+  }
+
+  Future<AuthSession> _refresh(AuthSession current) async {
     late final TokenResponse result;
     try {
       result = await _appAuth.token(
@@ -299,14 +325,28 @@ class AuthService {
     return details.session;
   }
 
-  Future<void> clearLocalAccount() => _storage.deleteAll();
+  Future<void> clearLocalAccount() async {
+    _latestSession = null;
+    _refreshInFlight = null;
+    await _storage.deleteAll();
+  }
 
-  Future<void> _clearTokens() => Future.wait([
-    _storage.delete(key: _accessTokenKey),
-    _storage.delete(key: _refreshTokenKey),
-    _storage.delete(key: _idTokenKey),
-    _storage.delete(key: _expiresAtKey),
-  ]);
+  Future<void> _clearTokens() async {
+    final latest = _latestSession;
+    if (latest != null) {
+      _latestSession = AuthSession(
+        identityBaseUrl: latest.identityBaseUrl,
+        deviceId: latest.deviceId,
+        deviceSecret: latest.deviceSecret,
+      );
+    }
+    await Future.wait([
+      _storage.delete(key: _accessTokenKey),
+      _storage.delete(key: _refreshTokenKey),
+      _storage.delete(key: _idTokenKey),
+      _storage.delete(key: _expiresAtKey),
+    ]);
+  }
 
   /// 读取已保存的 Events API 地址；若未保存则回落到默认值。
   Future<String> getEventsApiBaseUrl() async {
@@ -334,12 +374,13 @@ class AuthService {
     required String deviceId,
     required String deviceSecret,
   }) async {
-    final callbackFuture = _waitForCallback(expectedState);
-    if (!await launchUrl(authorizeUrl, mode: LaunchMode.externalApplication)) {
-      throw const AuthException('无法打开系统浏览器。');
-    }
-
-    final callback = await callbackFuture.timeout(const Duration(minutes: 3));
+    // 注册和账号密码登录已经由后端完成身份校验，handoff URL 只负责签发
+    // 一次性授权码。直接读取它的 302 回调即可，避免 Android 再弹浏览器选择器。
+    // 真正需要用户交互的设备重新认证仍使用系统 Custom Tab。
+    final directCallback = await _tryResolveHandoff(authorizeUrl);
+    final callback =
+        directCallback ??
+        await _launchAndWaitForCallback(authorizeUrl, expectedState);
     final error = callback.queryParameters['error'];
     if (error != null) {
       throw AuthException(
@@ -378,6 +419,36 @@ class AuthService {
     );
   }
 
+  Future<Uri?> _tryResolveHandoff(Uri authorizeUrl) async {
+    if (!authorizeUrl.queryParameters.containsKey('handoff_code')) return null;
+
+    final request = http.Request('GET', authorizeUrl)..followRedirects = false;
+    final response = await _http.send(request);
+    if (response.statusCode < 300 || response.statusCode >= 400) {
+      throw AuthException('登录授权失败：${response.statusCode}');
+    }
+    final location = response.headers['location'];
+    if (location == null || location.isEmpty) {
+      throw const AuthException('登录授权回调缺失。');
+    }
+    return authorizeUrl.resolve(location);
+  }
+
+  Future<Uri> _launchAndWaitForCallback(
+    Uri authorizeUrl,
+    String expectedState,
+  ) async {
+    final callbackFuture = _waitForCallback(expectedState);
+    if (!await launchUrl(
+      authorizeUrl,
+      mode: LaunchMode.inAppBrowserView,
+      browserConfiguration: const BrowserConfiguration(showTitle: false),
+    )) {
+      throw const AuthException('无法打开安全登录页。');
+    }
+    return callbackFuture.timeout(const Duration(minutes: 3));
+  }
+
   Future<Uri> _waitForCallback(String expectedState) async {
     bool isExpectedCallback(Uri uri) =>
         uri.scheme == 'com.passingtrace.mobile' &&
@@ -410,7 +481,18 @@ class AuthService {
         value: session.accessTokenExpiration?.toUtc().toIso8601String(),
       ),
     ]);
+    _latestSession = session;
     return session;
+  }
+
+  AuthSession _latestFor(AuthSession fallback) {
+    final latest = _latestSession;
+    if (latest == null ||
+        latest.identityBaseUrl != fallback.identityBaseUrl ||
+        latest.deviceId != fallback.deviceId) {
+      return fallback;
+    }
+    return latest;
   }
 
   Future<Map<String, dynamic>> _postJson(

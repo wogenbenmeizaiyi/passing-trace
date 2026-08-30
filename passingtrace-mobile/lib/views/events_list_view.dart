@@ -14,10 +14,18 @@ import 'event_form_view.dart';
 import 'event_widgets.dart';
 
 class EventsListView extends StatefulWidget {
-  const EventsListView({super.key, required this.auth, required this.session});
+  const EventsListView({
+    super.key,
+    required this.auth,
+    required this.session,
+    this.drawer,
+    this.onSessionExpired,
+  });
 
   final AuthService auth;
   final AuthSession session;
+  final Widget? drawer;
+  final Future<void> Function()? onSessionExpired;
 
   @override
   State<EventsListView> createState() => _EventsListViewState();
@@ -77,7 +85,7 @@ class _EventsListViewState extends State<EventsListView> {
     } on EventApiException catch (e) {
       if (!mounted) return;
       if (e.status == 401) {
-        Navigator.of(context).pop(true);
+        await _handleSessionExpired();
         return;
       }
       setState(() => _error = e.message);
@@ -111,7 +119,7 @@ class _EventsListViewState extends State<EventsListView> {
     } on EventApiException catch (e) {
       if (!mounted) return;
       if (e.status == 401) {
-        Navigator.of(context).pop(true);
+        await _handleSessionExpired();
         return;
       }
       setState(() => _error = e.message);
@@ -137,13 +145,22 @@ class _EventsListViewState extends State<EventsListView> {
   }
 
   Future<void> _openCreate() async {
-    final created = await Navigator.of(context).push<bool>(
+    final result = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         builder: (_) =>
             EventFormView(auth: widget.auth, session: widget.session),
       ),
     );
-    if (created == true && mounted) await _reload();
+    if (result == true && mounted) await _reload();
+  }
+
+  Future<void> _handleSessionExpired() async {
+    final handler = widget.onSessionExpired;
+    if (handler != null) {
+      await handler();
+      return;
+    }
+    if (mounted) Navigator.of(context).pop(true);
   }
 
   void _toggleFilter() {
@@ -165,9 +182,10 @@ class _EventsListViewState extends State<EventsListView> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      drawer: widget.drawer,
       appBar: AppBar(
         title: const Text(
-          '时间线',
+          '我的记录',
           style: TextStyle(
             fontFamily: 'serif',
             fontWeight: FontWeight.w600,
