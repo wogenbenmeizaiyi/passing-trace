@@ -153,6 +153,41 @@ class _EventFormViewState extends State<EventFormView> {
     return DateTime.parse(iso).toLocal();
   }
 
+  Future<void> _pickWhen() async {
+    FocusScope.of(context).unfocus();
+    final existing = DateTime.tryParse(
+      _when.text.trim().replaceFirst(' ', 'T'),
+    );
+    final initial = existing ?? DateTime.now();
+    final date = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime(1900),
+      lastDate: DateTime(2100, 12, 31),
+      helpText: _kind == EventKind.plan ? '选择计划日期' : '选择发生日期',
+      cancelText: '取消',
+      confirmText: '下一步',
+    );
+    if (date == null || !mounted) return;
+
+    final time = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(initial),
+      helpText: _kind == EventKind.plan ? '选择计划时间' : '选择发生时间',
+      cancelText: '取消',
+      confirmText: '确定',
+    );
+    if (time == null || !mounted) return;
+
+    String two(int value) => value.toString().padLeft(2, '0');
+    setState(() {
+      _when.text =
+          '${date.year.toString().padLeft(4, '0')}-'
+          '${two(date.month)}-${two(date.day)} '
+          '${two(time.hour)}:${two(time.minute)}';
+    });
+  }
+
   Future<void> _pickMedia() async {
     if (_media.length >= 10) {
       setState(() => _error = '每条记录最多添加 10 个附件。');
@@ -392,10 +427,31 @@ class _EventFormViewState extends State<EventFormView> {
           const SizedBox(height: 18),
           TextFormField(
             controller: _when,
-            decoration: _decoration(
-              _kind == EventKind.plan ? '计划时间' : '发生时间',
-              'YYYY-MM-DDTHH:mm',
-            ),
+            readOnly: true,
+            onTap: _submitting ? null : _pickWhen,
+            decoration:
+                _decoration(
+                  _kind == EventKind.plan ? '计划时间' : '发生时间',
+                  '点击选择日期和时间',
+                ).copyWith(
+                  suffixIcon: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (_when.text.isNotEmpty)
+                        IconButton(
+                          tooltip: '清除时间',
+                          onPressed: _submitting
+                              ? null
+                              : () => setState(_when.clear),
+                          icon: const Icon(Icons.close),
+                        ),
+                      const Padding(
+                        padding: EdgeInsets.only(right: 12),
+                        child: Icon(Icons.calendar_month_outlined),
+                      ),
+                    ],
+                  ),
+                ),
             validator: (value) {
               if (value == null || value.trim().isEmpty) return null;
               return _parseWhen() == null ? '时间格式不正确。' : null;
@@ -404,6 +460,7 @@ class _EventFormViewState extends State<EventFormView> {
           const SizedBox(height: 16),
           TextFormField(
             controller: _timezone,
+            readOnly: true,
             decoration: _decoration('时区 (IANA)', 'Asia/Tokyo'),
             validator: (value) {
               if (value == null || value.trim().isEmpty) {

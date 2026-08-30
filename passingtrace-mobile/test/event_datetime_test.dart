@@ -72,7 +72,7 @@ void main() {
 
     test('上海 +08:00', () {
       expect(
-        toIsoWithOffset('2026-08-18T19:30', 'Asia/Shanghai'),
+        toIsoWithOffset('2026-08-18 19:30', 'Asia/Shanghai'),
         '2026-08-18T19:30:00+08:00',
       );
     });
@@ -104,6 +104,11 @@ void main() {
       // 解析回 DateTime 应该是同一个 instant
       final parsed = DateTime.parse(out.replaceFirst(' ', 'T'));
       expect(parsed.toUtc().toIso8601String(), iso.toIso8601String());
+    });
+
+    test('toWallClockLocal 使用用户可读的空格分隔', () {
+      final out = toWallClockLocal(DateTime.utc(2026, 8, 18, 10, 30));
+      expect(out, matches(RegExp(r'^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$')));
     });
   });
 }
