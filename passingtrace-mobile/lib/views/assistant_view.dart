@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../auth_service.dart';
 import '../events/ai_api.dart';
+import '../events/events_api.dart';
 import '../main.dart';
 import 'event_detail_view.dart';
 
@@ -42,7 +43,7 @@ class _AssistantViewState extends State<AssistantView> {
         });
       }
     } catch (error) {
-      if (mounted) setState(() => _error = error.toString());
+      _handleError(error);
     }
   }
 
@@ -98,15 +99,28 @@ class _AssistantViewState extends State<AssistantView> {
         }
       }
     } catch (error) {
-      if (mounted) setState(() => _error = error.toString());
+      _handleError(error);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
 
   Future<void> _refreshMemories() async {
-    final memories = await _api.listMemories(widget.session);
-    if (mounted) setState(() => _memories = memories);
+    try {
+      final memories = await _api.listMemories(widget.session);
+      if (mounted) setState(() => _memories = memories);
+    } catch (error) {
+      _handleError(error);
+    }
+  }
+
+  void _handleError(Object error) {
+    if (!mounted) return;
+    if (error is EventApiException && error.status == 401) {
+      Navigator.of(context).pop(true);
+      return;
+    }
+    setState(() => _error = error.toString());
   }
 
   @override

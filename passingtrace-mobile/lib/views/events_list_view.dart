@@ -76,6 +76,10 @@ class _EventsListViewState extends State<EventsListView> {
       });
     } on EventApiException catch (e) {
       if (!mounted) return;
+      if (e.status == 401) {
+        Navigator.of(context).pop(true);
+        return;
+      }
       setState(() => _error = e.message);
     } catch (e) {
       if (!mounted) return;
@@ -106,6 +110,10 @@ class _EventsListViewState extends State<EventsListView> {
       });
     } on EventApiException catch (e) {
       if (!mounted) return;
+      if (e.status == 401) {
+        Navigator.of(context).pop(true);
+        return;
+      }
       setState(() => _error = e.message);
     } catch (e) {
       if (!mounted) return;

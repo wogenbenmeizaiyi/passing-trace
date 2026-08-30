@@ -423,12 +423,13 @@ class _AccountHomeState extends State<AccountHome> {
     }
     await Future<void>.delayed(const Duration(milliseconds: 180));
     if (!mounted) return;
-    await navigator.push(
+    final sessionExpired = await navigator.push<bool>(
       MaterialPageRoute(
         builder: (_) =>
             EventsListView(auth: widget.auth, session: widget.session),
       ),
     );
+    await _restoreAfterSessionExpiry(sessionExpired);
   }
 
   Future<void> _openAssistant() async {
@@ -436,12 +437,25 @@ class _AccountHomeState extends State<AccountHome> {
     if (navigator.canPop()) navigator.pop();
     await Future<void>.delayed(const Duration(milliseconds: 180));
     if (!mounted) return;
-    await navigator.push(
+    final sessionExpired = await navigator.push<bool>(
       MaterialPageRoute(
         builder: (_) =>
             AssistantView(auth: widget.auth, session: widget.session),
       ),
     );
+    await _restoreAfterSessionExpiry(sessionExpired);
+  }
+
+  Future<void> _restoreAfterSessionExpiry(bool? sessionExpired) async {
+    if (sessionExpired != true) return;
+    final restored = await widget.auth.restore();
+    if (!mounted) return;
+    if (restored == null) {
+      widget.onReset();
+      return;
+    }
+    widget.onSessionChanged(restored);
+    _message('登录状态已过期，请重新登录。');
   }
 
   Future<void> _login() async {
@@ -521,6 +535,9 @@ class _AccountHomeState extends State<AccountHome> {
     setState(() => _busy = true);
     try {
       await action();
+    } on DeviceCredentialsInvalidException {
+      await widget.auth.clearLocalAccount();
+      if (mounted) widget.onReset();
     } catch (error, stackTrace) {
       debugPrint('Account action failed: $error');
       debugPrintStack(stackTrace: stackTrace);

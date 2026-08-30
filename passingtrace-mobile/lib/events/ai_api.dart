@@ -68,7 +68,12 @@ class AiApiClient {
   );
 
   Future<Map<String, String>> _headers(AuthSession session) async {
-    final fresh = await auth.ensureFreshToken(session);
+    late final AuthSession fresh;
+    try {
+      fresh = await auth.ensureFreshToken(session);
+    } on AuthSessionExpiredException catch (error) {
+      throw EventApiException(status: 401, message: error.message);
+    }
     if (fresh.accessToken == null) {
       throw const EventApiException(status: 401, message: '登录状态已失效。');
     }

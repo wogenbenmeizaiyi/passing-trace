@@ -1,7 +1,25 @@
+import 'dart:convert';
+
 import 'package:flutter/services.dart';
+import 'package:flutter_appauth/flutter_appauth.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:passingtrace_mobile/auth_service.dart';
+
+class _InvalidGrantAppAuth extends FlutterAppAuth {
+  const _InvalidGrantAppAuth();
+
+  @override
+  Future<TokenResponse> token(TokenRequest request) async {
+    throw PlatformException(
+      code: 'token_failed',
+      message: 'Failed to get token',
+      details: const {'error': 'invalid_grant'},
+    );
+  }
+}
 
 void main() {
   test('AuthException exposes a safe user-facing message', () {
@@ -84,6 +102,76 @@ void main() {
       expect(
         () => auth.setEventsApiBaseUrl('not a url'),
         throwsA(isA<AuthException>()),
+      );
+    });
+
+    test('refresh token 失效时只清除令牌并保留设备配置', () async {
+      store.addAll({
+        'identity_url': 'http://localhost:56229',
+        'events_api_url': 'http://localhost:54934',
+        'device_id': 'device-1',
+        'device_secret': 'secret-1',
+        'access_token': 'expired-access',
+        'refresh_token': 'expired-refresh',
+        'id_token': 'expired-id',
+        'access_token_expires_at': DateTime.now()
+            .subtract(const Duration(minutes: 5))
+            .toUtc()
+            .toIso8601String(),
+      });
+      final expiringAuth = AuthService(
+        storage: const FlutterSecureStorage(),
+        appAuth: const _InvalidGrantAppAuth(),
+      );
+      final session = await expiringAuth.restore();
+
+      await expectLater(
+        expiringAuth.ensureFreshToken(session!),
+        throwsA(
+          isA<AuthSessionExpiredException>().having(
+            (error) => error.message,
+            'message',
+            '登录状态已过期，请重新登录。',
+          ),
+        ),
+      );
+
+      expect(store['identity_url'], 'http://localhost:56229');
+      expect(store['events_api_url'], 'http://localhost:54934');
+      expect(store['device_id'], 'device-1');
+      expect(store['device_secret'], 'secret-1');
+      expect(store, isNot(contains('access_token')));
+      expect(store, isNot(contains('refresh_token')));
+      expect(store, isNot(contains('id_token')));
+      expect(store, isNot(contains('access_token_expires_at')));
+    });
+
+    test('服务端 invalid_device 被识别为设备凭据失效', () async {
+      final invalidDeviceAuth = AuthService(
+        storage: const FlutterSecureStorage(),
+        httpClient: MockClient(
+          (_) async => http.Response.bytes(
+            utf8.encode('{"title":"invalid_device","detail":"移动设备凭据无效。"}'),
+            403,
+            headers: {'content-type': 'application/problem+json'},
+          ),
+        ),
+      );
+      final session = AuthSession(
+        identityBaseUrl: 'http://localhost:56229',
+        deviceId: 'missing-device',
+        deviceSecret: 'expired-secret',
+      );
+
+      await expectLater(
+        invalidDeviceAuth.login(session),
+        throwsA(
+          isA<DeviceCredentialsInvalidException>().having(
+            (error) => error.message,
+            'message',
+            '此手机的设备凭据已失效，请重新登录绑定。',
+          ),
+        ),
       );
     });
   });

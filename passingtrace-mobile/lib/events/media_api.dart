@@ -48,7 +48,12 @@ class MediaApiClient {
   }
 
   Future<Map<String, String>> _headers(AuthSession session) async {
-    final fresh = await auth.ensureFreshToken(session);
+    late final AuthSession fresh;
+    try {
+      fresh = await auth.ensureFreshToken(session);
+    } on AuthSessionExpiredException catch (error) {
+      throw EventApiException(status: 401, message: error.message);
+    }
     final token = fresh.accessToken;
     if (token == null || token.isEmpty) {
       throw const EventApiException(status: 401, message: '登录状态已失效，请重新登录。');

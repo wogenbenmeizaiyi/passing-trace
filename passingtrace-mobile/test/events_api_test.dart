@@ -28,6 +28,13 @@ class _FakeAuthService extends AuthService {
   }
 }
 
+class _ExpiredAuthService extends AuthService {
+  @override
+  Future<AuthSession> ensureFreshToken(AuthSession current) async {
+    throw const AuthSessionExpiredException();
+  }
+}
+
 AuthSession _session(String token) => AuthSession(
   identityBaseUrl: 'https://id.test',
   deviceId: 'dev-1',
@@ -53,6 +60,29 @@ Map<String, dynamic> _lastBody(List<http.Request> captured) {
 
 void main() {
   group('EventApiClient', () {
+    test('过期登录被转换成安全的 401 业务错误', () async {
+      var requested = false;
+      final client = EventApiClient(
+        auth: _ExpiredAuthService(),
+        baseUrl: 'https://events.test',
+        httpClient: MockClient((_) async {
+          requested = true;
+          return http.Response('{}', 200);
+        }),
+      );
+
+      await expectLater(
+        client.list(_session('expired')),
+        throwsA(
+          isA<EventApiException>()
+              .having((error) => error.status, 'status', 401)
+              .having((error) => error.message, 'message', '登录状态已过期，请重新登录。'),
+        ),
+      );
+      expect(requested, isFalse);
+      client.close();
+    });
+
     test('list 拼接查询参数并发送 Bearer', () async {
       final captured = <http.Request>[];
       final mock = MockClient((request) async {

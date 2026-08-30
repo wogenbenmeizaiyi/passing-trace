@@ -5,6 +5,7 @@ import 'dart:math';
 import 'package:app_links/app_links.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_appauth/flutter_appauth.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
@@ -229,16 +230,23 @@ class AuthService {
     }
     if (current.refreshToken == null) return login(current);
 
-    final result = await _appAuth.token(
-      TokenRequest(
-        mobileClientId,
-        mobileRedirectUri,
-        refreshToken: current.refreshToken,
-        serviceConfiguration: _configuration(current.identityBaseUrl),
-        scopes: mobileScopes,
-        allowInsecureConnections: _allowsInsecure(current.identityBaseUrl),
-      ),
-    );
+    late final TokenResponse result;
+    try {
+      result = await _appAuth.token(
+        TokenRequest(
+          mobileClientId,
+          mobileRedirectUri,
+          refreshToken: current.refreshToken,
+          serviceConfiguration: _configuration(current.identityBaseUrl),
+          scopes: mobileScopes,
+          allowInsecureConnections: _allowsInsecure(current.identityBaseUrl),
+        ),
+      );
+    } on PlatformException catch (error) {
+      if (!_isInvalidGrant(error)) rethrow;
+      await _clearTokens();
+      throw const AuthSessionExpiredException();
+    }
     if (result.accessToken == null) {
       throw const AuthException('刷新登录状态失败。');
     }
@@ -283,6 +291,13 @@ class AuthService {
   }
 
   Future<void> clearLocalAccount() => _storage.deleteAll();
+
+  Future<void> _clearTokens() => Future.wait([
+    _storage.delete(key: _accessTokenKey),
+    _storage.delete(key: _refreshTokenKey),
+    _storage.delete(key: _idTokenKey),
+    _storage.delete(key: _expiresAtKey),
+  ]);
 
   /// 读取已保存的 Events API 地址；若未保存则回落到默认值。
   Future<String> getEventsApiBaseUrl() async {
@@ -409,6 +424,9 @@ class AuthService {
     if (!expectedStatuses.contains(response.statusCode)) {
       try {
         final problem = jsonDecode(response.body) as Map<String, dynamic>;
+        if (problem['title'] == 'invalid_device') {
+          throw const DeviceCredentialsInvalidException();
+        }
         throw AuthException(
           problem['detail'] as String? ??
               problem['title'] as String? ??
@@ -460,6 +478,13 @@ class AuthService {
   static bool _allowsInsecure(String baseUrl) =>
       Uri.parse(baseUrl).scheme == 'http';
 
+  static bool _isInvalidGrant(PlatformException error) {
+    final details =
+        '${error.code} ${error.message ?? ''} ${error.details ?? ''}'
+            .toLowerCase();
+    return details.contains('invalid_grant');
+  }
+
   static bool _isBase64Url256(String? value) =>
       value != null && RegExp(r'^[A-Za-z0-9_-]{43}$').hasMatch(value);
 
@@ -504,6 +529,14 @@ class AuthException implements Exception {
   final String message;
   @override
   String toString() => message;
+}
+
+class AuthSessionExpiredException extends AuthException {
+  const AuthSessionExpiredException() : super('登录状态已过期，请重新登录。');
+}
+
+class DeviceCredentialsInvalidException extends AuthException {
+  const DeviceCredentialsInvalidException() : super('此手机的设备凭据已失效，请重新登录绑定。');
 }
 
 class _Pkce {
