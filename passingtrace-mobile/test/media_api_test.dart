@@ -52,7 +52,7 @@ AuthSession _session() => AuthSession(
 );
 
 void main() {
-  test('single upload 计算 SHA-256、直传对象并确认', () async {
+  test('single upload 计算 SHA-256、直传对象并兼容旧服务端 200', () async {
     final source = _MemoryPlatformFile('photo.png', [1, 2, 3, 4]);
     final requests = <http.Request>[];
     final client = MockClient((request) async {
@@ -68,7 +68,7 @@ void main() {
             'partCount': null,
             'expiresAt': '2026-08-30T12:00:00Z',
           }),
-          201,
+          200,
         );
       }
       if (request.method == 'PUT') {

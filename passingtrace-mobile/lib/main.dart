@@ -410,6 +410,7 @@ class AccountHome extends StatefulWidget {
 
 class _AccountHomeState extends State<AccountHome> {
   bool _busy = false;
+  int _section = 0;
 
   Future<void> _scanFromDrawer() async {
     Navigator.of(context).pop();
@@ -417,18 +418,10 @@ class _AccountHomeState extends State<AccountHome> {
     if (mounted) await _scan();
   }
 
-  Future<void> _openAssistant() async {
-    final navigator = Navigator.of(context);
-    if (navigator.canPop()) navigator.pop();
-    await Future<void>.delayed(const Duration(milliseconds: 180));
-    if (!mounted) return;
-    final sessionExpired = await navigator.push<bool>(
-      MaterialPageRoute(
-        builder: (_) =>
-            AssistantView(auth: widget.auth, session: widget.session),
-      ),
-    );
-    await _restoreAfterSessionExpiry(sessionExpired);
+  void _selectSection(int section) {
+    Navigator.of(context).pop();
+    if (_section == section) return;
+    setState(() => _section = section);
   }
 
   Future<void> _restoreAfterSessionExpiry(bool? sessionExpired) async {
@@ -532,12 +525,27 @@ class _AccountHomeState extends State<AccountHome> {
   @override
   Widget build(BuildContext context) => Stack(
     children: [
-      EventsListView(
-        auth: widget.auth,
-        session: widget.session,
-        drawer: _buildDrawer(),
-        onSessionExpired: () => _restoreAfterSessionExpiry(true),
-      ),
+      if (_section == 0)
+        AssistantView(
+          auth: widget.auth,
+          session: widget.session,
+          drawer: _buildDrawer(),
+          onSessionExpired: () => _restoreAfterSessionExpiry(true),
+        )
+      else if (_section == 1)
+        EventsListView(
+          auth: widget.auth,
+          session: widget.session,
+          drawer: _buildDrawer(),
+          onSessionExpired: () => _restoreAfterSessionExpiry(true),
+        )
+      else
+        MemoriesView(
+          auth: widget.auth,
+          session: widget.session,
+          drawer: _buildDrawer(),
+          onSessionExpired: () => _restoreAfterSessionExpiry(true),
+        ),
       if (_busy)
         const Positioned(
           left: 0,
@@ -566,9 +574,9 @@ class _AccountHomeState extends State<AccountHome> {
                   ),
                 ),
                 IconButton(
-                  tooltip: '关闭菜单',
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.close),
+                  tooltip: '扫一扫',
+                  onPressed: _busy ? null : _scanFromDrawer,
+                  icon: const Icon(Icons.qr_code_scanner),
                 ),
               ],
             ),
@@ -576,66 +584,29 @@ class _AccountHomeState extends State<AccountHome> {
           const Divider(height: 1),
           const SizedBox(height: 10),
           _DrawerDestination(
+            icon: Icons.auto_awesome_outlined,
+            selectedIcon: Icons.auto_awesome,
+            label: 'AI 问答',
+            selected: _section == 0,
+            onTap: () => _selectSection(0),
+          ),
+          _DrawerDestination(
             icon: Icons.article_outlined,
             selectedIcon: Icons.article,
             label: '我的记录',
-            selected: true,
-            onTap: () => Navigator.of(context).pop(),
+            selected: _section == 1,
+            onTap: () => _selectSection(1),
+          ),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+            child: Divider(height: 1),
           ),
           _DrawerDestination(
-            icon: Icons.auto_graph_outlined,
-            selectedIcon: Icons.auto_graph,
-            label: '生活洞察',
-            onTap: _busy ? null : _openAssistant,
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-            child: Material(
-              color: PassingTraceApp.coral.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(16),
-              child: InkWell(
-                onTap: _busy ? null : _scanFromDrawer,
-                borderRadius: BorderRadius.circular(16),
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 48,
-                        height: 48,
-                        decoration: BoxDecoration(
-                          color: PassingTraceApp.coral,
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        child: const Icon(
-                          Icons.qr_code_scanner,
-                          color: Colors.white,
-                          size: 27,
-                        ),
-                      ),
-                      const SizedBox(width: 14),
-                      const Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '扫一扫',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            SizedBox(height: 3),
-                            Text('扫描电脑端登录二维码', style: TextStyle(fontSize: 12)),
-                          ],
-                        ),
-                      ),
-                      const Icon(Icons.chevron_right),
-                    ],
-                  ),
-                ),
-              ),
-            ),
+            icon: Icons.psychology_outlined,
+            selectedIcon: Icons.psychology,
+            label: '我的记忆',
+            selected: _section == 2,
+            onTap: () => _selectSection(2),
           ),
           const Spacer(),
           const Divider(height: 1),

@@ -7,14 +7,83 @@ import '../auth_service.dart';
 import 'events_api.dart';
 
 class AiConversationModel {
-  const AiConversationModel({required this.id, required this.title});
+  const AiConversationModel({
+    required this.id,
+    required this.title,
+    required this.updatedAt,
+  });
   final String id;
   final String title;
+  final DateTime updatedAt;
 
   factory AiConversationModel.fromJson(Map<String, dynamic> json) =>
       AiConversationModel(
         id: json['id'] as String,
         title: json['title'] as String,
+        updatedAt: DateTime.parse(json['updatedAt'] as String),
+      );
+}
+
+class AiMessageModel {
+  const AiMessageModel({
+    required this.role,
+    required this.content,
+    required this.evidenceRecords,
+  });
+
+  final String role;
+  final String content;
+  final List<AiEvidenceRecord> evidenceRecords;
+  List<int> get evidenceEventIds =>
+      evidenceRecords.map((record) => record.eventId).toList(growable: false);
+
+  factory AiMessageModel.fromJson(Map<String, dynamic> json) {
+    final evidence = json['evidence'];
+    final records = evidence is Map<String, dynamic>
+        ? evidence['records'] as List<dynamic>? ?? const []
+        : const <dynamic>[];
+    return AiMessageModel(
+      role: (json['role'] as String).toLowerCase(),
+      content: json['content'] as String,
+      evidenceRecords: records
+          .whereType<Map<String, dynamic>>()
+          .map(AiEvidenceRecord.fromJson)
+          .toList(growable: false),
+    );
+  }
+}
+
+class AiEvidenceRecord {
+  const AiEvidenceRecord({required this.eventId, this.title});
+
+  final int eventId;
+  final String? title;
+
+  factory AiEvidenceRecord.fromJson(Map<String, dynamic> json) =>
+      AiEvidenceRecord(
+        eventId: (json['eventId'] as num).toInt(),
+        title: (json['title'] as String?)?.trim(),
+      );
+}
+
+class AiConversationDetailModel {
+  const AiConversationDetailModel({
+    required this.conversation,
+    required this.messages,
+  });
+
+  final AiConversationModel conversation;
+  final List<AiMessageModel> messages;
+
+  factory AiConversationDetailModel.fromJson(Map<String, dynamic> json) =>
+      AiConversationDetailModel(
+        conversation: AiConversationModel.fromJson(json),
+        messages: (json['messages'] as List<dynamic>? ?? const [])
+            .map(
+              (message) =>
+                  AiMessageModel.fromJson(message as Map<String, dynamic>),
+            )
+            .toList(growable: false),
       );
 }
 
@@ -91,6 +160,39 @@ class AiApiClient {
       body: jsonEncode({'title': null}),
     );
     return AiConversationModel.fromJson(_decode(response, const {201}));
+  }
+
+  Future<List<AiConversationModel>> listConversations(
+    AuthSession session,
+  ) async {
+    final response = await _http.get(
+      _uri('/api/v1/ai/conversations'),
+      headers: await _headers(session),
+    );
+    return _decodeList(response, const {200})
+        .map(
+          (item) => AiConversationModel.fromJson(item as Map<String, dynamic>),
+        )
+        .toList(growable: false);
+  }
+
+  Future<AiConversationDetailModel> getConversation(
+    AuthSession session,
+    String id,
+  ) async {
+    final response = await _http.get(
+      _uri('/api/v1/ai/conversations/$id'),
+      headers: await _headers(session),
+    );
+    return AiConversationDetailModel.fromJson(_decode(response, const {200}));
+  }
+
+  Future<void> deleteConversation(AuthSession session, String id) async {
+    final response = await _http.delete(
+      _uri('/api/v1/ai/conversations/$id'),
+      headers: await _headers(session),
+    );
+    if (response.statusCode != 204) _decode(response, const {204});
   }
 
   Stream<AssistantChunk> send(

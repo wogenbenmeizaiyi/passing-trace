@@ -2,6 +2,7 @@ using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization.Metadata;
 using Microsoft.Agents.AI;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
@@ -23,7 +24,10 @@ public sealed class AssistantService(
     IServiceProvider services,
     TimeProvider clock)
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        TypeInfoResolver = new DefaultJsonTypeInfoResolver(),
+    };
     private const string Instructions = """
         你是 PassingTrace 私人记录助手。只能使用 Context Provider 和只读工具返回的当前用户数据回答。
         涉及用户经历、偏好、数字或统计时必须先调用合适工具；精确次数、金额、趋势必须调用 AggregateMyRecords。

@@ -111,7 +111,7 @@ public sealed class S3ObjectStorage : IObjectStorage, IDisposable
             ContentType = contentType,
             Expires = expiresAt.UtcDateTime,
         });
-        return new Uri(url);
+        return NormalizePublicUrl(url);
     }
 
     public async Task<Uri> CreatePartUploadUrlAsync(string objectKey, string uploadId, int partNumber, DateTimeOffset expiresAt, CancellationToken cancellationToken)
@@ -126,7 +126,7 @@ public sealed class S3ObjectStorage : IObjectStorage, IDisposable
             PartNumber = partNumber,
             Expires = expiresAt.UtcDateTime,
         });
-        return new Uri(url);
+        return NormalizePublicUrl(url);
     }
 
     public async Task CompleteMultipartUploadAsync(string objectKey, string uploadId, IReadOnlyList<CompletedPart> parts, CancellationToken cancellationToken)
@@ -193,7 +193,7 @@ public sealed class S3ObjectStorage : IObjectStorage, IDisposable
                 ContentDisposition = $"{(inline ? "inline" : "attachment")}; filename=\"{safeName}\"",
             },
         });
-        return new Uri(url);
+        return NormalizePublicUrl(url);
     }
 
     public Task DeleteAsync(string objectKey, CancellationToken cancellationToken) =>
@@ -206,12 +206,29 @@ public sealed class S3ObjectStorage : IObjectStorage, IDisposable
         _bucketLock.Dispose();
     }
 
-    private AmazonS3Config CreateConfig(string endpoint) => new()
+    private AmazonS3Config CreateConfig(string endpoint)
     {
-        ServiceURL = endpoint.TrimEnd('/'),
-        ForcePathStyle = _options.ForcePathStyle,
-        AuthenticationRegion = _options.Region,
-    };
+        var endpointUri = new Uri(endpoint.TrimEnd('/'));
+        return new AmazonS3Config
+        {
+            ServiceURL = endpointUri.ToString().TrimEnd('/'),
+            UseHttp = endpointUri.Scheme == Uri.UriSchemeHttp,
+            ForcePathStyle = _options.ForcePathStyle,
+            AuthenticationRegion = _options.Region,
+        };
+    }
+
+    private Uri NormalizePublicUrl(string generatedUrl)
+    {
+        var configuredEndpoint = new Uri(_options.PublicEndpoint.TrimEnd('/'));
+        var generatedUri = new Uri(generatedUrl);
+        return new UriBuilder(generatedUri)
+        {
+            Scheme = configuredEndpoint.Scheme,
+            Host = configuredEndpoint.Host,
+            Port = configuredEndpoint.Port,
+        }.Uri;
+    }
 
     private sealed class ResponseOwnedStream(GetObjectResponse response) : Stream
     {

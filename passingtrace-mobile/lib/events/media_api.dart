@@ -84,7 +84,7 @@ class MediaApiClient {
           'sha256': digest.toString(),
         }),
       ),
-      const {201},
+      const {200, 201},
     );
 
     final id = create['id'] as String;

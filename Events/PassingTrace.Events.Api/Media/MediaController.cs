@@ -12,8 +12,11 @@ public sealed class MediaController(MediaService service) : ControllerBase
     [HttpPost("uploads")]
     public async Task<ActionResult<MediaUploadResponse>> CreateUploadAsync(
         [FromBody] CreateMediaUploadRequest request,
-        CancellationToken cancellationToken) =>
-        Ok(await service.CreateUploadAsync(User.GetUserId(), request, cancellationToken));
+        CancellationToken cancellationToken)
+    {
+        var upload = await service.CreateUploadAsync(User.GetUserId(), request, cancellationToken);
+        return StatusCode(StatusCodes.Status201Created, upload);
+    }
 
     [HttpPost("{id:guid}/parts")]
     public async Task<ActionResult<PartUploadResponse>> CreatePartAsync(
