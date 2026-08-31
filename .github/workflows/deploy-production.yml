@@ -130,8 +130,8 @@ jobs:
           cd "$1"
           chmod 600 deploy/.env.next
           mv deploy/.env.next deploy/.env
-          docker compose --env-file deploy/.env -f deploy/compose.yml --profile setup run --rm certificates
+          docker compose --env-file deploy/.env -f deploy/compose.yml --profile setup run --rm --no-TTY certificates </dev/null
           docker compose --env-file deploy/.env -f deploy/compose.yml pull
-          docker compose --env-file deploy/.env -f deploy/compose.yml up -d --no-build --remove-orphans
+          docker compose --env-file deploy/.env -f deploy/compose.yml up -d --no-build --remove-orphans --wait --wait-timeout 180
           docker compose --env-file deploy/.env -f deploy/compose.yml ps
           REMOTE
