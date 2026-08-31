@@ -56,6 +56,7 @@ services:
     entrypoint: ["/bin/sh", "/scripts/generate-certificates.sh"]
 
   identity:
+    image: ${IDENTITY_IMAGE:-passingtrace-identity:latest}
     build:
       context: ..
       dockerfile: deploy/Dockerfile.identity
@@ -87,6 +88,7 @@ services:
     networks: [backend]
 
   events:
+    image: ${EVENTS_IMAGE:-passingtrace-events:latest}
     build:
       context: ..
       dockerfile: deploy/Dockerfile.events
@@ -117,6 +119,7 @@ services:
     networks: [backend]
 
   worker:
+    image: ${WORKER_IMAGE:-passingtrace-worker:latest}
     build:
       context: ..
       dockerfile: deploy/Dockerfile.worker
@@ -139,6 +142,7 @@ services:
     networks: [backend]
 
   caddy:
+    image: ${CADDY_IMAGE:-passingtrace-caddy:latest}
     build:
       context: ..
       dockerfile: deploy/Dockerfile.caddy

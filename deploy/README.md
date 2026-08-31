@@ -1,6 +1,6 @@
 # PassingTrace 单机生产部署
 
-该目录用于把 PassingTrace 从 GitHub 部署到一台 Linux 服务器。服务由 Docker Compose 管理，Caddy 提供反向代理和自动 HTTPS。
+该目录用于把 PassingTrace 从 GitHub 部署到一台 Linux 服务器。GitHub Actions 构建镜像并推送到 GHCR，服务端由 Docker Compose 管理，Caddy 提供反向代理和自动 HTTPS。
 
 ## 域名
 
@@ -47,6 +47,28 @@ sh deploy/update.sh
 ```
 
 脚本会从部署分支执行 `git pull --ff-only`，重新构建镜像并滚动替换容器。数据库、附件、Identity 证书和 Caddy 证书都存放在 Docker Volume 中，不会因容器重建而删除。
+
+## GitHub Actions 自动部署
+
+工作流 `.github/workflows/deploy-production.yml` 在 `codex/media-ai-memory` 分支推送时执行：
+
+1. 构建 Caddy/Web、Identity、Events 与 Worker 镜像并推送至 GHCR。
+2. 使用 `production` Environment Secrets 建立 SSH 连接。
+3. 将本次提交对应的镜像地址和运行时密钥写入服务器 `deploy/.env`。
+4. 拉取镜像并执行 Compose 滚动更新。
+
+在 GitHub 仓库 `Settings → Environments → production` 中配置：
+
+- `DEPLOY_SSH_PRIVATE_KEY`
+- `POSTGRES_PASSWORD`
+- `REDIS_PASSWORD`
+- `MINIO_SECRET_KEY`
+- `CERTIFICATE_PASSWORD`
+- `REGISTRATION_BOOTSTRAP_CODE`
+- `QWEN_API_KEY`
+- `AMAP_WEB_SERVICE_KEY`
+
+工作流中的服务器地址、用户、部署目录和域名不是密钥，直接保存在工作流中。CI 使用专用 SSH Key，不应使用个人日常 SSH 私钥。
 
 ## 常用排查
 
