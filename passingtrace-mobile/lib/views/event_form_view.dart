@@ -14,7 +14,9 @@ import '../events/event_datetime.dart';
 import '../events/event_model.dart';
 import '../events/events_api.dart';
 import '../events/media_api.dart';
+import '../events/location_service.dart';
 import '../main.dart';
+import 'nearby_place_sheet.dart';
 
 class EventFormView extends StatefulWidget {
   const EventFormView({
@@ -49,6 +51,14 @@ class _EventFormViewState extends State<EventFormView> {
   final _timezone = TextEditingController(text: defaultTimezone());
   int? _loadedVersion;
   final List<_FormMediaItem> _media = [];
+  final AmapLocationService _locationService = AmapLocationService();
+  EventTaxonomyModel? _taxonomy;
+  String? _primaryCategoryKey;
+  final List<ManualTagModel> _manualTags = [];
+  final Set<String> _suppressedAiTags = {};
+  EventLocationModel? _location;
+  bool _locating = false;
+  final _customTag = TextEditingController();
 
   bool get _isEdit => widget.eventId != null;
 
@@ -65,6 +75,12 @@ class _EventFormViewState extends State<EventFormView> {
       _api = EventApiClient(auth: widget.auth, baseUrl: baseUrl);
       _mediaApi = MediaApiClient(auth: widget.auth, baseUrl: baseUrl);
     });
+    try {
+      final taxonomy = await _api.taxonomy(widget.session);
+      if (mounted) setState(() => _taxonomy = taxonomy);
+    } catch (_) {
+      // 分类词表加载失败不阻止记录正文与附件编辑。
+    }
     if (_isEdit) {
       await _loadDetail();
     }
@@ -78,6 +94,8 @@ class _EventFormViewState extends State<EventFormView> {
     _content.dispose();
     _when.dispose();
     _timezone.dispose();
+    _customTag.dispose();
+    _locationService.dispose();
     super.dispose();
   }
 
@@ -111,6 +129,14 @@ class _EventFormViewState extends State<EventFormView> {
               ),
             ),
           );
+        _primaryCategoryKey = event.manualClassification.primaryCategoryKey;
+        _manualTags
+          ..clear()
+          ..addAll(event.manualClassification.tags);
+        _suppressedAiTags
+          ..clear()
+          ..addAll(event.manualClassification.suppressedAiTagKeys);
+        _location = event.locations.isEmpty ? null : event.locations.first;
       });
     } on EventApiException catch (e) {
       if (!mounted) return;
@@ -288,6 +314,8 @@ class _EventFormViewState extends State<EventFormView> {
           timezone: tz,
           version: _loadedVersion!,
           mediaIds: _media.map((item) => item.id!).toList(growable: false),
+          classification: _classification(),
+          locations: _location == null ? <EventLocationModel>[] : [_location!],
         );
         if (!mounted) return;
         Navigator.of(context).pop(true);
@@ -307,6 +335,8 @@ class _EventFormViewState extends State<EventFormView> {
           timezone: tz,
           idempotencyKey: key,
           mediaIds: _media.map((item) => item.id!).toList(growable: false),
+          classification: _classification(),
+          locations: _location == null ? <EventLocationModel>[] : [_location!],
         );
         _idempotencyKey = null;
         if (!mounted) return;
@@ -347,6 +377,132 @@ class _EventFormViewState extends State<EventFormView> {
     }
   }
 
+  ManualClassification _classification() => ManualClassification(
+    primaryCategoryKey: _primaryCategoryKey,
+    tags: List.unmodifiable(_manualTags),
+    suppressedAiTagKeys: _suppressedAiTags.toList(growable: false),
+  );
+
+  String _categoryLabel() {
+    for (final item in _taxonomy?.categories ?? const <TaxonomyItem>[]) {
+      if (item.key == _primaryCategoryKey) return item.label;
+    }
+    return '未分类';
+  }
+
+  Future<void> _pickLocation() async {
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('选择地点'),
+        content: const Text(
+          'PassingTrace 将获取一次前台位置并打开高德地图。你可以拖动地图选点，再从附近地点中选择。不会后台定位或保存轨迹。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('同意并选择'),
+          ),
+        ],
+      ),
+    );
+    if (accepted != true || !mounted) return;
+    setState(() => _locating = true);
+    try {
+      if (!await _locationService.requestPermission()) {
+        throw StateError('未授予前台定位权限。');
+      }
+      final current = await _locationService.locateOnce(privacyAccepted: true);
+      final point = await _locationService.pickMapPoint(
+        latitude: current.latitude,
+        longitude: current.longitude,
+        privacyAccepted: true,
+      );
+      if (point == null || !mounted) return;
+      final candidates = await _api.searchPlaces(
+        widget.session,
+        mode: 'nearby',
+        latitude: point.latitude,
+        longitude: point.longitude,
+      );
+      if (!mounted) return;
+      final selected = await _choosePlace(
+        candidates,
+        title: '选择附近地点',
+        center: point,
+      );
+      if (selected != null) {
+        setState(
+          () => _location = EventLocationModel(
+            name: selected.name,
+            address: selected.address,
+            province: selected.province,
+            city: selected.city,
+            district: selected.district,
+            adCode: selected.adCode,
+            providerPoiId: selected.providerPoiId,
+            poiType: selected.poiType,
+            latitude: selected.latitude,
+            longitude: selected.longitude,
+            accuracyMeters: null,
+            coordinateSystem: 'GCJ02',
+            source: 2,
+            capturedAt: DateTime.now(),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) setState(() => _error = '地点选择失败：$e');
+    } finally {
+      if (mounted) setState(() => _locating = false);
+    }
+  }
+
+  Future<PlaceCandidateModel?> _choosePlace(
+    List<PlaceCandidateModel> places, {
+    required String title,
+    required MapPoint center,
+  }) => showModalBottomSheet<PlaceCandidateModel>(
+    context: context,
+    isScrollControlled: true,
+    showDragHandle: true,
+    builder: (context) => NearbyPlaceSheet(
+      title: title,
+      initialPlaces: places,
+      center: center,
+      onSearch: (query) => _api.searchPlaces(
+        widget.session,
+        mode: 'nearby',
+        query: query,
+        latitude: center.latitude,
+        longitude: center.longitude,
+      ),
+    ),
+  );
+
+  void _addCustomTag() {
+    final value = _customTag.text.trim();
+    if (value.isEmpty) return;
+    if (value.characters.length > 24) {
+      setState(() => _error = '自定义标签最多 24 个字符。');
+      return;
+    }
+    if (_manualTags.length >= 10) {
+      setState(() => _error = '最多 10 个行为标签。');
+      return;
+    }
+    if (!_manualTags.any(
+      (x) => (x.name ?? '').toLowerCase() == value.toLowerCase(),
+    )) {
+      setState(() => _manualTags.add(ManualTagModel(name: value)));
+    }
+    _customTag.clear();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -372,26 +528,10 @@ class _EventFormViewState extends State<EventFormView> {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
         children: [
-          SegmentedButton<EventKind>(
-            segments: const [
-              ButtonSegment(
-                value: EventKind.trace,
-                label: Text('痕迹'),
-                icon: Icon(Icons.history),
-              ),
-              ButtonSegment(
-                value: EventKind.plan,
-                label: Text('计划'),
-                icon: Icon(Icons.flag_outlined),
-              ),
-            ],
-            selected: {_kind},
-            onSelectionChanged: _isEdit
-                ? null
-                : (selection) {
-                    setState(() => _kind = selection.first);
-                  },
-            showSelectedIcon: false,
+          _EventKindSelector(
+            value: _kind,
+            enabled: !_isEdit,
+            onChanged: (value) => setState(() => _kind = value),
           ),
           const SizedBox(height: 18),
           TextFormField(
@@ -413,7 +553,11 @@ class _EventFormViewState extends State<EventFormView> {
             controller: _content,
             minLines: 5,
             maxLines: 12,
-            decoration: _decoration('正文', '把当下想到的、看到的、吃到的写下来…'),
+            textAlignVertical: TextAlignVertical.top,
+            decoration: _decoration(
+              '正文',
+              '把当下想到的、看到的、吃到的写下来…',
+            ).copyWith(alignLabelWithHint: true),
             validator: (_) {
               if (_title.text.trim().isEmpty &&
                   _content.text.trim().isEmpty &&
@@ -457,17 +601,119 @@ class _EventFormViewState extends State<EventFormView> {
               return _parseWhen() == null ? '时间格式不正确。' : null;
             },
           ),
-          const SizedBox(height: 16),
-          TextFormField(
-            controller: _timezone,
-            readOnly: true,
-            decoration: _decoration('时区 (IANA)', 'Asia/Tokyo'),
-            validator: (value) {
-              if (value == null || value.trim().isEmpty) {
-                return '请填写 IANA 时区名，例如 Asia/Tokyo。';
-              }
-              return null;
-            },
+          const SizedBox(height: 12),
+          _buildLocationSection(),
+          const SizedBox(height: 8),
+          ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            title: const Text(
+              '分类与标签（可选）',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+            subtitle: Text(
+              _primaryCategoryKey == null && _manualTags.isEmpty
+                  ? '不填写则由 AI 自动整理'
+                  : '${_categoryLabel()} · ${_manualTags.length} 个标签',
+            ),
+            children: [
+              if (_taxonomy != null) ...[
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    '主分类',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: _taxonomy!.categories
+                      .map(
+                        (item) => ChoiceChip(
+                          label: Text(item.label),
+                          selected: _primaryCategoryKey == item.key,
+                          onSelected: (selected) => setState(
+                            () => _primaryCategoryKey = selected
+                                ? item.key
+                                : null,
+                          ),
+                        ),
+                      )
+                      .toList(),
+                ),
+                const SizedBox(height: 14),
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    '行为标签',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: _taxonomy!.behaviorTags.map((item) {
+                    final selected = _manualTags.any(
+                      (x) => x.taxonomyKey == item.key,
+                    );
+                    return FilterChip(
+                      label: Text(item.label),
+                      selected: selected,
+                      onSelected: (value) => setState(() {
+                        if (value && _manualTags.length < 10) {
+                          _manualTags.add(
+                            ManualTagModel(taxonomyKey: item.key),
+                          );
+                        }
+                        if (!value) {
+                          _manualTags.removeWhere(
+                            (x) => x.taxonomyKey == item.key,
+                          );
+                        }
+                      }),
+                    );
+                  }).toList(),
+                ),
+              ],
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _customTag,
+                      maxLength: 24,
+                      decoration: const InputDecoration(
+                        labelText: '自定义标签',
+                        counterText: '',
+                        isDense: true,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: '添加标签',
+                    onPressed: _addCustomTag,
+                    icon: const Icon(Icons.add_circle_outline),
+                  ),
+                ],
+              ),
+              if (_manualTags.any((x) => x.name != null))
+                Wrap(
+                  spacing: 6,
+                  children: _manualTags
+                      .where((x) => x.name != null)
+                      .map(
+                        (x) => InputChip(
+                          label: Text(x.name!),
+                          onDeleted: () =>
+                              setState(() => _manualTags.remove(x)),
+                        ),
+                      )
+                      .toList(),
+                ),
+              const SizedBox(height: 8),
+            ],
           ),
           const SizedBox(height: 18),
           Row(
@@ -542,6 +788,46 @@ class _EventFormViewState extends State<EventFormView> {
       ),
     );
   }
+
+  Widget _buildLocationSection() => Column(
+    children: [
+      Row(
+        children: [
+          const Expanded(
+            child: Text(
+              '地点（可选）',
+              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+            ),
+          ),
+          TextButton.icon(
+            onPressed: _locating ? null : _pickLocation,
+            icon: _locating
+                ? const SizedBox.square(
+                    dimension: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.map_outlined, size: 17),
+            label: Text(_location == null ? '选择地点' : '重新选择'),
+          ),
+        ],
+      ),
+      if (_location != null)
+        Card(
+          elevation: 0,
+          child: ListTile(
+            dense: true,
+            leading: const Icon(Icons.place_outlined),
+            title: Text(_location!.name),
+            subtitle: Text(_location!.address ?? '仅保存地点名称'),
+            trailing: IconButton(
+              tooltip: '清除地点',
+              onPressed: () => setState(() => _location = null),
+              icon: const Icon(Icons.close),
+            ),
+          ),
+        ),
+    ],
+  );
 
   Widget _buildMediaRow(_FormMediaItem item, int index) => Card(
     elevation: 0,
@@ -623,6 +909,80 @@ class _EventFormViewState extends State<EventFormView> {
     ),
     counterText: label == '标题' ? null : '',
   );
+}
+
+class _EventKindSelector extends StatelessWidget {
+  const _EventKindSelector({
+    required this.value,
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  final EventKind value;
+  final bool enabled;
+  final ValueChanged<EventKind> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(
+            color: PassingTraceApp.ink.withValues(alpha: 0.16),
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          _item(context, EventKind.trace, '痕迹', Icons.history),
+          _item(context, EventKind.plan, '计划', Icons.flag_outlined),
+        ],
+      ),
+    );
+  }
+
+  Widget _item(
+    BuildContext context,
+    EventKind kind,
+    String label,
+    IconData icon,
+  ) {
+    final selected = value == kind;
+    final color = selected
+        ? Theme.of(context).colorScheme.primary
+        : PassingTraceApp.ink.withValues(alpha: enabled ? 0.62 : 0.38);
+    return Expanded(
+      child: InkWell(
+        onTap: enabled ? () => onChanged(kind) : null,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(
+                color: selected ? color : Colors.transparent,
+                width: 2,
+              ),
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 18, color: color),
+              const SizedBox(width: 7),
+              Text(
+                label,
+                style: TextStyle(
+                  color: color,
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _FormMediaItem {

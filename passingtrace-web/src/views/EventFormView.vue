@@ -13,6 +13,8 @@ import {
   type EventResponse,
   type MediaResponse,
   type UpdateEventRequest,
+  type EventTaxonomyResponse,
+  type EventLocationResponse,
 } from '@/api/events-types'
 import { useAuthStore } from '@/stores/auth'
 import { defaultTimezone, toDatetimeLocal, toIsoWithOffset } from '@/utils/datetime'
@@ -54,6 +56,14 @@ interface AttachmentDraft {
   error?: string
 }
 const attachments = ref<AttachmentDraft[]>([])
+const taxonomy = ref<EventTaxonomyResponse | null>(null)
+const primaryCategoryKey = ref<string | null>(null)
+const selectedTagKeys = ref<string[]>([])
+const customTags = ref<string[]>([])
+const customTagDraft = ref('')
+const location = ref<EventLocationResponse | null>(null)
+const placeQuery = ref('')
+const placeSearching = ref(false)
 
 /** 创建时生成一次，重试复用；成功后丢弃。 */
 let idempotencyKey: string | null = null
@@ -107,6 +117,12 @@ async function load() {
       .slice()
       .sort((a, b) => a.sortOrder - b.sortOrder)
       .map((media) => ({ key: media.id, media, progress: 100, uploading: false }))
+    primaryCategoryKey.value = item.manualClassification.primaryCategoryKey ?? null
+    selectedTagKeys.value = item.manualClassification.tags.flatMap((x) =>
+      x.taxonomyKey ? [x.taxonomyKey] : [],
+    )
+    customTags.value = item.manualClassification.tags.flatMap((x) => (x.name ? [x.name] : []))
+    location.value = item.locations[0] ?? null
   } catch (reason) {
     if (controller.signal.aborted) return
     if (reason instanceof HttpError && reason.status === 404) {
@@ -141,6 +157,8 @@ async function submit() {
           : { happenedAt: isoWhen, plannedAt: null }),
         timezone: form.value.timezone.trim(),
         mediaIds: attachments.value.map((item) => item.media!.id),
+        classification: classificationPayload(),
+        locations: location.value ? [location.value] : [],
       }
       const created = await eventsApi.create(payload, idempotencyKey)
       idempotencyKey = null
@@ -158,6 +176,8 @@ async function submit() {
           : { happenedAt: isoWhen, plannedAt: null }),
         timezone: form.value.timezone.trim(),
         mediaIds: attachments.value.map((item) => item.media!.id),
+        classification: classificationPayload(),
+        locations: location.value ? [location.value] : [],
       }
       const updated = await eventsApi.update(loaded.value.id, payload, loaded.value.version)
       loaded.value = updated
@@ -187,6 +207,58 @@ async function submit() {
     }
   } finally {
     submitting.value = false
+  }
+}
+
+function classificationPayload() {
+  return {
+    primaryCategoryKey: primaryCategoryKey.value,
+    tags: [
+      ...selectedTagKeys.value.map((taxonomyKey) => ({ taxonomyKey })),
+      ...customTags.value.map((name) => ({ name })),
+    ],
+    suppressedAiTagKeys: loaded.value?.manualClassification.suppressedAiTagKeys ?? [],
+  }
+}
+
+function toggleTag(key: string) {
+  selectedTagKeys.value = selectedTagKeys.value.includes(key)
+    ? selectedTagKeys.value.filter((value) => value !== key)
+    : selectedTagKeys.value.length + customTags.value.length < 10
+      ? [...selectedTagKeys.value, key]
+      : selectedTagKeys.value
+}
+
+function addCustomTag() {
+  const value = customTagDraft.value.normalize('NFKC').trim().replace(/\s+/g, ' ')
+  if (!value || value.length > 24 || selectedTagKeys.value.length + customTags.value.length >= 10)
+    return
+  if (!customTags.value.some((x) => x.toLocaleLowerCase() === value.toLocaleLowerCase()))
+    customTags.value.push(value)
+  customTagDraft.value = ''
+}
+
+async function searchPlace() {
+  const query = placeQuery.value.trim()
+  if (!query) return
+  placeSearching.value = true
+  try {
+    const places = await eventsApi.searchPlaces({ mode: 'keyword', query })
+    const first = places[0]
+    if (!first) {
+      error.value = '没有找到这个地点。'
+      return
+    }
+    location.value = {
+      ...first,
+      providerPoiId: first.poiId,
+      source: 3,
+      capturedAt: new Date().toISOString(),
+    }
+  } catch (reason) {
+    error.value = reason instanceof Error ? reason.message : '地点搜索失败。'
+  } finally {
+    placeSearching.value = false
   }
 }
 
@@ -256,6 +328,7 @@ const statusHint = computed(() => {
 })
 
 onMounted(() => {
+  if (auth.isAuthenticated) void eventsApi.taxonomy().then((value) => (taxonomy.value = value))
   if (mode.value === 'edit' && auth.isAuthenticated) void load()
 })
 watch(
@@ -364,6 +437,75 @@ onUnmounted(() => {
           </label>
           <p v-if="fieldErrors.content" class="field-error">{{ fieldErrors.content }}</p>
 
+          <details class="form-field optional-fields">
+            <summary>分类与标签（可选）</summary>
+            <p class="field-hint">不填写时由 AI 自动分类；人工主分类不会被 AI 覆盖。</p>
+            <label
+              ><span class="field-label">主分类</span>
+              <select v-model="primaryCategoryKey">
+                <option :value="null">交给 AI</option>
+                <option
+                  v-for="item in taxonomy?.categories ?? []"
+                  :key="item.key"
+                  :value="item.key"
+                >
+                  {{ item.label }}
+                </option>
+              </select>
+            </label>
+            <div class="tag-options">
+              <button
+                v-for="tag in taxonomy?.behaviorTags ?? []"
+                :key="tag.key"
+                type="button"
+                class="radio-pill"
+                :class="{ active: selectedTagKeys.includes(tag.key) }"
+                @click="toggleTag(tag.key)"
+              >
+                {{ tag.label }}
+              </button>
+            </div>
+            <div class="custom-tag-row">
+              <input
+                v-model="customTagDraft"
+                maxlength="24"
+                placeholder="自定义标签"
+                @keyup.enter.prevent="addCustomTag"
+              />
+              <button type="button" class="text-button" @click="addCustomTag">添加</button>
+            </div>
+            <div class="tag-options">
+              <button
+                v-for="tag in customTags"
+                :key="tag"
+                type="button"
+                class="radio-pill active"
+                @click="customTags = customTags.filter((x) => x !== tag)"
+              >
+                {{ tag }} ×
+              </button>
+            </div>
+          </details>
+
+          <fieldset class="form-field">
+            <legend>地点（可选）</legend>
+            <div class="custom-tag-row">
+              <input v-model="placeQuery" placeholder="搜索地点、商店或景点" />
+              <button
+                type="button"
+                class="text-button"
+                :disabled="placeSearching"
+                @click="searchPlace"
+              >
+                {{ placeSearching ? '搜索中…' : '搜索' }}
+              </button>
+            </div>
+            <p v-if="location" class="field-hint">
+              📍 {{ location.name }} · {{ location.address }}
+              <button type="button" class="text-button" @click="location = null">清除</button>
+            </p>
+          </fieldset>
+
           <fieldset class="form-field media-field">
             <legend>图片、视频或文件</legend>
             <label class="media-picker">
@@ -464,6 +606,29 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+.optional-fields summary {
+  cursor: pointer;
+  font-weight: 700;
+  margin-bottom: 14px;
+}
+.tag-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin: 10px 0;
+}
+.tag-options .radio-pill {
+  cursor: pointer;
+}
+.custom-tag-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 10px;
+}
+.custom-tag-row input {
+  flex: 1;
+}
 .form-page {
   max-width: 720px;
   margin: 0 auto;

@@ -166,6 +166,8 @@ public sealed class AssistantService(
         await cache.StringSetAsync(cacheKey,
             JsonSerializer.Serialize(new CachedAnswer(finalAnswer, evidence), JsonOptions),
             TimeSpan.FromHours(24));
+        if (evidence.NavigationTarget is not null)
+            yield return new AssistantStreamEvent("action", evidence.NavigationTarget);
         yield return new AssistantStreamEvent("evidence", evidence);
         yield return new AssistantStreamEvent("done", new { cached = false, watermark });
     }
@@ -180,6 +182,12 @@ public sealed class AssistantService(
             "获取已检索记录的原文和语义证据。"),
         CreateFunction(nameof(PersonalRecordTools.SearchMyMemoriesAsync), tools, "SearchMyMemories",
             "搜索当前用户有证据的长期记忆。"),
+        CreateFunction(nameof(PersonalRecordTools.SearchMyPlacesAsync), tools, "SearchMyPlaces",
+            "搜索当前用户已确认的历史地点。"),
+        CreateFunction(nameof(PersonalRecordTools.GetMyPlaceEvidenceAsync), tools, "GetMyPlaceEvidence",
+            "读取已检索历史地点的记录证据。"),
+        CreateFunction(nameof(PersonalRecordTools.GetNavigationTargetAsync), tools, "GetNavigationTarget",
+            "为已检索且有可信坐标的地点生成结构化导航动作。"),
     ];
 
     private static AIFunction CreateFunction(string methodName, PersonalRecordTools target, string name, string description) =>

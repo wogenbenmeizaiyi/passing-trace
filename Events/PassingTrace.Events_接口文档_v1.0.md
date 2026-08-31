@@ -9,6 +9,9 @@
 > 多媒体上传、语义分析、AI 问答与用户记忆扩展见仓库根目录的
 > `PassingTrace_多媒体与AI记忆运行说明_v1.0.md`。Event 创建/修改现在支持
 > `mediaIds`，标题、正文与附件至少存在一种即可。
+>
+> 计划中的 Event 地点、按地点 AI 检索和历史地点导航契约见仓库根目录的
+> `PassingTrace_高德定位与历史地点导航技术方案_v0.1.md`；该部分尚未实现，不属于当前 v1.0 接口。
 
 本文档描述 `PassingTrace.Events.Api` 暴露的 HTTP 接口，以及客户端从登录、获取令牌到完成「记录 / 查看 / 修改 / 删除」的完整交互链路。实现界面时只需遵循本文契约，无需了解后端内部实现。
 
@@ -376,6 +379,28 @@ App 启动
   → 409：提示内容与已存在记录不一致，丢弃幂等键
 ```
 
+创建和修改请求可附带：
+
+```json
+{
+  "classification": {
+    "primaryCategoryKey": "food",
+    "tags": [{ "taxonomyKey": "dining" }, { "name": "老张推荐" }],
+    "suppressedAiTagKeys": []
+  },
+  "locations": [{
+    "name": "西湖风景名胜区",
+    "providerPoiId": "B000A",
+    "latitude": 30.249,
+    "longitude": 120.143,
+    "coordinateSystem": "GCJ02",
+    "source": 3
+  }]
+}
+```
+
+`classification` 或 `locations` 在 PATCH 中省略表示继承上一修订，传空对象/空数组表示清除。每条记录 V1 最多一个地点、10 个行为标签。响应同时返回 `manualClassification`、`effectiveClassification` 和当前修订 `locations[]`。
+
 ### 6.5 编辑 Event
 
 ```text
@@ -396,6 +421,13 @@ App 启动
   → 204：从列表移除该条
   → 409：提示版本冲突，重新加载后重试
 ```
+
+### 6.7 分类与地点
+
+- `GET /api/v1/event-taxonomy`：取得版本化主分类与建议行为标签。
+- `POST /api/v1/places/search`：`mode=nearby|keyword`，坐标放 JSON body，不放 URL。
+- `GET /api/v1/events/{eventId}/locations/{locationId}/navigation-target`：仅返回当前用户当前修订的可信导航目标。
+- Event 列表支持 `categoryKey` 与逗号分隔的 `tagKeys`。
 
 ---
 

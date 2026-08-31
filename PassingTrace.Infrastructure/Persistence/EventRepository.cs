@@ -14,9 +14,16 @@ public sealed class EventRepository(TraceDbContext dbContext) : IEventRepository
         return await dbContext.Events
             .Include(e => e.SourceRevisions)
                 .ThenInclude(r => r.MediaAssets)
+            .Include(e => e.SourceRevisions)
+                .ThenInclude(r => r.Labels)
+            .Include(e => e.SourceRevisions)
+                .ThenInclude(r => r.Locations)
             .Include(e => e.MediaAssets)
                 .ThenInclude(link => link.MediaAsset)
             .Include(e => e.SemanticRuns)
+            .Include(e => e.LabelIndexes)
+            .Include(e => e.SearchIndexes)
+            .Include(e => e.Locations)
             .AsSplitQuery()
             .FirstOrDefaultAsync(
                 e => e.Id == eventId && e.UserId == userId,
@@ -31,6 +38,10 @@ public sealed class EventRepository(TraceDbContext dbContext) : IEventRepository
         return await dbContext.Events
             .Include(e => e.MediaAssets)
                 .ThenInclude(link => link.MediaAsset)
+            .Include(e => e.SourceRevisions)
+                .ThenInclude(r => r.Labels)
+            .Include(e => e.SourceRevisions)
+                .ThenInclude(r => r.Locations)
             .AsNoTracking()
             .FirstOrDefaultAsync(
                 e => e.UserId == userId && e.IdempotencyKey == idempotencyKey,
@@ -45,6 +56,8 @@ public sealed class EventRepository(TraceDbContext dbContext) : IEventRepository
             .Include(e => e.MediaAssets)
                 .ThenInclude(link => link.MediaAsset)
             .Include(e => e.SemanticRuns)
+            .Include(e => e.LabelIndexes)
+            .Include(e => e.Locations)
             .AsSplitQuery()
             .AsNoTracking()
             .Where(e => e.UserId == query.UserId);
@@ -77,6 +90,19 @@ public sealed class EventRepository(TraceDbContext dbContext) : IEventRepository
         if (query.Cursor is not null)
         {
             events = events.Where(e => e.Id < query.Cursor);
+        }
+
+        if (!string.IsNullOrWhiteSpace(query.CategoryKey))
+        {
+            var key = query.CategoryKey.ToLowerInvariant();
+            events = events.Where(e => e.LabelIndexes.Any(x => x.IsCurrent &&
+                x.Type == EventLabelType.PrimaryCategory && x.TaxonomyKey == key));
+        }
+        foreach (var rawKey in query.TagKeys ?? [])
+        {
+            var key = rawKey.ToLowerInvariant();
+            events = events.Where(e => e.LabelIndexes.Any(x => x.IsCurrent &&
+                x.Type == EventLabelType.BehaviorTag && x.TaxonomyKey == key));
         }
 
         return await events

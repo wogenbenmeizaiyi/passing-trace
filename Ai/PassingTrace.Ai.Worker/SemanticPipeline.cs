@@ -29,7 +29,9 @@ public sealed class SemanticPipeline(
 
     private const string SemanticSystemPrompt = """
         你是 PassingTrace 的记录分析器。只提取用户明确写下或图片中可直接观察到的事实，禁止猜测身份、健康、政治、宗教等敏感属性。
-        输出必须严格符合给定 JSON Schema。summary 用中文简述这一条记录；mentions 提取 category/location/activity/food/tag/person 等检索项；
+        输出必须严格符合给定 JSON Schema。summary 用中文简述这一条记录；mentions 提取 location/activity/food/person 等检索项；
+        PrimaryCategory.taxonomyKey 必须从 food,shopping,travel,scenery,entertainment,exercise,work,study,social,home,health,transport,other 中选择一个。
+        BehaviorTags 最多 5 个，taxonomyKey 必须从系统提供的行为标签 Key 中选择，不得自创；每个分类和标签必须给出置信度及正文位置或 mediaId 证据。
         expenses 仅在金额和币种足够明确时输出；memories 只输出可由本记录证据支持、以后有稳定价值的偏好/背景/习惯/目标/约束。
         每条 memory 的 evidence 必须说明来自正文或哪个 mediaId。图片描述写入 images，不能把图片里看不清的内容当事实。
         """;
@@ -92,6 +94,10 @@ public sealed class SemanticPipeline(
             .Include(x => x.SourceRevisions)
                 .ThenInclude(x => x.MediaAssets)
                 .ThenInclude(x => x.MediaAsset)
+            .Include(x => x.SourceRevisions)
+                .ThenInclude(x => x.Labels)
+            .Include(x => x.SourceRevisions)
+                .ThenInclude(x => x.Locations)
             .FirstOrDefaultAsync(x => x.Id == message.EventId && x.UserId == message.UserId, cancellationToken);
         if (evt is null || evt.DeletedAt is not null || evt.CurrentSourceRevision != message.SourceRevision)
         {
@@ -118,7 +124,7 @@ public sealed class SemanticPipeline(
             SourceRevision = source.Revision,
             PipelineVersion = pipeline.PipelineVersion,
             PromptVersion = pipeline.PromptVersion,
-            SchemaVersion = "semantic-envelope-v1",
+            SchemaVersion = "semantic-envelope-v2",
             Model = pipeline.PrimaryModel,
             Status = SemanticRunStatus.Running,
             CreatedAt = DateTimeOffset.UtcNow,
@@ -146,8 +152,13 @@ public sealed class SemanticPipeline(
             run.CompletedAt = DateTimeOffset.UtcNow;
             PublishMentions(run, evt.UserId, envelope);
             PublishExpenses(run, evt.UserId, envelope);
+            await PublishEffectiveLabelsAsync(evt, source, run, envelope, cancellationToken);
 
             var imageDescriptions = string.Join('\n', envelope.Images.Select(x => x.Description));
+            var effectiveLabels = await db.EventLabelIndexes.Where(x => x.UserId == evt.UserId && x.EventId == evt.Id &&
+                    x.SourceRevision == source.Revision && x.IsCurrent)
+                .Select(x => x.DisplayName).ToListAsync(cancellationToken);
+            var locationText = source.Locations.SelectMany(x => new[] { x.Name, x.Address, x.City, x.District, x.PoiType });
             var retrievalText = string.Join('\n', new[]
             {
                 source.Title,
@@ -155,28 +166,31 @@ public sealed class SemanticPipeline(
                 envelope.Summary,
                 imageDescriptions,
                 string.Join(' ', envelope.Mentions.Select(x => x.NormalizedValue)),
+                string.Join(' ', effectiveLabels),
+                string.Join(' ', locationText.Where(x => !string.IsNullOrWhiteSpace(x))),
             }.Where(x => !string.IsNullOrWhiteSpace(x)));
             var embedding = await embeddingGenerator.GenerateAsync([retrievalText], cancellationToken: cancellationToken);
-            await db.EventSearchIndexes
-                .Where(x => x.UserId == evt.UserId && x.EventId == evt.Id && x.IsCurrent)
+            await db.EventSearchIndexes.Where(x => x.UserId == evt.UserId && x.EventId == evt.Id &&
+                    x.SourceRevision != source.Revision && x.IsCurrent)
                 .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.IsCurrent, false), cancellationToken);
-            var searchIndex = new EventSearchIndex
+            var searchIndex = await db.EventSearchIndexes.FirstOrDefaultAsync(x => x.UserId == evt.UserId &&
+                x.EventId == evt.Id && x.SourceRevision == source.Revision, cancellationToken);
+            if (searchIndex is null)
             {
-                UserId = evt.UserId,
-                EventId = evt.Id,
-                SourceRevision = source.Revision,
-                SemanticRunId = run.Id,
-                Title = source.Title ?? string.Empty,
-                RawContent = source.RawContent ?? string.Empty,
-                AiSummary = envelope.Summary,
-                ImageDescriptions = imageDescriptions,
-                RetrievalText = retrievalText,
-                IsCurrent = true,
-                UpdatedAt = DateTimeOffset.UtcNow,
-            };
-            db.EventSearchIndexes.Add(searchIndex);
+                searchIndex = new EventSearchIndex { UserId = evt.UserId, EventId = evt.Id, SourceRevision = source.Revision };
+                db.EventSearchIndexes.Add(searchIndex);
+            }
+            searchIndex.SemanticRunId = run.Id;
+            searchIndex.Title = source.Title ?? string.Empty;
+            searchIndex.RawContent = source.RawContent ?? string.Empty;
+            searchIndex.AiSummary = envelope.Summary;
+            searchIndex.ImageDescriptions = imageDescriptions;
+            searchIndex.RetrievalText = retrievalText;
+            searchIndex.IsCurrent = true;
+            searchIndex.UpdatedAt = DateTimeOffset.UtcNow;
             db.Entry(searchIndex).Property<Vector?>("Embedding").CurrentValue = new Vector(embedding[0].Vector);
 
+            await PublishUserPlaceAsync(evt, source, cancellationToken);
             await PublishMemoriesAsync(evt.UserId, evt.Id, source.Revision, run, envelope.Memories, cancellationToken);
             await IncrementWatermarkAsync(evt.UserId, cancellationToken);
             await db.SaveChangesAsync(cancellationToken);
@@ -273,6 +287,123 @@ public sealed class SemanticPipeline(
                 TextLength = value.TextLength,
                 MediaAssetId = value.MediaId,
             });
+        }
+        if (envelope.PrimaryCategory is { } primary && EventTaxonomy.IsCategory(primary.TaxonomyKey))
+        {
+            run.Mentions.Add(LabelMention(userId, "primary_category", primary,
+                EventTaxonomy.CategoryLabel(primary.TaxonomyKey)));
+        }
+        foreach (var tag in (envelope.BehaviorTags ?? []).Take(5).Where(x => EventTaxonomy.IsBehaviorTag(x.TaxonomyKey)))
+        {
+            run.Mentions.Add(LabelMention(userId, "behavior_tag", tag,
+                EventTaxonomy.BehaviorTagLabel(tag.TaxonomyKey)));
+        }
+    }
+
+    private static SemanticMention LabelMention(long userId, string category, SemanticLabelData value, string display) => new()
+    {
+        UserId = userId,
+        Category = category,
+        NormalizedValue = display,
+        OriginalValue = display,
+        Assertion = SemanticAssertion.Inferred,
+        Confidence = Math.Clamp(value.Confidence, 0, 1),
+        TextStart = value.TextStart,
+        TextLength = value.TextLength,
+        MediaAssetId = value.MediaId,
+    };
+
+    private async Task PublishEffectiveLabelsAsync(Event evt, SourceRevision source, EventSemanticRun run,
+        SemanticEnvelope envelope, CancellationToken cancellationToken)
+    {
+        await db.EventLabelIndexes.Where(x => x.UserId == evt.UserId && x.EventId == evt.Id && x.IsCurrent &&
+                x.SourceRevision != source.Revision)
+            .ExecuteUpdateAsync(x => x.SetProperty(y => y.IsCurrent, false), cancellationToken);
+        var current = await db.EventLabelIndexes.Where(x => x.UserId == evt.UserId && x.EventId == evt.Id &&
+            x.SourceRevision == source.Revision && x.IsCurrent).ToListAsync(cancellationToken);
+        var manualPrimary = current.Any(x => x.Type == EventLabelType.PrimaryCategory && x.Origin == EventLabelOrigin.Manual);
+        if (!manualPrimary)
+        {
+            foreach (var old in current.Where(x => x.Type == EventLabelType.PrimaryCategory)) old.IsCurrent = false;
+            var key = envelope.PrimaryCategory is { } candidate && candidate.Confidence >= 0.60m && EventTaxonomy.IsCategory(candidate.TaxonomyKey)
+                ? candidate.TaxonomyKey.ToLowerInvariant() : "other";
+            db.EventLabelIndexes.Add(NewAiLabel(evt, source.Revision, run.Id, EventLabelType.PrimaryCategory,
+                key, EventTaxonomy.CategoryLabel(key), envelope.PrimaryCategory?.Confidence ?? 0));
+        }
+
+        var excluded = source.Labels.Where(x => x.Decision == SourceLabelDecision.Exclude)
+            .Select(x => x.TaxonomyKey).Where(x => x is not null).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var normalized = current.Where(x => x.Type == EventLabelType.BehaviorTag && x.Origin == EventLabelOrigin.Manual)
+            .Select(x => x.NormalizedValue).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var old in current.Where(x => x.Type == EventLabelType.BehaviorTag && x.Origin == EventLabelOrigin.Ai)) old.IsCurrent = false;
+        var remaining = Math.Max(0, 10 - normalized.Count);
+        foreach (var tag in (envelope.BehaviorTags ?? []).Where(x => x.Confidence >= 0.70m &&
+                     EventTaxonomy.IsBehaviorTag(x.TaxonomyKey) && !excluded.Contains(x.TaxonomyKey)).Take(remaining))
+        {
+            var key = tag.TaxonomyKey.ToLowerInvariant();
+            var display = EventTaxonomy.BehaviorTagLabel(key);
+            if (!normalized.Add(EventTaxonomy.NormalizedValue(display))) continue;
+            db.EventLabelIndexes.Add(NewAiLabel(evt, source.Revision, run.Id, EventLabelType.BehaviorTag,
+                key, display, tag.Confidence));
+        }
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    private static EventLabelIndex NewAiLabel(Event evt, int revision, long runId, EventLabelType type,
+        string key, string display, decimal confidence) => new()
+        {
+            UserId = evt.UserId,
+            EventId = evt.Id,
+            SourceRevision = revision,
+            SemanticRunId = runId,
+            Type = type,
+            Origin = EventLabelOrigin.Ai,
+            TaxonomyKey = key,
+            DisplayName = display,
+            NormalizedValue = EventTaxonomy.NormalizedValue(display),
+            Confidence = Math.Clamp(confidence, 0, 1),
+            IsCurrent = true,
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
+
+    private async Task PublishUserPlaceAsync(Event evt, SourceRevision source, CancellationToken cancellationToken)
+    {
+        foreach (var location in source.Locations.Where(x => x.UserConfirmed))
+        {
+            var key = !string.IsNullOrWhiteSpace(location.ProviderPoiId)
+                ? $"amap:{location.ProviderPoiId}" : $"text:{location.AdCode}:{EventTaxonomy.NormalizedValue(location.Name)}";
+            var place = await db.UserPlaces.FirstOrDefaultAsync(x => x.UserId == evt.UserId && x.CanonicalKey == key, cancellationToken);
+            var visitedAt = source.HappenedAt ?? source.CreatedAt;
+            if (place is null)
+            {
+                place = new UserPlace
+                {
+                    UserId = evt.UserId,
+                    CanonicalKey = key,
+                    VisitCount = 0,
+                    FirstVisitedAt = visitedAt,
+                    LastVisitedAt = visitedAt
+                };
+                db.UserPlaces.Add(place);
+            }
+            place.Name = location.Name; place.Address = location.Address; place.AdCode = location.AdCode;
+            place.ProviderPoiId = location.ProviderPoiId; place.Latitude = location.Latitude;
+            place.Longitude = location.Longitude; place.CoordinateSystem = location.CoordinateSystem;
+            place.VisitCount = await (
+                from candidate in db.EventLocations
+                join candidateEvent in db.Events on candidate.EventId equals candidateEvent.Id
+                where candidate.UserId == evt.UserId && candidateEvent.UserId == evt.UserId &&
+                      candidateEvent.DeletedAt == null && candidate.UserConfirmed &&
+                      candidate.SourceRevision == candidateEvent.CurrentSourceRevision &&
+                      ((location.ProviderPoiId != null && candidate.ProviderPoiId == location.ProviderPoiId) ||
+                       (location.ProviderPoiId == null && candidate.Name == location.Name && candidate.AdCode == location.AdCode))
+                select candidate.Id).CountAsync(cancellationToken);
+            place.FirstVisitedAt = visitedAt < place.FirstVisitedAt ? visitedAt : place.FirstVisitedAt;
+            place.LastVisitedAt = visitedAt > place.LastVisitedAt ? visitedAt : place.LastVisitedAt;
+            place.RetrievalText = string.Join(' ', new[] { location.Name, location.Address, location.City, location.District }.Where(x => !string.IsNullOrWhiteSpace(x)));
+            place.UpdatedAt = DateTimeOffset.UtcNow;
+            var vector = await embeddingGenerator.GenerateAsync([place.RetrievalText], cancellationToken: cancellationToken);
+            db.Entry(place).Property<Vector?>("Embedding").CurrentValue = new Vector(vector[0].Vector);
         }
     }
 

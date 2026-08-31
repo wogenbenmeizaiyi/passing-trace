@@ -4,6 +4,7 @@ using PassingTrace.Events.Api.Ai;
 using PassingTrace.Events.Api.Common;
 using PassingTrace.Events.Api.Events;
 using PassingTrace.Events.Api.Media;
+using PassingTrace.Events.Api.Places;
 
 namespace PassingTrace.Events.Api.DependencyInjection;
 
@@ -18,6 +19,12 @@ public static class ApplicationExtensions
         services.AddSingleton(TimeProvider.System);
         services.Configure<ObjectStorageOptions>(configuration.GetSection(ObjectStorageOptions.SectionName));
         services.Configure<QwenAiOptions>(configuration.GetSection(QwenAiOptions.SectionName));
+        services.Configure<AmapOptions>(configuration.GetSection(AmapOptions.SectionName));
+        services.AddHttpClient<AmapPlaceService>(client =>
+        {
+            client.BaseAddress = new Uri("https://restapi.amap.com");
+            client.Timeout = TimeSpan.FromSeconds(8);
+        }).RemoveAllLoggers();
         services.AddSingleton<QwenClientFactory>();
         services.AddSingleton(provider => provider.GetRequiredService<QwenClientFactory>().ChatClient);
         services.AddSingleton(provider => provider.GetRequiredService<QwenClientFactory>().EmbeddingGenerator);

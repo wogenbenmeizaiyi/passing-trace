@@ -114,5 +114,7 @@ public sealed class EventSearchIndexConfiguration : IEntityTypeConfiguration<Eve
             .HasDatabaseName("ix_event_search_index_trgm");
         builder.HasIndex("Embedding").HasMethod("hnsw").HasOperators("vector_cosine_ops")
             .HasDatabaseName("ix_event_search_index_embedding");
+        builder.HasOne(x => x.Event).WithMany(x => x.SearchIndexes)
+            .HasForeignKey(x => x.EventId).OnDelete(DeleteBehavior.Cascade);
     }
 }

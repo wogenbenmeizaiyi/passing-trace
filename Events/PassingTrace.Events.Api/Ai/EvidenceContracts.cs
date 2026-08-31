@@ -8,7 +8,19 @@ public sealed record RecordEvidence(
     string? SemanticSummary,
     DateTimeOffset? HappenedAt,
     DateTimeOffset CreatedAt,
-    double Score);
+    double Score,
+    IReadOnlyList<string>? Labels = null,
+    string? Place = null);
+
+public sealed record PlaceEvidence(
+    long LocationId,
+    long EventId,
+    string EventTitle,
+    string Name,
+    string? Address,
+    string? AdCode,
+    DateTimeOffset? HappenedAt,
+    int VisitCount);
 
 public sealed record MemoryEvidence(
     long MemoryId,
@@ -23,7 +35,9 @@ public sealed record EvidenceBundle(
     IReadOnlyList<MemoryEvidence> Memories,
     string? Aggregate = null,
     string? TimeRange = null,
-    string? Assumptions = null);
+    string? Assumptions = null,
+    IReadOnlyList<PlaceEvidence>? Places = null,
+    object? NavigationTarget = null);
 
 public sealed record RecordEvidenceDetail(
     long EventId,

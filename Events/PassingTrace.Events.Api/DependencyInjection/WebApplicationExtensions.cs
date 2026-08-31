@@ -15,9 +15,10 @@ public static class WebApplicationExtensions
     public static async Task<WebApplication> ConfigureTracePipelineAsync(
         this WebApplication app)
     {
-        if (app.Environment.IsDevelopment())
+        if (app.Environment.IsDevelopment() ||
+            app.Configuration.GetValue<bool>("Database:AutoMigrate"))
         {
-            // 仅开发环境自动迁移；生产迁移应作为部署步骤单独执行。
+            // 本地开发默认迁移；单机容器部署可显式开启，集群部署应改用独立迁移任务。
             await using var scope = app.Services.CreateAsyncScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<TraceDbContext>();
             await dbContext.Database.MigrateAsync();

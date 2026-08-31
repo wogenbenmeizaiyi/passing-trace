@@ -219,6 +219,27 @@ class _EventDetailViewState extends State<EventDetailView> {
               fontWeight: FontWeight.w600,
             ),
           ),
+          if (event.effectiveClassification.primaryCategory != null ||
+              event.effectiveClassification.tags.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 7,
+              runSpacing: 7,
+              children: [
+                if (event.effectiveClassification.primaryCategory
+                    case final category?)
+                  Chip(
+                    label: Text(category.displayName),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                for (final tag in event.effectiveClassification.tags.take(10))
+                  Chip(
+                    label: Text('${tag.isAi ? '✦ ' : ''}${tag.displayName}'),
+                    visualDensity: VisualDensity.compact,
+                  ),
+              ],
+            ),
+          ],
           if (event.title?.isNotEmpty == true &&
               event.rawContent?.isNotEmpty == true) ...[
             const SizedBox(height: 16),
@@ -239,6 +260,23 @@ class _EventDetailViewState extends State<EventDetailView> {
             ),
             const SizedBox(height: 10),
             for (final media in event.media) _buildMedia(media),
+          ],
+          if (event.locations.isNotEmpty) ...[
+            const SizedBox(height: 20),
+            Card(
+              elevation: 0,
+              child: ListTile(
+                leading: const Icon(Icons.place_outlined),
+                title: Text(event.locations.first.name),
+                subtitle: Text(event.locations.first.address ?? '已保存的地点'),
+                trailing: event.locations.first.canNavigate
+                    ? const Icon(Icons.directions_outlined)
+                    : null,
+                onTap: event.locations.first.canNavigate
+                    ? () => _navigate(event, event.locations.first)
+                    : null,
+              ),
+            ),
           ],
           if (event.semanticStatus != null) ...[
             const SizedBox(height: 24),
@@ -269,7 +307,6 @@ class _EventDetailViewState extends State<EventDetailView> {
             label: event.kind == EventKind.plan ? '计划时间' : '发生时间',
             value: time,
           ),
-          _DetailRow(label: '时区', value: event.timezone),
           if (event.completedAt != null)
             _DetailRow(label: '完成时间', value: formatLocal(event.completedAt)),
           const Divider(height: 36),
@@ -291,6 +328,40 @@ class _EventDetailViewState extends State<EventDetailView> {
         ],
       ),
     );
+  }
+
+  Future<void> _navigate(EventModel event, EventLocationModel location) async {
+    try {
+      final target = await _api.navigationTarget(
+        widget.session,
+        event.id,
+        location.id!,
+      );
+      final lat = (target['latitude'] as num).toDouble();
+      final lon = (target['longitude'] as num).toDouble();
+      final name = target['name'] as String;
+      final app = Uri.parse(
+        'amapuri://route/plan/?sourceApplication=PassingTrace&dlat=$lat&dlon=$lon&dname=${Uri.encodeComponent(name)}&dev=0&t=0',
+      );
+      if (await canLaunchUrl(app)) {
+        await launchUrl(app, mode: LaunchMode.externalApplication);
+        return;
+      }
+      final web = Uri.https('uri.amap.com', '/navigation', {
+        'to': '$lon,$lat,$name',
+        'mode': 'car',
+        'policy': '1',
+        'src': 'PassingTrace',
+      });
+      if (!await launchUrl(web, mode: LaunchMode.externalApplication)) {
+        throw StateError('无法打开地图应用。');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('导航失败：$e')));
+      }
+    }
   }
 
   Widget _buildMedia(MediaAssetModel media) => Card(

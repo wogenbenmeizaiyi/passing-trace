@@ -138,6 +138,24 @@ class EventCard extends StatelessWidget {
                       ),
                     ),
                   ],
+                  if (event.effectiveClassification.primaryCategory != null ||
+                      event.effectiveClassification.tags.isNotEmpty) ...[
+                    const SizedBox(height: 7),
+                    Text(
+                      [
+                        if (event.effectiveClassification.primaryCategory
+                            case final value?)
+                          value.displayName,
+                        ...event.effectiveClassification.tags
+                            .take(2)
+                            .map((x) => '${x.isAi ? '✦' : ''}${x.displayName}'),
+                      ].join(' · '),
+                      style: TextStyle(
+                        color: PassingTraceApp.coral.withValues(alpha: 0.85),
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),

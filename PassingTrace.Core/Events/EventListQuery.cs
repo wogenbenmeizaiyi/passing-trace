@@ -12,4 +12,6 @@ public sealed record EventListQuery(
     DateTimeOffset? To = null,
     bool IncludeDeleted = false,
     int Limit = 50,
-    long? Cursor = null);
+    long? Cursor = null,
+    string? CategoryKey = null,
+    IReadOnlyList<string>? TagKeys = null);

@@ -125,6 +125,18 @@ function fmt(iso: string | null): string {
   return formatLocal(iso)
 }
 
+async function navigateToLocation() {
+  const event = item.value
+  const location = event?.locations[0]
+  if (!event || !location?.id) return
+  const target = await eventsApi.navigationTarget(event.id, location.id)
+  const url = new URL('https://uri.amap.com/navigation')
+  url.searchParams.set('to', `${target.longitude},${target.latitude},${target.name}`)
+  url.searchParams.set('mode', 'car')
+  url.searchParams.set('src', 'PassingTrace')
+  window.open(url.toString(), '_blank', 'noopener')
+}
+
 onMounted(() => {
   if (auth.isAuthenticated) void load()
 })
@@ -204,6 +216,23 @@ onUnmounted(() => {
         </header>
 
         <h1 class="detail-title">{{ item.title ?? '（无标题）' }}</h1>
+        <div
+          v-if="
+            item.effectiveClassification.primaryCategory || item.effectiveClassification.tags.length
+          "
+          class="label-row"
+        >
+          <span v-if="item.effectiveClassification.primaryCategory" class="badge kind">{{
+            item.effectiveClassification.primaryCategory.displayName
+          }}</span>
+          <span
+            v-for="tag in item.effectiveClassification.tags"
+            :key="tag.taxonomyKey ?? tag.displayName"
+            class="badge status"
+          >
+            {{ tag.origin === 'ai' ? '✦ ' : '' }}{{ tag.displayName }}
+          </span>
+        </div>
 
         <dl class="source">
           <div v-if="item.kind === EventKind.Trace">
@@ -271,6 +300,20 @@ onUnmounted(() => {
           </div>
           <button class="text-button" :disabled="reparsing" @click="reparse">
             {{ reparsing ? '已排队' : '重新分析' }}
+          </button>
+        </section>
+        <section v-if="item.locations.length" class="semantic-card">
+          <div>
+            <p class="section-label">地点</p>
+            <strong>{{ item.locations[0]?.name }}</strong>
+            <p>{{ item.locations[0]?.address }}</p>
+          </div>
+          <button
+            v-if="item.locations[0]?.latitude != null"
+            class="button button-dark compact-button"
+            @click="navigateToLocation"
+          >
+            导航到这里
           </button>
         </section>
 

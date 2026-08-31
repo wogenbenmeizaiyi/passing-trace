@@ -94,6 +94,61 @@ void main() {
       expect(event.plannedAt, isNull);
       expect(event.happenedAt, isNull);
     });
+
+    test('解析人工与 AI 标签以及可信地点', () {
+      final event = EventModel.fromJson({
+        'id': 7,
+        'kind': 0,
+        'status': 1,
+        'title': '西湖散步',
+        'rawContent': null,
+        'happenedAt': null,
+        'plannedAt': null,
+        'completedAt': null,
+        'timezone': 'Asia/Shanghai',
+        'sourceRevision': 2,
+        'version': 3,
+        'createdAt': '2026-08-31T00:00:00Z',
+        'updatedAt': '2026-08-31T00:00:00Z',
+        'manualClassification': {
+          'primaryCategoryKey': 'scenery',
+          'tags': [
+            {'taxonomyKey': 'walking', 'name': null},
+          ],
+          'suppressedAiTagKeys': [],
+        },
+        'effectiveClassification': {
+          'primaryCategory': {
+            'taxonomyKey': 'scenery',
+            'displayName': '美景',
+            'origin': 'manual',
+            'confidence': null,
+          },
+          'tags': [
+            {
+              'taxonomyKey': 'photography',
+              'displayName': '拍照',
+              'origin': 'ai',
+              'confidence': 0.9,
+            },
+          ],
+          'taxonomyVersion': 'life-v1',
+        },
+        'locations': [
+          {
+            'id': 11,
+            'name': '西湖',
+            'latitude': 30.2,
+            'longitude': 120.1,
+            'coordinateSystem': 'GCJ02',
+            'source': 3,
+          },
+        ],
+      });
+      expect(event.manualClassification.primaryCategoryKey, 'scenery');
+      expect(event.effectiveClassification.tags.single.isAi, isTrue);
+      expect(event.locations.single.canNavigate, isTrue);
+    });
   });
 
   group('EventPage.fromJson', () {

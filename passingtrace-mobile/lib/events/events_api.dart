@@ -188,6 +188,8 @@ class EventApiClient {
     required String timezone,
     required String idempotencyKey,
     List<String> mediaIds = const [],
+    ManualClassification? classification,
+    List<EventLocationModel>? locations,
   }) async {
     if (idempotencyKey.isEmpty) {
       throw ArgumentError.value(idempotencyKey, 'idempotencyKey', '幂等键不能为空');
@@ -200,6 +202,9 @@ class EventApiClient {
       'plannedAt': plannedAt?.toUtc().toIso8601String(),
       'timezone': timezone,
       'mediaIds': mediaIds,
+      if (classification != null) 'classification': classification.toJson(),
+      if (locations != null)
+        'locations': locations.map((x) => x.toJson()).toList(),
     };
     final uri = _resolve('/api/v1/events');
     final response = await _send(
@@ -224,6 +229,8 @@ class EventApiClient {
     required String timezone,
     required int version,
     List<String> mediaIds = const [],
+    ManualClassification? classification,
+    List<EventLocationModel>? locations,
   }) async {
     if (version < 0) {
       throw ArgumentError.value(version, 'version', 'version 必须为非负整数');
@@ -235,6 +242,9 @@ class EventApiClient {
       'plannedAt': plannedAt?.toUtc().toIso8601String(),
       'timezone': timezone,
       'mediaIds': mediaIds,
+      if (classification != null) 'classification': classification.toJson(),
+      if (locations != null)
+        'locations': locations.map((x) => x.toJson()).toList(),
     };
     final uri = _resolve('/api/v1/events/$id');
     final response = await _send(
@@ -283,6 +293,63 @@ class EventApiClient {
       message: message,
       problem: problem,
     );
+  }
+
+  Future<EventTaxonomyModel> taxonomy(AuthSession session) async {
+    final response = await _send(
+      session,
+      'GET',
+      _resolve('/api/v1/event-taxonomy'),
+    );
+    return _decode(response, const {
+      200,
+    }, (raw) => EventTaxonomyModel.fromJson(raw as Map<String, dynamic>));
+  }
+
+  Future<List<PlaceCandidateModel>> searchPlaces(
+    AuthSession session, {
+    required String mode,
+    String? query,
+    double? latitude,
+    double? longitude,
+    int radiusMeters = 1000,
+    String? cityAdCode,
+  }) async {
+    final response = await _send(
+      session,
+      'POST',
+      _resolve('/api/v1/places/search'),
+      body: {
+        'mode': mode,
+        'query': query,
+        'latitude': latitude,
+        'longitude': longitude,
+        'radiusMeters': radiusMeters,
+        'cityAdCode': cityAdCode,
+      },
+    );
+    return _decode(
+      response,
+      const {200},
+      (raw) => (raw as List<dynamic>)
+          .map((x) => PlaceCandidateModel.fromJson(x as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+
+  Future<Map<String, dynamic>> navigationTarget(
+    AuthSession session,
+    int eventId,
+    int locationId,
+  ) async {
+    final response = await _send(
+      session,
+      'GET',
+      _resolve(
+        '/api/v1/events/$eventId/locations/$locationId/navigation-target',
+      ),
+    );
+    return _decode(response, const {200}, (raw) => raw as Map<String, dynamic>);
   }
 
   void close() => _http.close();

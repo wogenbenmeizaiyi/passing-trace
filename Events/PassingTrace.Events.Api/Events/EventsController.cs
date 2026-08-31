@@ -29,7 +29,9 @@ public sealed class EventsController(EventService service) : ControllerBase
             request.PlannedAt,
             request.Timezone ?? "UTC",
             idempotencyKey,
-            request.MediaIds);
+            request.MediaIds,
+            request.Classification,
+            request.Locations);
 
         var evt = await service.CreateAsync(command, cancellationToken);
 
@@ -46,6 +48,8 @@ public sealed class EventsController(EventService service) : ControllerBase
         [FromQuery] EventStatus? status,
         [FromQuery] DateTimeOffset? from,
         [FromQuery] DateTimeOffset? to,
+        [FromQuery] string? categoryKey,
+        [FromQuery] string? tagKeys,
         [FromQuery] int limit = 50,
         [FromQuery] long? cursor = null,
         CancellationToken cancellationToken = default)
@@ -58,7 +62,9 @@ public sealed class EventsController(EventService service) : ControllerBase
             to,
             IncludeDeleted: false,
             limit,
-            cursor);
+            cursor,
+            categoryKey,
+            tagKeys?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
 
         var events = await service.ListAsync(query, cancellationToken);
         var items = events.Select(ToResponse).ToList();
@@ -102,7 +108,9 @@ public sealed class EventsController(EventService service) : ControllerBase
             request.HappenedAt,
             request.PlannedAt,
             request.Timezone ?? "UTC",
-            request.MediaIds);
+            request.MediaIds,
+            request.Classification,
+            request.Locations);
 
         var evt = await service.UpdateSourceAsync(command, cancellationToken);
 
@@ -155,6 +163,26 @@ public sealed class EventsController(EventService service) : ControllerBase
                 x.SortOrder))
             .ToArray();
 
+        var revision = evt.SourceRevisions.SingleOrDefault(x => x.Revision == evt.CurrentSourceRevision);
+        var sourceLabels = revision?.Labels ?? [];
+        var manual = new ManualClassificationResponse(
+            sourceLabels.FirstOrDefault(x => x.Type == EventLabelType.PrimaryCategory && x.Decision == SourceLabelDecision.Include)?.TaxonomyKey,
+            sourceLabels.Where(x => x.Type == EventLabelType.BehaviorTag && x.Decision == SourceLabelDecision.Include)
+                .OrderBy(x => x.SortOrder)
+                .Select(x => new ManualTagInput(x.TaxonomyKey, x.TaxonomyKey is null ? x.DisplayName : null)).ToArray(),
+            sourceLabels.Where(x => x.Type == EventLabelType.BehaviorTag && x.Decision == SourceLabelDecision.Exclude)
+                .Select(x => x.TaxonomyKey!).ToArray());
+        var effectiveLabels = evt.LabelIndexes.Where(x => x.IsCurrent && x.SourceRevision == evt.CurrentSourceRevision).ToArray();
+        EventLabelResponse MapLabel(EventLabelIndex x) => new(x.TaxonomyKey, x.DisplayName,
+            x.Origin == EventLabelOrigin.Ai ? "ai" : "manual", x.Confidence);
+        var effective = new EffectiveClassificationResponse(
+            effectiveLabels.FirstOrDefault(x => x.Type == EventLabelType.PrimaryCategory) is { } primary ? MapLabel(primary) : null,
+            effectiveLabels.Where(x => x.Type == EventLabelType.BehaviorTag).Select(MapLabel).ToArray(),
+            EventTaxonomy.Version);
+        var locations = evt.Locations.Where(x => x.SourceRevision == evt.CurrentSourceRevision)
+            .Select(x => new EventLocationResponse(x.Id, x.Name, x.Address, x.Province, x.City, x.District,
+                x.AdCode, x.ProviderPoiId, x.PoiType, x.Latitude, x.Longitude, x.AccuracyMeters,
+                x.CoordinateSystem, x.Source, x.CapturedAt)).ToArray();
         return new EventResponse(
             evt.Id,
             evt.EventKind,
@@ -172,6 +200,9 @@ public sealed class EventsController(EventService service) : ControllerBase
             evt.UpdatedAt,
             media,
             semantic?.Status.ToString() ?? "Pending",
-            semantic?.Summary);
+            semantic?.Summary,
+            manual,
+            effective,
+            locations);
     }
 }

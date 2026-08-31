@@ -66,6 +66,53 @@ Map<String, dynamic> _lastBody(List<http.Request> captured) {
 
 void main() {
   group('EventApiClient', () {
+    test('地点搜索坐标放在 POST 请求体而不是 URL', () async {
+      final captured = <http.Request>[];
+      final client = EventApiClient(
+        auth: _FakeAuthService('t'),
+        baseUrl: 'https://events.test',
+        httpClient: MockClient((request) async {
+          captured.add(request);
+          return http.Response('[]', 200);
+        }),
+      );
+      await client.searchPlaces(
+        _session('t'),
+        mode: 'nearby',
+        latitude: 30.2,
+        longitude: 120.1,
+      );
+      expect(captured.single.method, 'POST');
+      expect(captured.single.url.query, isEmpty);
+      expect(_lastBody(captured)['latitude'], 30.2);
+      client.close();
+    });
+    test('附近地点名称搜索同时发送关键词和地图中心坐标', () async {
+      final captured = <http.Request>[];
+      final client = EventApiClient(
+        auth: _FakeAuthService('t'),
+        baseUrl: 'https://events.test',
+        httpClient: MockClient((request) async {
+          captured.add(request);
+          return http.Response('[]', 200);
+        }),
+      );
+
+      await client.searchPlaces(
+        _session('t'),
+        mode: 'nearby',
+        query: '早阳肉包',
+        latitude: 30.2,
+        longitude: 120.1,
+      );
+
+      final body = _lastBody(captured);
+      expect(body['mode'], 'nearby');
+      expect(body['query'], '早阳肉包');
+      expect(body['latitude'], 30.2);
+      expect(body['longitude'], 120.1);
+      client.close();
+    });
     test('过期登录被转换成安全的 401 业务错误', () async {
       var requested = false;
       final client = EventApiClient(

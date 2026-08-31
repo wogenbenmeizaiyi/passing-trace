@@ -14,6 +14,7 @@ var objectStoragePublicEndpoint = builder.AddParameter(
     "object-storage-public-endpoint",
     "http://localhost:9000");
 var qwenApiKey = builder.AddParameter("qwen-api-key", secret: true);
+var amapWebServiceKey = builder.AddParameter("amap-web-service-key", secret: true);
 
 var redis = builder.AddRedis("redis")
     .WithLifetime(ContainerLifetime.Persistent);
@@ -62,6 +63,7 @@ var api = builder.AddProject<Projects.PassingTrace_Events_Api>("passingtrace-eve
     .WithEnvironment("ObjectStorage__AccessKey", minioAccessKey)
     .WithEnvironment("ObjectStorage__SecretKey", minioSecretKey)
     .WithEnvironment("Qwen__ApiKey", qwenApiKey)
+    .WithEnvironment("Amap__WebServiceKey", amapWebServiceKey)
     .WaitFor(identity)
     .WaitFor(traceDatabase)
     .WaitFor(redis)

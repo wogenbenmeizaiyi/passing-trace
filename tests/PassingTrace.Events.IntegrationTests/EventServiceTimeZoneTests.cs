@@ -237,6 +237,67 @@ public sealed class EventServiceTimeZoneTests : IDisposable
             service.RejectAsync(foreign.Id, CancellationToken.None));
     }
 
+    [Fact]
+    public async Task CreateAsync_SnapshotsManualLabelsAndConfirmedLocation_AndBuildsBaseIndex()
+    {
+        var service = CreateService(_db);
+        var created = await service.CreateAsync(new CreateEventCommand(
+            61, EventKind.Trace, "西湖散步", "今天沿着西湖走了一圈。", DateTimeOffset.UtcNow, null,
+            "Asia/Shanghai", "labels-location", Classification: new ClassificationInput("scenery",
+                [new ManualTagInput("walking", null), new ManualTagInput(null, "周末放松")], []),
+            Locations: [new EventLocationInput("西湖风景名胜区", "杭州市西湖区", "浙江省", "杭州市", "西湖区",
+                "330106", "B000A", "风景名胜", 30.249m, 120.143m, 18m, "GCJ02",
+                EventLocationSource.KeywordSearch, DateTimeOffset.UtcNow)]), CancellationToken.None);
+
+        var revision = await _db.SourceRevisions.AsNoTracking().Include(x => x.Labels).Include(x => x.Locations)
+            .SingleAsync(x => x.EventId == created.Id);
+        Assert.Equal(3, revision.Labels.Count);
+        Assert.Equal("scenery", revision.Labels.Single(x => x.Type == EventLabelType.PrimaryCategory).TaxonomyKey);
+        Assert.Equal("西湖风景名胜区", Assert.Single(revision.Locations).Name);
+        var index = await _db.EventSearchIndexes.AsNoTracking().SingleAsync(x => x.EventId == created.Id && x.IsCurrent);
+        Assert.Contains("周末放松", index.RetrievalText);
+        Assert.Contains("西湖风景名胜区", index.RetrievalText);
+    }
+
+    [Fact]
+    public async Task UpdateSourceAsync_OmittedMetadataPreservesIt_AndExplicitEmptyClearsIt()
+    {
+        var service = CreateService(_db);
+        var created = await service.CreateAsync(new CreateEventCommand(62, EventKind.Trace, "咖啡", null, null, null,
+            "UTC", "preserve-labels", Classification: new ClassificationInput("food",
+                [new ManualTagInput("coffee", null)], []), Locations: [new EventLocationInput("咖啡店", null, null,
+                null, null, null, null, null, null, null, null, null, EventLocationSource.ManualText, null)]), CancellationToken.None);
+
+        var preserved = await service.UpdateSourceAsync(new UpdateEventCommand(62, created.Id, created.RowVersion,
+            "咖啡续杯", null, null, null, "UTC"), CancellationToken.None);
+        var second = await _db.SourceRevisions.AsNoTracking().Include(x => x.Labels).Include(x => x.Locations)
+            .SingleAsync(x => x.EventId == created.Id && x.Revision == 2);
+        Assert.Contains(second.Labels, x => x.TaxonomyKey == "coffee");
+        Assert.Single(second.Locations);
+
+        await service.UpdateSourceAsync(new UpdateEventCommand(62, created.Id, preserved.RowVersion,
+            "咖啡续杯", null, null, null, "UTC", Classification: new ClassificationInput(null, [], []), Locations: []),
+            CancellationToken.None);
+        var third = await _db.SourceRevisions.AsNoTracking().Include(x => x.Labels).Include(x => x.Locations)
+            .SingleAsync(x => x.EventId == created.Id && x.Revision == 3);
+        Assert.Empty(third.Labels);
+        Assert.Empty(third.Locations);
+    }
+
+    [Fact]
+    public async Task CreateAsync_RejectsInvalidCustomTagAndNonGcjCoordinates()
+    {
+        var service = CreateService(_db);
+        await Assert.ThrowsAsync<DomainValidationException>(() => service.CreateAsync(new CreateEventCommand(
+            63, EventKind.Trace, "x", null, null, null, "UTC", "bad-tag",
+            Classification: new ClassificationInput(null, [new ManualTagInput(null, new string('长', 25))], [])),
+            CancellationToken.None));
+        await Assert.ThrowsAsync<DomainValidationException>(() => service.CreateAsync(new CreateEventCommand(
+            63, EventKind.Trace, "x", null, null, null, "UTC", "bad-coordinate",
+            Locations: [new EventLocationInput("位置", null, null, null, null, null, null, null, 30m, 120m,
+                null, "WGS84", EventLocationSource.CurrentPosition, null)]), CancellationToken.None));
+    }
+
     private static TraceDbContext CreateDbContext() =>
         throw new InvalidOperationException("请使用带连接的构造器。");
 
@@ -353,6 +414,7 @@ public sealed class EventServiceTimeZoneTests : IDisposable
             modelBuilder.Entity<EventSearchIndex>().Ignore("Embedding");
             modelBuilder.Entity<EventSearchIndex>().Ignore("SearchVector");
             modelBuilder.Entity<UserMemory>().Ignore("Embedding");
+            modelBuilder.Entity<UserPlace>().Ignore("Embedding");
         }
     }
 }

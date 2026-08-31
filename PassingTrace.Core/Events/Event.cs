@@ -72,6 +72,14 @@ public sealed class Event
     /// <summary>该 Event 的不可变语义分析历史。</summary>
     public List<EventSemanticRun> SemanticRuns { get; set; } = [];
 
+    /// <summary>当前和历史修订的结构化地点。</summary>
+    public List<EventLocation> Locations { get; set; } = [];
+
+    /// <summary>当前和历史修订的生效标签索引。</summary>
+    public List<EventLabelIndex> LabelIndexes { get; set; } = [];
+
+    public List<Ai.EventSearchIndex> SearchIndexes { get; set; } = [];
+
     /// <summary>
     /// 创建新 Event。Trace 默认已完成，Plan 默认待执行。
     /// </summary>

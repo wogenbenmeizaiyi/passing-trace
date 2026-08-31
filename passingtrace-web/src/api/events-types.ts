@@ -34,6 +34,58 @@ export interface MediaResponse {
   sortOrder: number
 }
 
+export interface ManualTagInput {
+  taxonomyKey?: string | null
+  name?: string | null
+}
+export interface ManualClassification {
+  primaryCategoryKey?: string | null
+  tags: ManualTagInput[]
+  suppressedAiTagKeys: string[]
+}
+export interface EventLabelResponse {
+  taxonomyKey: string | null
+  displayName: string
+  origin: 'manual' | 'ai'
+  confidence: number | null
+}
+export interface EffectiveClassification {
+  primaryCategory: EventLabelResponse | null
+  tags: EventLabelResponse[]
+  taxonomyVersion: string
+}
+export interface EventLocationResponse {
+  id?: number
+  name: string
+  address?: string | null
+  province?: string | null
+  city?: string | null
+  district?: string | null
+  adCode?: string | null
+  providerPoiId?: string | null
+  poiType?: string | null
+  latitude?: number | null
+  longitude?: number | null
+  accuracyMeters?: number | null
+  coordinateSystem: string
+  source: number
+  capturedAt?: string | null
+}
+export interface TaxonomyItem {
+  key: string
+  label: string
+}
+export interface EventTaxonomyResponse {
+  version: string
+  categories: TaxonomyItem[]
+  behaviorTags: TaxonomyItem[]
+}
+export interface PlaceCandidate extends Omit<EventLocationResponse, 'id' | 'source'> {
+  provider: string
+  poiId: string
+  distanceMeters: number | null
+}
+
 /** UI 展示用的中文文案。 */
 export const EventKindLabel: Record<EventKind, string> = {
   [EventKind.Trace]: '痕迹',
@@ -71,6 +123,9 @@ export interface EventResponse {
   media: MediaResponse[]
   semanticStatus: string
   semanticSummary: string | null
+  manualClassification: ManualClassification
+  effectiveClassification: EffectiveClassification
+  locations: EventLocationResponse[]
 }
 
 export interface CreateEventRequest {
@@ -81,6 +136,8 @@ export interface CreateEventRequest {
   plannedAt?: string | null
   timezone: string
   mediaIds?: string[]
+  classification?: ManualClassification
+  locations?: EventLocationResponse[]
 }
 
 export interface UpdateEventRequest {
@@ -90,6 +147,8 @@ export interface UpdateEventRequest {
   plannedAt?: string | null
   timezone: string
   mediaIds?: string[]
+  classification?: ManualClassification
+  locations?: EventLocationResponse[]
 }
 
 export interface EventPage {
@@ -104,6 +163,8 @@ export interface ListEventsQuery {
   status?: EventStatus
   from?: string
   to?: string
+  categoryKey?: string
+  tagKeys?: string[]
 }
 
 export interface ProblemDetails {

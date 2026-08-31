@@ -38,6 +38,10 @@ public sealed class SourceRevision
     /// <summary>该修订对应的附件快照。</summary>
     public List<SourceRevisionMedia> MediaAssets { get; set; } = [];
 
+    public List<SourceRevisionLabel> Labels { get; set; } = [];
+
+    public List<EventLocation> Locations { get; set; } = [];
+
     /// <summary>构造一条 Source 修订快照。</summary>
     public static SourceRevision Create(
         long eventId,

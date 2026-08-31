@@ -30,6 +30,10 @@ public sealed class TraceDbContext(DbContextOptions<TraceDbContext> options)
     public DbSet<AiMessage> AiMessages => Set<AiMessage>();
     public DbSet<ConversationSummary> ConversationSummaries => Set<ConversationSummary>();
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
+    public DbSet<SourceRevisionLabel> SourceRevisionLabels => Set<SourceRevisionLabel>();
+    public DbSet<EventLabelIndex> EventLabelIndexes => Set<EventLabelIndex>();
+    public DbSet<EventLocation> EventLocations => Set<EventLocation>();
+    public DbSet<UserPlace> UserPlaces => Set<UserPlace>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {

@@ -91,4 +91,5 @@ public sealed class EventSearchIndex
     public string RetrievalText { get; set; } = string.Empty;
     public bool IsCurrent { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
+    public Events.Event Event { get; set; } = null!;
 }

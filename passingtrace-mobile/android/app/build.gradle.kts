@@ -1,7 +1,14 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+}
+
+val localProperties = Properties().apply {
+    val file = rootProject.file("local.properties")
+    if (file.exists()) file.inputStream().use { load(it) }
 }
 
 android {
@@ -24,6 +31,7 @@ android {
         // Authorization callbacks are handled by app_links in MainActivity.
         // AppAuth is only used for token requests, so its receiver uses an unused scheme.
         manifestPlaceholders["appAuthRedirectScheme"] = "com.passingtrace.mobile.appauth-unused"
+        manifestPlaceholders["amapApiKey"] = localProperties.getProperty("AMAP_ANDROID_KEY", "")
         // Uses the version code from pubspec.yaml. When using split APKs, 1000 * ABI_VERSION
         // is added automatically by Flutter. (https://developer.android.com/studio/build/configure-apk-splits#configure-APK-versions)
         // You can force using the value of versionCode by specifying the `-P force-version-code-ignoring-abi=true`
@@ -39,6 +47,10 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
+}
+
+dependencies {
+    implementation("com.amap.api:3dmap-location-search:11.2.100_loc11.2.100_sea9.8.1")
 }
 
 kotlin {

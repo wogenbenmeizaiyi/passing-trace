@@ -21,11 +21,15 @@ public sealed class PersonalRecordTools(
     private readonly List<RecordEvidence> _recordEvidence = [];
     private readonly List<MemoryEvidence> _memoryEvidence = [];
     private string? _aggregateEvidence;
+    private readonly List<PlaceEvidence> _placeEvidence = [];
+    private readonly HashSet<long> _retrievedLocationIds = [];
+    private object? _navigationTarget;
 
     public EvidenceBundle Snapshot => new(
         _recordEvidence.GroupBy(x => x.EventId).Select(x => x.First()).ToArray(),
         _memoryEvidence.GroupBy(x => x.MemoryId).Select(x => x.First()).ToArray(),
-        _aggregateEvidence);
+        _aggregateEvidence, Places: _placeEvidence.GroupBy(x => x.LocationId).Select(x => x.First()).ToArray(),
+        NavigationTarget: _navigationTarget);
 
     [Description("搜索当前登录用户自己的记录。支持关键词、时间、记录类型、状态、语义类别和地点；返回已排序的证据，不接受 userId。")]
     public async Task<EvidenceBundle> SearchMyRecordsAsync(
@@ -34,8 +38,13 @@ public sealed class PersonalRecordTools(
         [Description("ISO-8601 结束时间，可空")] string? to = null,
         [Description("Trace 或 Plan，可空")] string? kind = null,
         [Description("Completed、Planned、Cancelled 等状态，可空")] string? status = null,
-        [Description("语义类别，可空")] string? category = null,
+        [Description("主分类 taxonomy key，可空")] string? category = null,
+        [Description("行为标签 taxonomy key，可空")] string? tag = null,
         [Description("地点名称，可空")] string? location = null,
+        [Description("行政区 adCode，可空")] string? adCode = null,
+        [Description("中心纬度，可空")] decimal? centerLatitude = null,
+        [Description("中心经度，可空")] decimal? centerLongitude = null,
+        [Description("半径米数，可空")] int? radiusMeters = null,
         [Description("最多返回 1-20 条")] int limit = 10,
         CancellationToken cancellationToken = default)
     {
@@ -63,8 +72,29 @@ public sealed class PersonalRecordTools(
         }
         if (!string.IsNullOrWhiteSpace(category))
         {
-            indexes = indexes.Where(x => x.SemanticRunId != null && db.SemanticMentions.Any(m =>
-                m.UserId == userId && m.SemanticRunId == x.SemanticRunId && m.Category == category));
+            var key = category.ToLowerInvariant();
+            indexes = indexes.Where(x => db.EventLabelIndexes.Any(m => m.UserId == userId && m.EventId == x.EventId &&
+                m.IsCurrent && m.Type == EventLabelType.PrimaryCategory && m.TaxonomyKey == key));
+        }
+        if (!string.IsNullOrWhiteSpace(tag))
+        {
+            var key = tag.ToLowerInvariant();
+            indexes = indexes.Where(x => db.EventLabelIndexes.Any(m => m.UserId == userId && m.EventId == x.EventId &&
+                m.IsCurrent && m.Type == EventLabelType.BehaviorTag && m.TaxonomyKey == key));
+        }
+        if (!string.IsNullOrWhiteSpace(adCode))
+            indexes = indexes.Where(x => db.EventLocations.Any(l => l.UserId == userId && l.EventId == x.EventId &&
+                l.SourceRevision == x.SourceRevision && l.AdCode == adCode));
+        if (centerLatitude.HasValue && centerLongitude.HasValue)
+        {
+            var radius = Math.Clamp(radiusMeters ?? 1000, 100, 100000);
+            var latitudeDelta = (decimal)radius / 111_320m;
+            var longitudeDelta = latitudeDelta / (decimal)Math.Max(0.1, Math.Cos((double)centerLatitude.Value * Math.PI / 180));
+            var minLat = centerLatitude.Value - latitudeDelta; var maxLat = centerLatitude.Value + latitudeDelta;
+            var minLon = centerLongitude.Value - longitudeDelta; var maxLon = centerLongitude.Value + longitudeDelta;
+            indexes = indexes.Where(x => db.EventLocations.Any(l => l.UserId == userId && l.EventId == x.EventId &&
+                l.SourceRevision == x.SourceRevision && l.Latitude >= minLat && l.Latitude <= maxLat &&
+                l.Longitude >= minLon && l.Longitude <= maxLon));
         }
         if (!string.IsNullOrWhiteSpace(location))
         {
@@ -118,6 +148,10 @@ public sealed class PersonalRecordTools(
             where ids.Contains(index.EventId) && index.UserId == userId && evt.UserId == userId &&
                   index.IsCurrent && evt.DeletedAt == null
             select new { index, evt }).ToListAsync(cancellationToken);
+        var labelRows = await db.EventLabelIndexes.AsNoTracking().Where(x => x.UserId == userId && x.IsCurrent && ids.Contains(x.EventId))
+            .ToListAsync(cancellationToken);
+        var locationRows = await db.EventLocations.AsNoTracking().Where(x => x.UserId == userId && ids.Contains(x.EventId))
+            .ToListAsync(cancellationToken);
         var records = ids.Select(id => rows.Single(x => x.index.EventId == id))
             .Select(x => new RecordEvidence(
                 x.evt.Id,
@@ -127,7 +161,9 @@ public sealed class PersonalRecordTools(
                 string.IsNullOrWhiteSpace(x.index.AiSummary) ? null : x.index.AiSummary,
                 x.evt.HappenedAt,
                 x.evt.CreatedAt,
-                scores[x.evt.Id]))
+                scores[x.evt.Id],
+                labelRows.Where(l => l.EventId == x.evt.Id).Select(l => l.DisplayName).ToArray(),
+                locationRows.FirstOrDefault(l => l.EventId == x.evt.Id && l.SourceRevision == x.index.SourceRevision)?.Name))
             .ToArray();
         foreach (var record in records)
         {
@@ -143,12 +179,26 @@ public sealed class PersonalRecordTools(
         string? from = null,
         string? to = null,
         string? currency = null,
+        string? category = null,
+        string? tag = null,
         CancellationToken cancellationToken = default)
     {
         var userId = currentUser.UserId;
         var events = db.Events.AsNoTracking().Where(x => x.UserId == userId && x.DeletedAt == null);
         if (DateTimeOffset.TryParse(from, out var fromValue)) events = events.Where(x => (x.HappenedAt ?? x.CreatedAt) >= fromValue.ToUniversalTime());
         if (DateTimeOffset.TryParse(to, out var toValue)) events = events.Where(x => (x.HappenedAt ?? x.CreatedAt) <= toValue.ToUniversalTime());
+        if (!string.IsNullOrWhiteSpace(category))
+        {
+            var key = category.ToLowerInvariant();
+            events = events.Where(e => db.EventLabelIndexes.Any(x => x.UserId == userId && x.EventId == e.Id && x.IsCurrent &&
+                x.Type == EventLabelType.PrimaryCategory && x.TaxonomyKey == key));
+        }
+        if (!string.IsNullOrWhiteSpace(tag))
+        {
+            var key = tag.ToLowerInvariant();
+            events = events.Where(e => db.EventLabelIndexes.Any(x => x.UserId == userId && x.EventId == e.Id && x.IsCurrent &&
+                x.Type == EventLabelType.BehaviorTag && x.TaxonomyKey == key));
+        }
 
         object result = metric.ToLowerInvariant() switch
         {
@@ -225,6 +275,45 @@ public sealed class PersonalRecordTools(
         _memoryEvidence.AddRange(ordered);
         foreach (var eventId in ordered.SelectMany(x => x.EventIds)) _retrievedEventIds.Add(eventId);
         return ordered;
+    }
+
+    [Description("搜索当前用户已确认的历史地点，不接受 userId。")]
+    public async Task<IReadOnlyList<PlaceEvidence>> SearchMyPlacesAsync(string query, int limit = 10,
+        CancellationToken cancellationToken = default)
+    {
+        var userId = currentUser.UserId;
+        limit = Math.Clamp(limit, 1, 20);
+        var places = await (from location in db.EventLocations.AsNoTracking()
+                            join evt in db.Events.AsNoTracking() on location.EventId equals evt.Id
+                            where location.UserId == userId && evt.UserId == userId && evt.DeletedAt == null &&
+                                  location.UserConfirmed && location.SourceRevision == evt.CurrentSourceRevision &&
+                                  (query == "" || EF.Functions.TrigramsSimilarity(location.Name + " " + location.Address, query) > 0.1)
+                            orderby evt.HappenedAt ?? evt.CreatedAt descending
+                            select new PlaceEvidence(location.Id, evt.Id, evt.Title ?? "无标题", location.Name, location.Address,
+                                location.AdCode, evt.HappenedAt, 1)).Take(limit).ToListAsync(cancellationToken);
+        foreach (var place in places) { _retrievedLocationIds.Add(place.LocationId); _retrievedEventIds.Add(place.EventId); }
+        _placeEvidence.AddRange(places);
+        return places;
+    }
+
+    [Description("读取本轮已经检索到的历史地点证据。")]
+    public Task<IReadOnlyList<PlaceEvidence>> GetMyPlaceEvidenceAsync(IReadOnlyList<long> locationIds,
+        CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<PlaceEvidence>>(
+            _placeEvidence.Where(x => locationIds.Contains(x.LocationId) && _retrievedLocationIds.Contains(x.LocationId)).ToArray());
+
+    [Description("为本轮已检索且有可信坐标的地点生成结构化导航目标。")]
+    public async Task<object?> GetNavigationTargetAsync(long locationId, CancellationToken cancellationToken = default)
+    {
+        if (!_retrievedLocationIds.Contains(locationId)) return null;
+        var userId = currentUser.UserId;
+        _navigationTarget = await (from location in db.EventLocations.AsNoTracking()
+                                   join evt in db.Events.AsNoTracking() on location.EventId equals evt.Id
+                                   where location.Id == locationId && location.UserId == userId && evt.UserId == userId && evt.DeletedAt == null &&
+                                         location.SourceRevision == evt.CurrentSourceRevision && location.UserConfirmed && location.Latitude != null &&
+                                         location.Longitude != null && location.CoordinateSystem == "GCJ02"
+                                   select new { type = "navigation", eventId = evt.Id, locationId = location.Id, label = $"导航到{location.Name}" })
+            .FirstOrDefaultAsync(cancellationToken);
+        return _navigationTarget;
     }
 
     private async Task<object> AggregateExpensesAsync(IQueryable<Event> events, long userId, string? currency, CancellationToken cancellationToken)

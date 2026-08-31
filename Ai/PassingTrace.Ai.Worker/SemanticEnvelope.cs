@@ -5,7 +5,16 @@ public sealed record SemanticEnvelope(
     IReadOnlyList<ImageDescription> Images,
     IReadOnlyList<SemanticMentionData> Mentions,
     IReadOnlyList<ExpenseFactData> Expenses,
-    IReadOnlyList<MemoryCandidate> Memories);
+    IReadOnlyList<MemoryCandidate> Memories,
+    SemanticLabelData? PrimaryCategory = null,
+    IReadOnlyList<SemanticLabelData>? BehaviorTags = null);
+
+public sealed record SemanticLabelData(
+    string TaxonomyKey,
+    decimal Confidence,
+    int? TextStart,
+    int? TextLength,
+    Guid? MediaId);
 
 public sealed record ImageDescription(Guid MediaId, string Description);
 

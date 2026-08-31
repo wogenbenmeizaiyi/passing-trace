@@ -8,6 +8,9 @@
 
 本文描述已经落地的多媒体记录、异步语义分析、用户长期记忆与 AI 问答能力。原始记录始终是事实源，AI 结果是可重算、可追溯的派生数据。
 
+> 计划中的高德定位、历史地点 AI 检索和导航操作见
+> `PassingTrace_高德定位与历史地点导航技术方案_v0.1.md`。该方案当前仅为技术决策稿，尚未表示接口已经实现。
+
 ## 1. 运行结构
 
 ```text
@@ -86,6 +89,8 @@ Event 的标题、正文、附件至少存在一种，因此允许纯图片、�
 - 事实层：`Event`、`SourceRevision`、`MediaAsset` 及修订附件快照。AI 不修改此层。
 - 分析层：每次处理产生新的 `EventSemanticRun`；可检索 mention 和金额分别落入 `SemanticMention`、`ExpenseFact`。
 - 搜索层：当前有效修订写入 `EventSearchIndex`，包含检索文本、PostgreSQL 全文/`pg_trgm` 索引及 1024 维向量。
+- 分类层：用户确认内容写入 `SourceRevisionLabel`，AI 分类写入 `SemanticEnvelope v2`，当前合并结果投影到 `EventLabelIndex`。人工主分类优先，AI 行为标签只在置信度不低于 0.70 时补充。
+- 地点层：用户确认地点写入修订级 `EventLocation`；只有当前修订、GCJ02 且带坐标的地点可以生成导航目标。AI 从文字或图片推断的地点不能直接导航。
 - 记忆层：`UserMemory` 必须关联 `UserMemoryEvidence`。用户确认或纠正优先；删除会写成 rejected，原 Source 未变化时不会自动重建。
 - 对话层：原始 `AiMessage` 保留 30 天，`ConversationSummary` 长期保留。用户可以删除单个会话、单条记忆或全部记忆。
 
@@ -100,7 +105,8 @@ Qwen API Key 未配置时，记录与媒体功能仍能工作；AI 分析任务�
 | 范围 | 接口 |
 |---|---|
 | 媒体 | `POST /api/v1/media/uploads`、`POST /api/v1/media/{id}/parts`、`POST /api/v1/media/{id}/confirm`、`GET /api/v1/media/{id}/access`、`DELETE /api/v1/media/{id}` |
-| Event | 原创建/修改请求增加 `mediaIds`；响应增加 `media`、`semanticStatus`、`semanticSummary` |
+| Event | 创建/修改增加 `mediaIds`、`classification`、`locations`；响应增加媒体、语义、人工/生效分类和当前地点 |
+| 分类与地点 | `GET /api/v1/event-taxonomy`、`POST /api/v1/places/search`、`GET /api/v1/events/{eventId}/locations/{locationId}/navigation-target` |
 | 语义 | `GET /api/v1/events/{id}/semantic`、`POST /api/v1/events/{id}/semantic/reparse` |
 | 对话 | `GET/POST /api/v1/ai/conversations`、`GET/DELETE /api/v1/ai/conversations/{id}` |
 | 问答 | `POST /api/v1/ai/conversations/{id}/messages`，SSE 事件为 `delta`、`evidence`、`done`、`error` |
@@ -129,3 +135,4 @@ Events 集成测试包含真实 Testcontainers 用例，会临时启动 `pgvecto
 - 本期不对外暴露 MCP Server。Agent 在同一进程调用只读 Typed Tools；以后可以直接把这些应用服务包装成只读 MCP 工具。
 - Agent 不拥有修改或删除 Event 的工具，也不能跨用户搜索。
 - 密钥、原文、图片、Token 和预签名 URL 不应进入日志或 Trace。
+- Android 高德 Key 写入未跟踪的 `passingtrace-mobile/android/local.properties`：`AMAP_ANDROID_KEY=...`；高德 Web 服务 Key 通过 AppHost User Secrets 的 `Parameters:amap-web-service-key` 提供。
