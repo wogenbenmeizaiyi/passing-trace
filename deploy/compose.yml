@@ -64,6 +64,7 @@ services:
       OpenIddict__Clients__2__RedirectUris__0: https://${WEB_DOMAIN}/auth/callback
       OpenIddict__Clients__2__PostLogoutRedirectUris__0: https://${WEB_DOMAIN}/auth/logout-callback
       MobileRegistration__BootstrapCode: ${REGISTRATION_BOOTSTRAP_CODE}
+      MobileRegistration__MaxUsers: ${IDENTITY_MAX_USERS:-2}
       QrLogin__PublicOrigin: https://${AUTH_DOMAIN}
     volumes:
       - identity-certificates:/certificates:ro
