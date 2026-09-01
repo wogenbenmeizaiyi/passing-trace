@@ -163,6 +163,34 @@ public sealed class EventServiceTimeZoneTests : IDisposable
     }
 
     [Fact]
+    public async Task CreateAccessAsync_AllowsAttachmentLinkedToCurrentUsersEvent()
+    {
+        var foreign = AddReadyMedia(40, "imported-photo.png", MediaKind.Image);
+        var now = DateTimeOffset.UtcNow;
+        var evt = Event.Create(41, EventKind.Trace, "导入记录", null, now, null, "UTC", "imported-event", now);
+        evt.MediaAssets.Add(new EventMediaAsset
+        {
+            Event = evt,
+            MediaAsset = foreign,
+            MediaAssetId = foreign.Id,
+            SortOrder = 0,
+            CreatedAt = now,
+        });
+        _db.Events.Add(evt);
+        await _db.SaveChangesAsync();
+        var media = new MediaService(
+            _db,
+            new MemoryObjectStorage([0x89, 0x50, 0x4E, 0x47]),
+            new AnalysisOutbox(_db),
+            TimeProvider.System);
+
+        var access = await media.CreateAccessAsync(41, foreign.Id, CancellationToken.None);
+
+        Assert.True(access.Inline);
+        Assert.Equal("https://objects.test/imported-photo.png", access.Url.ToString());
+    }
+
+    [Fact]
     public async Task ConfirmAsync_RejectsImageWhoseDeclaredMimeDoesNotMatchMagicBytes()
     {
         var bytes = new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 1, 2, 3 };
@@ -412,7 +440,8 @@ public sealed class EventServiceTimeZoneTests : IDisposable
         public Task<Stream> OpenReadAsync(string objectKey, CancellationToken cancellationToken) =>
             Task.FromResult<Stream>(new MemoryStream(content, writable: false));
         public Task PutAsync(string objectKey, Stream stream, string contentType, CancellationToken cancellationToken) => throw Unused();
-        public Task<Uri> CreateDownloadUrlAsync(string objectKey, string fileName, string contentType, bool inline, DateTimeOffset expiresAt, CancellationToken cancellationToken) => throw Unused();
+        public Task<Uri> CreateDownloadUrlAsync(string objectKey, string fileName, string contentType, bool inline, DateTimeOffset expiresAt, CancellationToken cancellationToken) =>
+            Task.FromResult(new Uri($"https://objects.test/{fileName}"));
         public Task DeleteAsync(string objectKey, CancellationToken cancellationToken)
         {
             Deleted = true;

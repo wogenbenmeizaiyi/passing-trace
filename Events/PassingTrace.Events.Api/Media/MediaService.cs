@@ -207,7 +207,15 @@ public sealed class MediaService(
 
     public async Task<MediaAccessResponse> CreateAccessAsync(long userId, Guid mediaId, CancellationToken cancellationToken)
     {
-        var asset = await FindOwnedAsync(userId, mediaId, cancellationToken);
+        // 正常数据以 MediaAsset.UserId 判定归属。早期导入数据中曾出现附件所有者
+        // 未同步、但附件已经合法关联到当前用户 Event 的情况；Event 详情能看到附件，
+        // access 却返回 404。允许当前用户通过自己未删除的 Event 关联读取该附件，
+        // 仍然不会向未关联用户开放对象。
+        var asset = await dbContext.MediaAssets.FirstOrDefaultAsync(
+            x => x.Id == mediaId && x.DeletedAt == null &&
+                 (x.UserId == userId || x.EventLinks.Any(link =>
+                     link.Event.UserId == userId && link.Event.DeletedAt == null)),
+            cancellationToken) ?? throw new MediaAssetNotFoundException(mediaId);
         if (asset.Status is not (MediaAssetStatus.Uploaded or MediaAssetStatus.Processing or MediaAssetStatus.Ready))
         {
             throw new MediaAssetNotFoundException(mediaId);

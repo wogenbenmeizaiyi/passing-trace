@@ -115,12 +115,10 @@ class _AssistantViewState extends State<AssistantView> {
           });
         } else if (chunk.type == 'evidence') {
           final raw = chunk.data as Map<String, dynamic>;
-          final records = raw['records'] as List<dynamic>? ?? const [];
+          final records = AiEvidenceRecord.fromEnvelope(raw);
           setState(
             () => answer.eventTitles = {
-              for (final raw in records.whereType<Map<String, dynamic>>())
-                (raw['eventId'] as num).toInt():
-                    (raw['title'] as String?)?.trim() ?? '',
+              for (final record in records) record.eventId: record.displayTitle,
             },
           );
         } else if (chunk.type == 'error') {
@@ -1094,7 +1092,7 @@ class _ChatBubble {
     List<AiEvidenceRecord>? evidenceRecords,
   }) : eventTitles = {
          for (final record in evidenceRecords ?? const <AiEvidenceRecord>[])
-           record.eventId: record.title ?? '',
+           record.eventId: record.displayTitle,
        };
   final String role;
   String text;
@@ -1183,7 +1181,7 @@ class AssistantMessageContent extends StatelessWidget {
     (match) {
       final id = int.parse(match.group(1)!);
       final title = titles[id]?.trim();
-      final label = title == null || title.isEmpty ? '记录 #$id' : title;
+      final label = title == null || title.isEmpty ? '查看记录' : title;
       final escaped = label
           .replaceAll(r'\', r'\\')
           .replaceAll('[', r'\[')

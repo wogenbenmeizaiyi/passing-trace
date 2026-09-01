@@ -1,0 +1,1044 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="light dark" />
+  <title>星期八 · 故事线交互样板</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --canvas: #e9ede8;
+      --canvas-deep: #dce3dd;
+      --surface: #ffffff;
+      --surface-raised: #ffffff;
+      --surface-soft: #f4f7f3;
+      --surface-tint: #e5f0eb;
+      --ink: #1c2520;
+      --ink-secondary: #526159;
+      --ink-tertiary: #68756d;
+      --line: #d9e1db;
+      --line-strong: #b8c5bd;
+      --primary: #2f6b57;
+      --primary-strong: #245443;
+      --on-primary: #ffffff;
+      --primary-soft: #dcebe4;
+      --accent: #c96c47;
+      --accent-soft: #f6e3da;
+      --danger: #a3423d;
+      --warning: #8f651f;
+      --focus-color: rgba(47, 107, 87, .28);
+      --shadow-1: 0 1px 2px rgba(25, 42, 33, .05), 0 8px 22px rgba(25, 42, 33, .07);
+      --shadow-2: 0 20px 52px rgba(25, 42, 33, .16);
+      --radius-sm: 8px;
+      --radius-md: 12px;
+      --radius-lg: 18px;
+      --space-1: 4px;
+      --space-2: 8px;
+      --space-3: 12px;
+      --space-4: 16px;
+      --space-5: 20px;
+      --space-6: 24px;
+      --space-8: 32px;
+      --header-height: 72px;
+      --motion-fast: 140ms;
+      --motion-base: 220ms;
+      --ease-out: cubic-bezier(.2, .8, .2, 1);
+      font-family: Inter, "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+      font-synthesis: none;
+    }
+
+    html[data-theme="dark"] {
+      color-scheme: dark;
+      --canvas: #101713;
+      --canvas-deep: #0b100d;
+      --surface: #18211c;
+      --surface-raised: #202b25;
+      --surface-soft: #1d2822;
+      --surface-tint: #243a31;
+      --ink: #f1f5f2;
+      --ink-secondary: #bcc8c0;
+      --ink-tertiary: #92a097;
+      --line: #334139;
+      --line-strong: #52625a;
+      --primary: #75b89f;
+      --primary-strong: #8dcbb4;
+      --on-primary: #102019;
+      --primary-soft: #29483b;
+      --accent: #e29a79;
+      --accent-soft: #4c3027;
+      --danger: #f18a82;
+      --warning: #e5b05d;
+      --focus-color: rgba(117, 184, 159, .34);
+      --shadow-1: 0 1px 2px rgba(0, 0, 0, .2), 0 8px 22px rgba(0, 0, 0, .18);
+      --shadow-2: 0 20px 52px rgba(0, 0, 0, .4);
+    }
+
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; }
+    body {
+      min-width: 320px;
+      overflow: hidden;
+      color: var(--ink);
+      background: var(--canvas-deep);
+      font-size: 15px;
+      line-height: 1.5;
+    }
+    button, input { font: inherit; }
+    button { color: inherit; }
+    button, [role="button"] { touch-action: manipulation; }
+    button:focus-visible, input:focus-visible, [tabindex]:focus-visible {
+      outline: none;
+      box-shadow: 0 0 0 3px var(--focus-color);
+    }
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+    .icon {
+      width: 20px;
+      height: 20px;
+      flex: 0 0 20px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      pointer-events: none;
+    }
+
+    .app-shell {
+      height: 100dvh;
+      display: grid;
+      grid-template-rows: var(--header-height) minmax(0, 1fr);
+      background: var(--canvas);
+    }
+    .topbar {
+      position: relative;
+      z-index: 40;
+      display: grid;
+      grid-template-columns: minmax(220px, 1fr) auto minmax(220px, 1fr);
+      align-items: center;
+      gap: var(--space-4);
+      padding: 0 var(--space-5);
+      border-bottom: 1px solid var(--line);
+      background: color-mix(in srgb, var(--surface) 94%, transparent);
+      box-shadow: 0 1px 0 rgba(25, 42, 33, .02);
+    }
+    .brand-block, .top-actions, .title-block { min-width: 0; display: flex; align-items: center; }
+    .brand-block { gap: var(--space-3); }
+    .brand-mark {
+      width: 38px;
+      height: 38px;
+      display: grid;
+      place-items: center;
+      color: var(--on-primary);
+      background: var(--primary-strong);
+      border-radius: 10px;
+    }
+    .brand-mark .icon { width: 23px; height: 23px; }
+    .brand-copy { display: grid; line-height: 1.2; }
+    .brand-copy strong { font-size: 15px; letter-spacing: .04em; }
+    .brand-copy span { margin-top: 3px; color: var(--ink-tertiary); font-size: 12px; }
+    .title-block {
+      justify-content: center;
+      gap: var(--space-3);
+      text-align: center;
+    }
+    .title-copy { min-width: 0; }
+    .title-copy h1 {
+      margin: 0;
+      overflow: hidden;
+      font-family: "Songti SC", "STSong", "SimSun", serif;
+      font-size: 20px;
+      line-height: 1.25;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .title-copy p { margin: 3px 0 0; color: var(--ink-tertiary); font-size: 12px; }
+    .status-label {
+      padding: 3px 7px;
+      color: var(--warning);
+      background: color-mix(in srgb, var(--warning) 11%, var(--surface));
+      border: 1px solid color-mix(in srgb, var(--warning) 28%, var(--line));
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 650;
+      white-space: nowrap;
+    }
+    .top-actions { justify-content: flex-end; gap: var(--space-2); }
+    .button {
+      min-height: 44px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 0 15px;
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius-sm);
+      background: var(--surface);
+      cursor: pointer;
+      font-weight: 650;
+      transition: background var(--motion-fast), border-color var(--motion-fast), color var(--motion-fast);
+    }
+    .button:hover { border-color: var(--primary); background: var(--surface-tint); }
+    .button:active { background: var(--primary-soft); }
+    .button.primary { color: var(--on-primary); border-color: var(--primary-strong); background: var(--primary-strong); }
+    .button.primary:hover { background: var(--primary); }
+    .icon-button {
+      width: 44px;
+      height: 44px;
+      display: inline-grid;
+      place-items: center;
+      padding: 0;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+      background: var(--surface);
+      cursor: pointer;
+      transition: background var(--motion-fast), border-color var(--motion-fast), color var(--motion-fast);
+    }
+    .icon-button:hover { color: var(--primary-strong); border-color: var(--primary); background: var(--surface-tint); }
+
+    .workspace {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 244px minmax(440px, 1fr) 328px;
+      overflow: hidden;
+    }
+    .left-panel, .inspector {
+      min-width: 0;
+      overflow-y: auto;
+      background: var(--surface);
+      scrollbar-width: thin;
+      scrollbar-color: var(--line-strong) transparent;
+    }
+    .left-panel { border-right: 1px solid var(--line); }
+    .inspector { border-left: 1px solid var(--line); }
+    .panel-section { padding: var(--space-5); border-bottom: 1px solid var(--line); }
+    .panel-kicker {
+      margin: 0 0 6px;
+      color: var(--primary);
+      font-size: 12px;
+      font-weight: 750;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+    .panel-heading-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+    .panel-heading-row h2, .inspector h2 { margin: 0; font-size: 16px; }
+    .count { color: var(--ink-tertiary); font-variant-numeric: tabular-nums; font-size: 12px; }
+    .helper { margin: 7px 0 0; color: var(--ink-tertiary); font-size: 12px; line-height: 1.6; }
+    .search-field { position: relative; margin-top: var(--space-4); }
+    .search-field .icon {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      width: 18px;
+      height: 18px;
+      color: var(--ink-tertiary);
+      transform: translateY(-50%);
+    }
+    .search-field input {
+      width: 100%;
+      min-height: 44px;
+      padding: 0 12px 0 40px;
+      color: var(--ink);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+      background: var(--surface-soft);
+    }
+    .search-field input::placeholder { color: var(--ink-tertiary); }
+    .record-bank { display: grid; gap: var(--space-2); margin-top: var(--space-3); }
+    .bank-card {
+      width: 100%;
+      min-height: 76px;
+      display: grid;
+      grid-template-columns: 36px minmax(0, 1fr) 24px;
+      align-items: center;
+      gap: var(--space-3);
+      padding: 11px 10px;
+      text-align: left;
+      border: 1px solid transparent;
+      border-radius: var(--radius-sm);
+      background: transparent;
+      cursor: pointer;
+      transition: background var(--motion-fast), border-color var(--motion-fast);
+    }
+    .bank-card:hover { border-color: var(--line); background: var(--surface-soft); }
+    .bank-card:active { background: var(--primary-soft); }
+    .bank-icon, .node-icon, .detail-icon {
+      display: grid;
+      place-items: center;
+      color: var(--primary-strong);
+      background: var(--primary-soft);
+      border-radius: 8px;
+    }
+    .bank-icon { width: 36px; height: 36px; }
+    .bank-icon .icon { width: 18px; height: 18px; }
+    .bank-copy { min-width: 0; }
+    .bank-copy strong { display: block; overflow: hidden; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+    .bank-copy span { display: block; margin-top: 3px; color: var(--ink-tertiary); font-size: 11px; }
+    .bank-card > .icon { width: 16px; height: 16px; color: var(--ink-tertiary); }
+    .legend { display: grid; gap: 11px; margin-top: var(--space-3); }
+    .legend-item { display: flex; align-items: center; gap: 10px; color: var(--ink-secondary); font-size: 12px; }
+    .legend-swatch { width: 13px; height: 13px; border: 2px solid var(--line-strong); border-radius: 4px; background: var(--surface); }
+    .legend-swatch.start { border-color: var(--primary-strong); background: var(--primary-strong); }
+    .legend-swatch.record { border-color: var(--primary); background: var(--primary-soft); }
+    .legend-swatch.summary { border-color: var(--accent); background: var(--accent-soft); }
+
+    .flow-stage { position: relative; min-width: 0; min-height: 0; overflow: hidden; background: var(--canvas); }
+    .canvas-toolbar {
+      position: absolute;
+      z-index: 24;
+      top: var(--space-4);
+      left: var(--space-4);
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 6px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: color-mix(in srgb, var(--surface) 94%, transparent);
+      box-shadow: var(--shadow-1);
+    }
+    .canvas-toolbar .icon-button { width: 38px; height: 38px; border: 0; background: transparent; }
+    .toolbar-divider { width: 1px; height: 24px; margin: 0 2px; background: var(--line); }
+    .zoom-label { min-width: 48px; color: var(--ink-secondary); text-align: center; font-size: 12px; font-variant-numeric: tabular-nums; }
+    .canvas-hint {
+      position: absolute;
+      z-index: 20;
+      left: 50%;
+      bottom: 18px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 11px;
+      color: var(--ink-secondary);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--surface) 92%, transparent);
+      box-shadow: var(--shadow-1);
+      font-size: 12px;
+      transform: translateX(-50%);
+      pointer-events: none;
+    }
+    .canvas-hint .icon { width: 16px; height: 16px; }
+    .flow-viewport {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      cursor: grab;
+      background-color: var(--canvas);
+      background-image: radial-gradient(circle, color-mix(in srgb, var(--ink-tertiary) 28%, transparent) 1px, transparent 1.2px);
+      background-size: 22px 22px;
+      background-position: 1px 1px;
+    }
+    .flow-viewport.is-panning { cursor: grabbing; }
+    .flow-world {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 1280px;
+      height: 760px;
+      transform-origin: 0 0;
+      will-change: transform;
+    }
+    .chapter-region {
+      position: absolute;
+      z-index: 0;
+      top: 110px;
+      height: 520px;
+      padding: 15px 18px;
+      color: var(--ink-tertiary);
+      border: 1px dashed color-mix(in srgb, var(--line-strong) 80%, transparent);
+      border-radius: var(--radius-lg);
+      background: color-mix(in srgb, var(--surface-soft) 50%, transparent);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      pointer-events: none;
+    }
+    .chapter-region.one { left: 36px; width: 374px; }
+    .chapter-region.two { left: 430px; width: 466px; }
+    .chapter-region.three { left: 916px; width: 326px; }
+    .edge-layer { position: absolute; z-index: 2; inset: 0; overflow: visible; pointer-events: none; }
+    .edge-path { fill: none; stroke: color-mix(in srgb, var(--primary) 70%, var(--line-strong)); stroke-width: 2; }
+    .edge-path.branch { stroke-dasharray: 6 6; stroke: color-mix(in srgb, var(--accent) 55%, var(--line-strong)); }
+    .edge-label rect { fill: var(--surface); stroke: var(--line); rx: 5; }
+    .edge-label text { fill: var(--ink-tertiary); font-size: 11px; text-anchor: middle; dominant-baseline: middle; }
+
+    .flow-node {
+      position: absolute;
+      z-index: 6;
+      width: 216px;
+      min-height: 116px;
+      display: block;
+      padding: 14px;
+      color: var(--ink);
+      text-align: left;
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius-md);
+      background: var(--surface-raised);
+      box-shadow: var(--shadow-1);
+      cursor: grab;
+      user-select: none;
+      touch-action: none;
+      transition: border-color var(--motion-fast), box-shadow var(--motion-fast), background var(--motion-fast);
+    }
+    .flow-node:hover { border-color: var(--primary); }
+    .flow-node:active { cursor: grabbing; }
+    .flow-node[aria-pressed="true"] { border-color: var(--primary-strong); box-shadow: 0 0 0 3px var(--focus-color), var(--shadow-1); }
+    .flow-node.type-start { color: var(--on-primary); border-color: var(--primary-strong); background: var(--primary-strong); }
+    .flow-node.type-start .node-meta, .flow-node.type-start .node-kind { color: color-mix(in srgb, var(--on-primary) 76%, transparent); }
+    .flow-node.type-start .node-icon { color: var(--on-primary); background: color-mix(in srgb, var(--on-primary) 15%, transparent); }
+    .flow-node.type-summary { border-color: color-mix(in srgb, var(--accent) 68%, var(--line)); background: var(--accent-soft); }
+    .flow-node.type-summary .node-icon { color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--surface)); }
+    .node-top { display: flex; align-items: center; gap: 10px; }
+    .node-icon { width: 32px; height: 32px; flex: 0 0 32px; }
+    .node-icon .icon { width: 17px; height: 17px; }
+    .node-heading { min-width: 0; flex: 1; }
+    .node-kind { display: block; color: var(--primary); font-size: 10px; font-weight: 780; letter-spacing: .09em; }
+    .node-title { display: block; margin-top: 2px; overflow: hidden; font-size: 14px; font-weight: 720; text-overflow: ellipsis; white-space: nowrap; }
+    .node-meta { display: flex; align-items: center; gap: 6px; margin-top: 12px; color: var(--ink-secondary); font-size: 11px; }
+    .node-meta .icon { width: 14px; height: 14px; }
+    .node-tags { display: flex; gap: 5px; margin-top: 10px; overflow: hidden; }
+    .node-tag {
+      padding: 2px 6px;
+      color: var(--ink-secondary);
+      border-radius: 5px;
+      background: var(--surface-soft);
+      font-size: 10px;
+      white-space: nowrap;
+    }
+    .type-start .node-tag { color: var(--on-primary); background: color-mix(in srgb, var(--on-primary) 13%, transparent); }
+    .type-summary .node-tag { background: color-mix(in srgb, var(--accent) 11%, var(--surface)); }
+    .node-handle {
+      position: absolute;
+      top: 50%;
+      width: 10px;
+      height: 10px;
+      border: 2px solid var(--surface);
+      border-radius: 50%;
+      background: var(--primary);
+      box-shadow: 0 0 0 1px var(--primary);
+      transform: translateY(-50%);
+      pointer-events: none;
+    }
+    .node-handle.input { left: -6px; }
+    .node-handle.output { right: -6px; }
+
+    .minimap {
+      position: absolute;
+      z-index: 22;
+      right: 16px;
+      bottom: 16px;
+      width: 148px;
+      height: 92px;
+      overflow: hidden;
+      border: 1px solid var(--line-strong);
+      border-radius: 9px;
+      background: color-mix(in srgb, var(--surface) 94%, transparent);
+      box-shadow: var(--shadow-1);
+    }
+    .minimap[hidden] { display: none; }
+    .mini-node { position: absolute; height: 8px; border: 1px solid var(--primary); border-radius: 2px; background: var(--primary-soft); }
+    .mini-node.start { background: var(--primary-strong); }
+    .mini-node.summary { border-color: var(--accent); background: var(--accent-soft); }
+    .mini-viewport { position: absolute; border: 1px solid var(--accent); background: color-mix(in srgb, var(--accent) 9%, transparent); pointer-events: none; }
+
+    .inspector-head { padding: var(--space-5); border-bottom: 1px solid var(--line); }
+    .inspector-title { display: flex; align-items: flex-start; gap: var(--space-3); margin-top: var(--space-3); }
+    .detail-icon { width: 42px; height: 42px; flex: 0 0 42px; }
+    .detail-icon .icon { width: 21px; height: 21px; }
+    .inspector-title-copy { min-width: 0; }
+    .inspector-title-copy h2 { overflow-wrap: anywhere; }
+    .inspector-title-copy p { margin: 4px 0 0; color: var(--ink-tertiary); font-size: 12px; }
+    .detail-list { display: grid; gap: 16px; margin: 0; }
+    .detail-row { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 12px; }
+    .detail-row dt { color: var(--ink-tertiary); font-size: 12px; }
+    .detail-row dd { margin: 0; color: var(--ink); font-size: 13px; overflow-wrap: anywhere; }
+    .detail-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+    .detail-tags span { padding: 3px 7px; color: var(--primary-strong); border: 1px solid color-mix(in srgb, var(--primary) 32%, var(--line)); border-radius: 6px; background: var(--primary-soft); font-size: 11px; }
+    .relation-card { margin-top: var(--space-4); padding: var(--space-3); border-left: 3px solid var(--accent); background: var(--accent-soft); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
+    .relation-card strong { display: block; font-size: 12px; }
+    .relation-card p { margin: 5px 0 0; color: var(--ink-secondary); font-size: 12px; }
+    .nudge-grid { width: 142px; display: grid; grid-template: repeat(3, 42px) / repeat(3, 42px); gap: 5px; margin-top: var(--space-3); }
+    .nudge-grid .icon-button { width: 42px; height: 42px; }
+    .nudge-up { grid-area: 1 / 2; }
+    .nudge-left { grid-area: 2 / 1; }
+    .nudge-center { grid-area: 2 / 2; display: grid; place-items: center; color: var(--ink-tertiary); font-size: 10px; }
+    .nudge-right { grid-area: 2 / 3; }
+    .nudge-down { grid-area: 3 / 2; }
+    .inspector-actions { display: grid; gap: 8px; padding: var(--space-5); }
+    .inspector-actions .button { width: 100%; }
+    .text-button-danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 28%, var(--line)); }
+    .text-button-danger:hover { color: var(--danger); border-color: var(--danger); background: color-mix(in srgb, var(--danger) 9%, var(--surface)); }
+    .mobile-panel-toggle { display: none; }
+
+    .toast {
+      position: fixed;
+      z-index: 100;
+      left: 50%;
+      bottom: 24px;
+      min-width: 220px;
+      max-width: calc(100vw - 32px);
+      padding: 12px 16px;
+      color: var(--on-primary);
+      border-radius: var(--radius-sm);
+      background: var(--primary-strong);
+      box-shadow: var(--shadow-2);
+      opacity: 0;
+      transform: translate(-50%, 14px);
+      transition: opacity var(--motion-base), transform var(--motion-base);
+      pointer-events: none;
+    }
+    .toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+    @media (max-width: 1100px) {
+      .workspace { grid-template-columns: 220px minmax(420px, 1fr) 300px; }
+      .brand-copy span, .title-copy p { display: none; }
+      .topbar { grid-template-columns: minmax(170px, 1fr) auto minmax(170px, 1fr); }
+    }
+    @media (max-width: 860px) {
+      .workspace { grid-template-columns: 210px minmax(0, 1fr); }
+      .inspector {
+        position: absolute;
+        z-index: 50;
+        top: var(--header-height);
+        right: 0;
+        bottom: 0;
+        width: min(340px, calc(100vw - 32px));
+        border-left: 1px solid var(--line);
+        box-shadow: var(--shadow-2);
+        transform: translateX(105%);
+        transition: transform var(--motion-base) var(--ease-out);
+      }
+      .inspector.open { transform: translateX(0); }
+      .mobile-panel-toggle { display: inline-grid; }
+      .preview-button { display: none; }
+    }
+    @media (max-width: 620px) {
+      :root { --header-height: 64px; }
+      .topbar { grid-template-columns: auto minmax(0, 1fr) auto; padding: 0 12px; }
+      .brand-copy, .title-copy p, .status-label, .button-label { display: none; }
+      .title-block { justify-content: center; }
+      .title-copy h1 { font-size: 18px; }
+      .top-actions .button { width: 44px; padding: 0; }
+      .workspace { display: block; }
+      .left-panel {
+        position: absolute;
+        z-index: 48;
+        top: var(--header-height);
+        left: 0;
+        bottom: 0;
+        width: min(286px, calc(100vw - 44px));
+        box-shadow: var(--shadow-2);
+        transform: translateX(-105%);
+        transition: transform var(--motion-base) var(--ease-out);
+      }
+      .left-panel.open { transform: translateX(0); }
+      .flow-stage { width: 100%; height: 100%; }
+      .canvas-toolbar { top: 12px; left: 12px; }
+      .canvas-toolbar .zoom-label, .canvas-toolbar .toolbar-divider:nth-of-type(2) { display: none; }
+      .minimap { width: 124px; height: 78px; }
+      .canvas-hint { display: none; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <svg aria-hidden="true" class="sr-only">
+    <symbol id="i-box" viewBox="0 0 24 24"><path d="M4 8.5 12 4l8 4.5v9L12 22l-8-4.5z"/><path d="m4 8.5 8 4.5 8-4.5M12 13v9"/><path d="m8.5 6 8 4.5"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20.6 15.4A9 9 0 0 1 8.6 3.4a9 9 0 1 0 12 12Z"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.5"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+    <symbol id="i-save" viewBox="0 0 24 24"><path d="M5 3h12l2 2v16H5z"/><path d="M8 3v6h8V3M8 21v-7h8v7"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m10 8 6 4-6 4z"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></symbol>
+    <symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14M14 7l5 5-5 5"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v5h5M9 13h6M9 17h5"/></symbol>
+    <symbol id="i-pin" viewBox="0 0 24 24"><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></symbol>
+    <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18"/></symbol>
+    <symbol id="i-route" viewBox="0 0 24 24"><circle cx="6" cy="18" r="2"/><circle cx="18" cy="6" r="2"/><path d="M8 18h3a3 3 0 0 0 3-3v-6a3 3 0 0 1 3-3"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24"><path d="m12 3 1.4 4.1L17.5 8.5l-4.1 1.4L12 14l-1.4-4.1-4.1-1.4 4.1-1.4zM19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></symbol>
+    <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+    <symbol id="i-expand" viewBox="0 0 24 24"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/></symbol>
+    <symbol id="i-map" viewBox="0 0 24 24"><path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3zM9 3v15M15 6v15"/></symbol>
+    <symbol id="i-hand" viewBox="0 0 24 24"><path d="M8 11V6a2 2 0 0 1 4 0v4-6a2 2 0 1 1 4 0v6-4a2 2 0 1 1 4 0v7c0 5-3 8-8 8h-1c-3 0-5-2-7-5l-2-3a2 2 0 0 1 3-2z"/></symbol>
+    <symbol id="i-up" viewBox="0 0 24 24"><path d="m6 15 6-6 6 6"/></symbol>
+    <symbol id="i-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="i-left" viewBox="0 0 24 24"><path d="m15 6-6 6 6 6"/></symbol>
+    <symbol id="i-right" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+    <symbol id="i-panel" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/></symbol>
+    <symbol id="i-link" viewBox="0 0 24 24"><path d="m9.5 14.5 5-5M7 17l-1 1a3.5 3.5 0 0 1-5-5l4-4a3.5 3.5 0 0 1 5 0M17 7l1-1a3.5 3.5 0 0 1 5 5l-4 4a3.5 3.5 0 0 1-5 0"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M7 7l1 14h8l1-14M10 11v6M14 11v6"/></symbol>
+  </svg>
+
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand-block">
+        <button class="icon-button mobile-panel-toggle" id="openLibrary" aria-label="打开记录素材栏"><svg class="icon"><use href="#i-menu"/></svg></button>
+        <div class="brand-mark" aria-hidden="true"><svg class="icon"><use href="#i-box"/></svg></div>
+        <div class="brand-copy"><strong>星期八</strong><span>故事线实验功能</span></div>
+      </div>
+
+      <div class="title-block">
+        <div class="title-copy">
+          <h1>杭州的周末</h1>
+          <p>由 6 条记录组成 · 上次编辑于今天 18:42</p>
+        </div>
+        <span class="status-label">草稿</span>
+      </div>
+
+      <div class="top-actions">
+        <button class="icon-button" id="themeToggle" aria-label="切换深浅主题"><svg class="icon"><use id="themeIcon" href="#i-moon"/></svg></button>
+        <button class="button preview-button" id="previewStory"><svg class="icon"><use href="#i-play"/></svg><span>预览故事</span></button>
+        <button class="button primary" id="saveStory"><svg class="icon"><use href="#i-save"/></svg><span class="button-label">保存</span></button>
+        <button class="icon-button mobile-panel-toggle" id="openInspector" aria-label="打开节点详情"><svg class="icon"><use href="#i-panel"/></svg></button>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <aside class="left-panel" id="libraryPanel" aria-label="记录素材">
+        <section class="panel-section">
+          <p class="panel-kicker">素材</p>
+          <div class="panel-heading-row"><h2>还未关联的记录</h2><span class="count" id="bankCount">3 条</span></div>
+          <p class="helper">点击一条记录，将它接到当前选中节点之后。</p>
+          <label class="search-field">
+            <span class="sr-only">搜索记录</span>
+            <svg class="icon"><use href="#i-search"/></svg>
+            <input id="recordSearch" type="search" placeholder="搜索标题、地点或标签" />
+          </label>
+          <div class="record-bank" id="recordBank">
+            <button class="bank-card" data-title="灵隐寺的清晨" data-date="8 月 4 日 · 08:20" data-place="灵隐寺" data-tags="旅行,拍照">
+              <span class="bank-icon"><svg class="icon"><use href="#i-file"/></svg></span>
+              <span class="bank-copy"><strong>灵隐寺的清晨</strong><span>8 月 4 日 · 2 张图片</span></span>
+              <svg class="icon"><use href="#i-plus"/></svg>
+            </button>
+            <button class="bank-card" data-title="回程高铁随记" data-date="8 月 4 日 · 17:45" data-place="杭州东站" data-tags="交通,随记">
+              <span class="bank-icon"><svg class="icon"><use href="#i-file"/></svg></span>
+              <span class="bank-copy"><strong>回程高铁随记</strong><span>8 月 4 日 · 杭州东站</span></span>
+              <svg class="icon"><use href="#i-plus"/></svg>
+            </button>
+            <button class="bank-card" data-title="旅行花费清单" data-date="8 月 4 日 · 20:10" data-place="杭州" data-tags="旅行,消费">
+              <span class="bank-icon"><svg class="icon"><use href="#i-file"/></svg></span>
+              <span class="bank-copy"><strong>旅行花费清单</strong><span>8 月 4 日 · 文档</span></span>
+              <svg class="icon"><use href="#i-plus"/></svg>
+            </button>
+          </div>
+        </section>
+
+        <section class="panel-section">
+          <p class="panel-kicker">图例</p>
+          <div class="legend">
+            <div class="legend-item"><span class="legend-swatch start"></span><span>事件起点</span></div>
+            <div class="legend-item"><span class="legend-swatch record"></span><span>已关联记录</span></div>
+            <div class="legend-item"><span class="legend-swatch summary"></span><span>回顾或阶段结论</span></div>
+          </div>
+        </section>
+
+        <section class="panel-section">
+          <p class="panel-kicker">结构建议</p>
+          <p class="helper">一条故事线只表达一个完整事件。允许分支，但尽量让主路径保持清楚；原记录仍是事实来源，故事线只保存关系和叙事顺序。</p>
+        </section>
+      </aside>
+
+      <section class="flow-stage" aria-label="故事线画布">
+        <div class="canvas-toolbar" role="toolbar" aria-label="画布控制">
+          <button class="icon-button" id="zoomOut" aria-label="缩小"><svg class="icon"><use href="#i-minus"/></svg></button>
+          <span class="zoom-label" id="zoomLabel">100%</span>
+          <button class="icon-button" id="zoomIn" aria-label="放大"><svg class="icon"><use href="#i-plus"/></svg></button>
+          <span class="toolbar-divider"></span>
+          <button class="icon-button" id="fitView" aria-label="适应画布"><svg class="icon"><use href="#i-expand"/></svg></button>
+          <button class="icon-button" id="toggleMinimap" aria-label="显示或隐藏缩略图" aria-pressed="true"><svg class="icon"><use href="#i-map"/></svg></button>
+          <span class="toolbar-divider"></span>
+          <button class="icon-button" id="quickAdd" aria-label="新增记录节点"><svg class="icon"><use href="#i-plus"/></svg></button>
+        </div>
+
+        <div class="flow-viewport" id="viewport">
+          <div class="flow-world" id="world">
+            <div class="chapter-region one">第一段 · 起意与抵达</div>
+            <div class="chapter-region two">第二段 · 城市漫游</div>
+            <div class="chapter-region three">第三段 · 相聚与回望</div>
+            <svg class="edge-layer" id="edgeLayer" viewBox="0 0 1280 760" aria-hidden="true">
+              <defs><marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="var(--primary)"/></marker></defs>
+            </svg>
+            <div id="nodeLayer"></div>
+          </div>
+        </div>
+
+        <div class="canvas-hint"><svg class="icon"><use href="#i-hand"/></svg><span>拖动节点调整位置 · 拖动画布平移 · 方向键微调</span></div>
+        <div class="minimap" id="minimap" aria-label="画布缩略图"><div class="mini-viewport" id="miniViewport"></div></div>
+      </section>
+
+      <aside class="inspector" id="inspectorPanel" aria-label="节点详情">
+        <div class="inspector-head">
+          <p class="panel-kicker">当前节点</p>
+          <div class="inspector-title">
+            <span class="detail-icon"><svg class="icon"><use id="detailIconUse" href="#i-file"/></svg></span>
+            <div class="inspector-title-copy"><h2 id="detailTitle">参观城市博物馆</h2><p id="detailKind">记录节点 · 当前主路径</p></div>
+          </div>
+        </div>
+
+        <section class="panel-section">
+          <dl class="detail-list">
+            <div class="detail-row"><dt>发生时间</dt><dd id="detailDate">8 月 3 日 · 14:20</dd></div>
+            <div class="detail-row"><dt>地点</dt><dd id="detailPlace">浙江省博物馆</dd></div>
+            <div class="detail-row"><dt>标签</dt><dd class="detail-tags" id="detailTags"><span>旅行</span><span>博物馆</span><span>拍照</span></dd></div>
+          </dl>
+          <div class="relation-card"><strong>与上一条记录的关系</strong><p id="detailRelation">沿西湖散步后，临时决定进馆看看。</p></div>
+        </section>
+
+        <section class="panel-section">
+          <p class="panel-kicker">位置微调</p>
+          <p class="helper">除了拖动，也可以使用方向键或下面的按钮移动节点。</p>
+          <div class="nudge-grid" aria-label="移动当前节点">
+            <button class="icon-button nudge-up" data-nudge="0,-12" aria-label="向上移动"><svg class="icon"><use href="#i-up"/></svg></button>
+            <button class="icon-button nudge-left" data-nudge="-12,0" aria-label="向左移动"><svg class="icon"><use href="#i-left"/></svg></button>
+            <span class="nudge-center">12px</span>
+            <button class="icon-button nudge-right" data-nudge="12,0" aria-label="向右移动"><svg class="icon"><use href="#i-right"/></svg></button>
+            <button class="icon-button nudge-down" data-nudge="0,12" aria-label="向下移动"><svg class="icon"><use href="#i-down"/></svg></button>
+          </div>
+        </section>
+
+        <div class="inspector-actions">
+          <button class="button" id="openRecord"><svg class="icon"><use href="#i-link"/></svg><span>打开原记录</span></button>
+          <button class="button text-button-danger" id="removeNode"><svg class="icon"><use href="#i-trash"/></svg><span>从故事线移除</span></button>
+        </div>
+      </aside>
+    </main>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    const icon = (name) => `<svg class="icon" aria-hidden="true"><use href="#i-${name}"/></svg>`;
+
+    const graph = {
+      nodes: [
+        { id: 'start', x: 72, y: 278, type: 'start', kind: '事件起点', title: '临时决定去杭州', date: '8 月 2 日 · 21:30', place: '家中', tags: ['写下计划', '旅行'], relation: '这条记录是整个周末事件的起点。' },
+        { id: 'arrive', x: 326, y: 194, type: 'record', kind: '记录', title: '清晨抵达杭州东站', date: '8 月 3 日 · 08:16', place: '杭州东站', tags: ['交通', '旅行'], relation: '兑现前一晚的临时计划，正式开始这次周末出行。' },
+        { id: 'walk', x: 498, y: 390, type: 'record', kind: '记录', title: '傍晚在西湖边散步', date: '8 月 3 日 · 17:40', place: '西湖断桥附近', tags: ['美景', '步行'], relation: '到达杭州后先放下行李，再沿湖慢慢走了一段。' },
+        { id: 'museum', x: 620, y: 158, type: 'record', kind: '记录', title: '参观城市博物馆', date: '8 月 3 日 · 14:20', place: '浙江省博物馆', tags: ['旅行', '博物馆', '拍照'], relation: '沿西湖散步后，临时决定进馆看看。' },
+        { id: 'dinner', x: 912, y: 318, type: 'record', kind: '记录', title: '和朋友吃了顿火锅', date: '8 月 3 日 · 19:10', place: '湖滨银泰附近', tags: ['美食', '朋友'], relation: '结束白天的游览后，与住在杭州的朋友会合。' },
+        { id: 'summary', x: 1024, y: 116, type: 'summary', kind: '回顾', title: '这个周末比计划更松弛', date: '8 月 4 日 · 21:20', place: '回程后', tags: ['周末回顾', 'AI 可辅助'], relation: '把前面的记录收束成一次完整经历，但不覆盖任何原记录。' },
+      ],
+      edges: [
+        { id: 'e-start-arrive', source: 'start', target: 'arrive', label: '第二天出发' },
+        { id: 'e-arrive-museum', source: 'arrive', target: 'museum', label: '先去看看' },
+        { id: 'e-arrive-walk', source: 'arrive', target: 'walk', label: '傍晚支线', branch: true },
+        { id: 'e-museum-dinner', source: 'museum', target: 'dinner', label: '随后会合' },
+        { id: 'e-walk-dinner', source: 'walk', target: 'dinner', label: '', branch: true },
+        { id: 'e-dinner-summary', source: 'dinner', target: 'summary', label: '形成回顾' },
+      ],
+    };
+
+    const state = { selectedId: 'museum', scale: 1, panX: -15, panY: -70, isPanning: false, nodeSeed: 1 };
+    const viewport = document.getElementById('viewport');
+    const world = document.getElementById('world');
+    const nodeLayer = document.getElementById('nodeLayer');
+    const edgeLayer = document.getElementById('edgeLayer');
+    const minimap = document.getElementById('minimap');
+    const toast = document.getElementById('toast');
+    let toastTimer;
+
+    function nodeIcon(type) { return type === 'start' ? 'route' : type === 'summary' ? 'spark' : 'file'; }
+    function nodeKindText(node) { return node.type === 'start' ? '事件起点' : node.type === 'summary' ? '回顾节点' : '记录节点'; }
+
+    function renderNodes() {
+      nodeLayer.innerHTML = '';
+      graph.nodes.forEach((node) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = `flow-node type-${node.type}`;
+        button.dataset.nodeId = node.id;
+        button.style.left = `${node.x}px`;
+        button.style.top = `${node.y}px`;
+        button.setAttribute('aria-label', `${nodeKindText(node)}：${node.title}`);
+        button.setAttribute('aria-pressed', node.id === state.selectedId ? 'true' : 'false');
+        button.innerHTML = `
+          <span class="node-handle input"></span>
+          <span class="node-handle output"></span>
+          <span class="node-top">
+            <span class="node-icon">${icon(nodeIcon(node.type))}</span>
+            <span class="node-heading"><span class="node-kind">${node.kind}</span><span class="node-title">${node.title}</span></span>
+          </span>
+          <span class="node-meta">${icon(node.place === '回程后' ? 'calendar' : 'pin')}<span>${node.place}</span></span>
+          <span class="node-tags">${node.tags.slice(0, 2).map((tag) => `<span class="node-tag">${tag}</span>`).join('')}</span>`;
+        bindNodeInteractions(button, node);
+        nodeLayer.appendChild(button);
+      });
+      requestAnimationFrame(() => { renderEdges(); renderMinimap(); });
+    }
+
+    function bindNodeInteractions(element, node) {
+      let drag = null;
+      let moved = false;
+      element.addEventListener('pointerdown', (event) => {
+        if (event.button !== 0) return;
+        moved = false;
+        drag = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, nodeX: node.x, nodeY: node.y };
+        element.setPointerCapture(event.pointerId);
+        selectNode(node.id);
+        event.stopPropagation();
+      });
+      element.addEventListener('pointermove', (event) => {
+        if (!drag || drag.pointerId !== event.pointerId) return;
+        const dx = (event.clientX - drag.startX) / state.scale;
+        const dy = (event.clientY - drag.startY) / state.scale;
+        if (Math.abs(dx) > 3 || Math.abs(dy) > 3) moved = true;
+        node.x = Math.max(16, Math.min(1048, drag.nodeX + dx));
+        node.y = Math.max(70, Math.min(610, drag.nodeY + dy));
+        element.style.left = `${node.x}px`;
+        element.style.top = `${node.y}px`;
+        renderEdges();
+        renderMinimap();
+      });
+      element.addEventListener('pointerup', (event) => {
+        if (drag?.pointerId === event.pointerId) element.releasePointerCapture(event.pointerId);
+        drag = null;
+      });
+      element.addEventListener('click', (event) => {
+        event.stopPropagation();
+        if (!moved) selectNode(node.id);
+      });
+      element.addEventListener('keydown', (event) => {
+        const delta = event.shiftKey ? 24 : 8;
+        const map = { ArrowUp: [0, -delta], ArrowDown: [0, delta], ArrowLeft: [-delta, 0], ArrowRight: [delta, 0] };
+        if (!map[event.key]) return;
+        event.preventDefault();
+        moveSelected(...map[event.key]);
+      });
+    }
+
+    function renderEdges() {
+      edgeLayer.querySelectorAll('.rendered-edge').forEach((edge) => edge.remove());
+      graph.edges.forEach((edge) => {
+        const sourceEl = nodeLayer.querySelector(`[data-node-id="${edge.source}"]`);
+        const targetEl = nodeLayer.querySelector(`[data-node-id="${edge.target}"]`);
+        if (!sourceEl || !targetEl) return;
+        const sx = sourceEl.offsetLeft + sourceEl.offsetWidth;
+        const sy = sourceEl.offsetTop + sourceEl.offsetHeight / 2;
+        const tx = targetEl.offsetLeft;
+        const ty = targetEl.offsetTop + targetEl.offsetHeight / 2;
+        const bend = Math.max(58, Math.abs(tx - sx) * .45);
+        const d = `M ${sx} ${sy} C ${sx + bend} ${sy}, ${tx - bend} ${ty}, ${tx} ${ty}`;
+        const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        group.setAttribute('class', 'rendered-edge');
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', d);
+        path.setAttribute('class', `edge-path${edge.branch ? ' branch' : ''}`);
+        path.setAttribute('marker-end', 'url(#arrow)');
+        group.appendChild(path);
+        if (edge.label) {
+          const lx = (sx + tx) / 2;
+          const ly = (sy + ty) / 2 - 11;
+          const label = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+          label.setAttribute('class', 'edge-label');
+          const width = Math.max(54, edge.label.length * 12 + 16);
+          label.innerHTML = `<rect x="${lx - width / 2}" y="${ly - 11}" width="${width}" height="22"></rect><text x="${lx}" y="${ly + .5}">${edge.label}</text>`;
+          group.appendChild(label);
+        }
+        edgeLayer.appendChild(group);
+      });
+    }
+
+    function selectNode(id) {
+      const node = graph.nodes.find((item) => item.id === id);
+      if (!node) return;
+      state.selectedId = id;
+      nodeLayer.querySelectorAll('.flow-node').forEach((element) => element.setAttribute('aria-pressed', element.dataset.nodeId === id ? 'true' : 'false'));
+      document.getElementById('detailTitle').textContent = node.title;
+      document.getElementById('detailKind').textContent = `${nodeKindText(node)} · ${node.type === 'summary' ? '收束主路径' : '当前主路径'}`;
+      document.getElementById('detailDate').textContent = node.date;
+      document.getElementById('detailPlace').textContent = node.place;
+      document.getElementById('detailTags').innerHTML = node.tags.map((tag) => `<span>${tag}</span>`).join('');
+      document.getElementById('detailRelation').textContent = node.relation;
+      document.getElementById('detailIconUse').setAttribute('href', `#i-${nodeIcon(node.type)}`);
+    }
+
+    function applyViewport() {
+      world.style.transform = `translate(${state.panX}px, ${state.panY}px) scale(${state.scale})`;
+      document.getElementById('zoomLabel').textContent = `${Math.round(state.scale * 100)}%`;
+      renderMinimap();
+    }
+
+    function setZoom(next, anchorX = viewport.clientWidth / 2, anchorY = viewport.clientHeight / 2) {
+      const old = state.scale;
+      state.scale = Math.max(.48, Math.min(1.55, next));
+      const worldX = (anchorX - state.panX) / old;
+      const worldY = (anchorY - state.panY) / old;
+      state.panX = anchorX - worldX * state.scale;
+      state.panY = anchorY - worldY * state.scale;
+      applyViewport();
+    }
+
+    function fitGraph() {
+      const padding = 60;
+      const minX = Math.min(...graph.nodes.map((n) => n.x));
+      const minY = Math.min(...graph.nodes.map((n) => n.y));
+      const maxX = Math.max(...graph.nodes.map((n) => n.x + 216));
+      const maxY = Math.max(...graph.nodes.map((n) => n.y + 120));
+      const graphWidth = maxX - minX;
+      const graphHeight = maxY - minY;
+      state.scale = Math.max(.5, Math.min(1.1, Math.min((viewport.clientWidth - padding * 2) / graphWidth, (viewport.clientHeight - padding * 2) / graphHeight)));
+      state.panX = (viewport.clientWidth - graphWidth * state.scale) / 2 - minX * state.scale;
+      state.panY = (viewport.clientHeight - graphHeight * state.scale) / 2 - minY * state.scale;
+      applyViewport();
+    }
+
+    function renderMinimap() {
+      minimap.querySelectorAll('.mini-node').forEach((item) => item.remove());
+      const miniW = minimap.clientWidth || 148;
+      const miniH = minimap.clientHeight || 92;
+      const sx = miniW / 1280;
+      const sy = miniH / 760;
+      graph.nodes.forEach((node) => {
+        const mini = document.createElement('span');
+        mini.className = `mini-node ${node.type}`;
+        mini.style.left = `${node.x * sx}px`;
+        mini.style.top = `${node.y * sy}px`;
+        mini.style.width = `${Math.max(12, 216 * sx)}px`;
+        minimap.appendChild(mini);
+      });
+      const miniViewport = document.getElementById('miniViewport');
+      miniViewport.style.left = `${Math.max(0, -state.panX / state.scale * sx)}px`;
+      miniViewport.style.top = `${Math.max(0, -state.panY / state.scale * sy)}px`;
+      miniViewport.style.width = `${Math.min(miniW, viewport.clientWidth / state.scale * sx)}px`;
+      miniViewport.style.height = `${Math.min(miniH, viewport.clientHeight / state.scale * sy)}px`;
+    }
+
+    function moveSelected(dx, dy) {
+      const node = graph.nodes.find((item) => item.id === state.selectedId);
+      const element = nodeLayer.querySelector(`[data-node-id="${state.selectedId}"]`);
+      if (!node || !element) return;
+      node.x = Math.max(16, Math.min(1048, node.x + dx));
+      node.y = Math.max(70, Math.min(610, node.y + dy));
+      element.style.left = `${node.x}px`;
+      element.style.top = `${node.y}px`;
+      renderEdges();
+      renderMinimap();
+    }
+
+    function addNode(payload = {}) {
+      const selected = graph.nodes.find((item) => item.id === state.selectedId) || graph.nodes[0];
+      const id = `new-${Date.now()}-${state.nodeSeed++}`;
+      const node = {
+        id,
+        x: Math.min(1010, selected.x + 260),
+        y: Math.min(585, selected.y + 145),
+        type: 'record',
+        kind: '新关联记录',
+        title: payload.title || '一条新的周末记录',
+        date: payload.date || '等待补充时间',
+        place: payload.place || '尚未设置地点',
+        tags: payload.tags ? payload.tags.split(',') : ['未整理'],
+        relation: '这是刚刚加入的节点，可以在右侧补充它与上一条记录的关系。',
+      };
+      graph.nodes.push(node);
+      graph.edges.push({ id: `e-${selected.id}-${id}`, source: selected.id, target: id, label: '继续发生' });
+      renderNodes();
+      selectNode(id);
+      showToast(`已把“${node.title}”加入故事线`);
+    }
+
+    function removeSelectedNode() {
+      if (state.selectedId === 'start') return showToast('事件起点不能直接移除');
+      const index = graph.nodes.findIndex((node) => node.id === state.selectedId);
+      if (index < 0) return;
+      const title = graph.nodes[index].title;
+      graph.nodes.splice(index, 1);
+      graph.edges = graph.edges.filter((edge) => edge.source !== state.selectedId && edge.target !== state.selectedId);
+      state.selectedId = graph.nodes[0]?.id || '';
+      renderNodes();
+      if (state.selectedId) selectNode(state.selectedId);
+      showToast(`已从样板中移除“${title}”`);
+    }
+
+    function showToast(message) {
+      clearTimeout(toastTimer);
+      toast.textContent = message;
+      toast.classList.add('show');
+      toastTimer = setTimeout(() => toast.classList.remove('show'), 3000);
+    }
+
+    let pan = null;
+    viewport.addEventListener('pointerdown', (event) => {
+      if (event.target.closest('.flow-node')) return;
+      pan = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, panX: state.panX, panY: state.panY };
+      viewport.setPointerCapture(event.pointerId);
+      viewport.classList.add('is-panning');
+    });
+    viewport.addEventListener('pointermove', (event) => {
+      if (!pan || pan.pointerId !== event.pointerId) return;
+      state.panX = pan.panX + event.clientX - pan.x;
+      state.panY = pan.panY + event.clientY - pan.y;
+      applyViewport();
+    });
+    viewport.addEventListener('pointerup', (event) => {
+      if (pan?.pointerId === event.pointerId) viewport.releasePointerCapture(event.pointerId);
+      pan = null;
+      viewport.classList.remove('is-panning');
+    });
+    viewport.addEventListener('wheel', (event) => {
+      event.preventDefault();
+      const rect = viewport.getBoundingClientRect();
+      setZoom(state.scale + (event.deltaY > 0 ? -.08 : .08), event.clientX - rect.left, event.clientY - rect.top);
+    }, { passive: false });
+
+    document.getElementById('zoomOut').addEventListener('click', () => setZoom(state.scale - .1));
+    document.getElementById('zoomIn').addEventListener('click', () => setZoom(state.scale + .1));
+    document.getElementById('fitView').addEventListener('click', fitGraph);
+    document.getElementById('quickAdd').addEventListener('click', () => addNode());
+    document.getElementById('toggleMinimap').addEventListener('click', (event) => {
+      minimap.hidden = !minimap.hidden;
+      event.currentTarget.setAttribute('aria-pressed', minimap.hidden ? 'false' : 'true');
+    });
+    document.querySelectorAll('[data-nudge]').forEach((button) => button.addEventListener('click', () => moveSelected(...button.dataset.nudge.split(',').map(Number))));
+    document.getElementById('removeNode').addEventListener('click', removeSelectedNode);
+    document.getElementById('openRecord').addEventListener('click', () => showToast('正式版本会在这里打开对应的原记录'));
+    document.getElementById('previewStory').addEventListener('click', () => showToast('预览会按主路径依次播放 6 条记录'));
+    document.getElementById('saveStory').addEventListener('click', () => showToast('样板已保存：正式版本会生成一个新的事件修订'));
+    document.getElementById('themeToggle').addEventListener('click', () => {
+      const dark = document.documentElement.dataset.theme === 'dark';
+      document.documentElement.dataset.theme = dark ? 'light' : 'dark';
+      document.getElementById('themeIcon').setAttribute('href', dark ? '#i-moon' : '#i-sun');
+    });
+    document.getElementById('recordSearch').addEventListener('input', (event) => {
+      const query = event.target.value.trim().toLowerCase();
+      document.querySelectorAll('.bank-card').forEach((card) => {
+        card.hidden = query && !card.textContent.toLowerCase().includes(query) && !card.dataset.place.toLowerCase().includes(query) && !card.dataset.tags.toLowerCase().includes(query);
+      });
+    });
+    document.querySelectorAll('.bank-card').forEach((card) => card.addEventListener('click', () => {
+      addNode(card.dataset);
+      card.remove();
+      document.getElementById('bankCount').textContent = `${document.querySelectorAll('.bank-card').length} 条`;
+    }));
+
+    const libraryPanel = document.getElementById('libraryPanel');
+    const inspectorPanel = document.getElementById('inspectorPanel');
+    document.getElementById('openLibrary').addEventListener('click', () => libraryPanel.classList.toggle('open'));
+    document.getElementById('openInspector').addEventListener('click', () => inspectorPanel.classList.toggle('open'));
+    document.addEventListener('pointerdown', (event) => {
+      if (window.innerWidth <= 620 && libraryPanel.classList.contains('open') && !libraryPanel.contains(event.target) && !event.target.closest('#openLibrary')) libraryPanel.classList.remove('open');
+      if (window.innerWidth <= 860 && inspectorPanel.classList.contains('open') && !inspectorPanel.contains(event.target) && !event.target.closest('#openInspector')) inspectorPanel.classList.remove('open');
+    });
+    window.addEventListener('resize', () => { renderMinimap(); if (window.innerWidth > 860) inspectorPanel.classList.remove('open'); });
+
+    renderNodes();
+    selectNode(state.selectedId);
+    applyViewport();
+    requestAnimationFrame(fitGraph);
+  </script>
+</body>
+</html>

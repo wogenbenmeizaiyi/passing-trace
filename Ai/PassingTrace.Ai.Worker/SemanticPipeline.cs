@@ -20,7 +20,7 @@ public sealed class SemanticPipeline(
     ImageDerivativeProcessor imageProcessor,
     IChatClient chatClient,
     IEmbeddingGenerator<string, Embedding<float>> embeddingGenerator,
-    IOptions<QwenAiOptions> options)
+    IOptions<AiModelOptions> options)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
@@ -29,7 +29,14 @@ public sealed class SemanticPipeline(
 
     private const string SemanticSystemPrompt = """
         你是 PassingTrace 的记录分析器。只提取用户明确写下或图片中可直接观察到的事实，禁止猜测身份、健康、政治、宗教等敏感属性。
-        输出必须严格符合给定 JSON Schema。summary 用中文简述这一条记录；mentions 提取 location/activity/food/person 等检索项；
+        只输出一个合法 JSON 对象，不要 Markdown、解释或其他文字。JSON 结构必须是：
+        {"summary":"字符串","images":[{"mediaId":"UUID","description":"字符串"}],
+        "mentions":[{"category":"字符串","normalizedValue":"字符串","originalValue":"字符串","assertion":"explicit|inferred","confidence":0.0,"textStart":null,"textLength":null,"mediaId":null}],
+        "expenses":[{"amount":0.0,"currency":"CNY","purpose":"字符串","scope":"字符串","confidence":0.0,"evidence":"字符串"}],
+        "memories":[{"type":"preference|background|habit|goal|constraint","content":"字符串","confidence":0.0,"evidence":"字符串"}],
+        "primaryCategory":{"taxonomyKey":"other","confidence":0.0,"textStart":null,"textLength":null,"mediaId":null},
+        "behaviorTags":[{"taxonomyKey":"标签Key","confidence":0.0,"textStart":null,"textLength":null,"mediaId":null}]}。
+        没有内容的数组输出 []，没有主分类候选时 primaryCategory 输出 null。summary 用中文简述这一条记录；mentions 提取 location/activity/food/person 等检索项；
         PrimaryCategory.taxonomyKey 必须从 food,shopping,travel,scenery,entertainment,exercise,work,study,social,home,health,transport,other 中选择一个。
         BehaviorTags 最多 5 个，taxonomyKey 必须从系统提供的行为标签 Key 中选择，不得自创；每个分类和标签必须给出置信度及正文位置或 mediaId 证据。
         expenses 仅在金额和币种足够明确时输出；memories 只输出可由本记录证据支持、以后有稳定价值的偏好/背景/习惯/目标/约束。
@@ -125,7 +132,7 @@ public sealed class SemanticPipeline(
             PipelineVersion = pipeline.PipelineVersion,
             PromptVersion = pipeline.PromptVersion,
             SchemaVersion = "semantic-envelope-v2",
-            Model = pipeline.PrimaryModel,
+            Model = pipeline.Semantic.PrimaryModel,
             Status = SemanticRunStatus.Running,
             CreatedAt = DateTimeOffset.UtcNow,
         };
@@ -230,14 +237,31 @@ public sealed class SemanticPipeline(
         {
             throw new InvalidOperationException("图片衍生文件尚未处理完成，稍后重试语义分析。");
         }
+        var provider = options.Value.Providers.FirstOrDefault(x =>
+            string.Equals(x.Key, options.Value.Semantic.Provider, StringComparison.OrdinalIgnoreCase)).Value;
+        var useRemoteMediaUrls = provider?.UseRemoteMediaUrls == true;
         foreach (var link in images.Where(x => x.MediaAsset.Status == MediaAssetStatus.Ready &&
                      !string.IsNullOrWhiteSpace(x.MediaAsset.AiObjectKey)))
         {
-            await using var stream = await storage.OpenReadAsync(link.MediaAsset.AiObjectKey!, cancellationToken);
-            await using var bytes = new MemoryStream();
-            await stream.CopyToAsync(bytes, cancellationToken);
             content.Add(new TextContent($"下面图片的 mediaId={link.MediaAssetId}"));
-            content.Add(new DataContent(bytes.ToArray(), "image/jpeg"));
+            if (useRemoteMediaUrls)
+            {
+                var imageUrl = await storage.CreateDownloadUrlAsync(
+                    link.MediaAsset.AiObjectKey!,
+                    $"{link.MediaAssetId:N}.jpg",
+                    "image/jpeg",
+                    inline: true,
+                    DateTimeOffset.UtcNow.AddMinutes(10),
+                    cancellationToken);
+                content.Add(new UriContent(imageUrl, "image/jpeg"));
+            }
+            else
+            {
+                await using var stream = await storage.OpenReadAsync(link.MediaAsset.AiObjectKey!, cancellationToken);
+                await using var bytes = new MemoryStream();
+                await stream.CopyToAsync(bytes, cancellationToken);
+                content.Add(new DataContent(bytes.ToArray(), "image/jpeg"));
+            }
         }
 
         var messages = new[]
@@ -247,7 +271,7 @@ public sealed class SemanticPipeline(
         };
         var response = await chatClient.GetResponseAsync(messages, new ChatOptions
         {
-            Temperature = 0,
+            Temperature = 0.1f,
             ResponseFormat = ChatResponseFormat.ForJsonSchema<SemanticEnvelope>(),
         }, cancellationToken);
         if (TryDeserialize(response.Text, out var result))
@@ -256,16 +280,16 @@ public sealed class SemanticPipeline(
         }
 
         var repair = await chatClient.GetResponseAsync([
-            new ChatMessage(ChatRole.System, "把下面内容修复为严格符合 SemanticEnvelope JSON Schema 的 JSON，只输出 JSON。"),
+            new ChatMessage(ChatRole.System, SemanticSystemPrompt + "\n把下面内容修复为符合上述结构的 JSON，只输出 JSON。"),
             new ChatMessage(ChatRole.User, response.Text),
         ], new ChatOptions
         {
-            Temperature = 0,
+            Temperature = 0.1f,
             ResponseFormat = ChatResponseFormat.ForJsonSchema<SemanticEnvelope>(),
         }, cancellationToken);
         if (!TryDeserialize(repair.Text, out result))
         {
-            throw new InvalidDataException("Qwen 连续两次返回无法解析的 SemanticEnvelope JSON。");
+            throw new InvalidDataException("语义模型连续两次返回无法解析的 SemanticEnvelope JSON。");
         }
         return result!;
     }

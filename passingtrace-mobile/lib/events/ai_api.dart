@@ -54,16 +54,39 @@ class AiMessageModel {
 }
 
 class AiEvidenceRecord {
-  const AiEvidenceRecord({required this.eventId, this.title});
+  const AiEvidenceRecord({required this.eventId, this.title, this.snippet});
 
   final int eventId;
   final String? title;
+  final String? snippet;
+
+  String get displayTitle {
+    final explicitTitle = title?.trim();
+    if (explicitTitle != null && explicitTitle.isNotEmpty) return explicitTitle;
+
+    final source = snippet?.trim().replaceAll(RegExp(r'\s+'), ' ');
+    if (source == null || source.isEmpty) return '查看记录';
+    final firstSentence = source.split(RegExp(r'[。！？\n]')).first.trim();
+    final codePoints = firstSentence.runes.toList(growable: false);
+    if (codePoints.length <= 28) return firstSentence;
+    return '${String.fromCharCodes(codePoints.take(28))}…';
+  }
 
   factory AiEvidenceRecord.fromJson(Map<String, dynamic> json) =>
       AiEvidenceRecord(
-        eventId: (json['eventId'] as num).toInt(),
-        title: (json['title'] as String?)?.trim(),
+        eventId: ((json['eventId'] ?? json['EventId']) as num).toInt(),
+        title: ((json['title'] ?? json['Title']) as String?)?.trim(),
+        snippet: ((json['snippet'] ?? json['Snippet']) as String?)?.trim(),
       );
+
+  static List<AiEvidenceRecord> fromEnvelope(Map<String, dynamic> json) {
+    final raw = json['records'] ?? json['Records'];
+    if (raw is! List<dynamic>) return const [];
+    return raw
+        .whereType<Map<String, dynamic>>()
+        .map(AiEvidenceRecord.fromJson)
+        .toList(growable: false);
+  }
 }
 
 class AiConversationDetailModel {

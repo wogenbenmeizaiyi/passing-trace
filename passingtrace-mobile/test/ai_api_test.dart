@@ -110,4 +110,34 @@ void main() {
     await api.deleteConversation(_session(), 'conversation-1');
     api.close();
   });
+
+  test('实时证据兼容服务端 PascalCase 并使用记录标题', () async {
+    final client = MockClient(
+      (_) async => http.Response(
+        'event: evidence\n'
+        'data: {"Records":[{"EventId":13,"Title":"整理项目下一阶段计划","Snippet":"阶段计划"}]}\n\n'
+        'event: done\n'
+        'data: {}\n\n',
+        200,
+        headers: {'content-type': 'text/event-stream; charset=utf-8'},
+      ),
+    );
+    final api = AiApiClient(
+      auth: _FakeAuthService(),
+      baseUrl: 'https://events.test',
+      httpClient: client,
+    );
+
+    final chunks = await api
+        .send(_session(), 'conversation-1', '总结这个月')
+        .toList();
+    final evidence = chunks.singleWhere((chunk) => chunk.type == 'evidence');
+    final records = AiEvidenceRecord.fromEnvelope(
+      evidence.data as Map<String, dynamic>,
+    );
+
+    expect(records.single.eventId, 13);
+    expect(records.single.displayTitle, '整理项目下一阶段计划');
+    api.close();
+  });
 }

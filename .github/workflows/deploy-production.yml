@@ -115,6 +115,7 @@ jobs:
           REGISTRATION_BOOTSTRAP_CODE=${{ secrets.REGISTRATION_BOOTSTRAP_CODE }}
           IDENTITY_MAX_USERS=2
           QWEN_API_KEY=${{ secrets.QWEN_API_KEY }}
+          MINIMAX_API_KEY=${{ secrets.MINIMAX_API_KEY }}
           AMAP_WEB_SERVICE_KEY=${{ secrets.AMAP_WEB_SERVICE_KEY }}
           EOF
 

@@ -62,6 +62,27 @@ void main() {
     expect(openedEventId, 13);
   });
 
+  testWidgets('证据标题缺失时不再显示记录加 ID', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: AssistantMessageContent(
+            isUser: false,
+            text: '可以继续查看 [Event #13]',
+          ),
+        ),
+      ),
+    );
+
+    final text = tester
+        .widgetList<SelectableText>(find.byType(SelectableText))
+        .single
+        .textSpan!
+        .toPlainText();
+    expect(text, contains('查看记录'));
+    expect(text, isNot(contains('记录 #13')));
+  });
+
   testWidgets('回答依据默认收起，展开后才显示记录卡片', (tester) async {
     int? openedEventId;
     await tester.pumpWidget(

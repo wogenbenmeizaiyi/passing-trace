@@ -97,7 +97,8 @@ services:
       ObjectStorage__ForcePathStyle: ${S3_FORCE_PATH_STYLE:-false}
       ObjectStorage__CreateBucketIfMissing: "false"
       ObjectStorage__ConfigureCors: "false"
-      Qwen__ApiKey: ${QWEN_API_KEY}
+      AiModels__Providers__Qwen__ApiKey: ${QWEN_API_KEY}
+      AiModels__Providers__MiniMax__ApiKey: ${MINIMAX_API_KEY}
       Amap__WebServiceKey: ${AMAP_WEB_SERVICE_KEY}
     depends_on:
       postgres:
@@ -126,7 +127,8 @@ services:
       ObjectStorage__ForcePathStyle: ${S3_FORCE_PATH_STYLE:-false}
       ObjectStorage__CreateBucketIfMissing: "false"
       ObjectStorage__ConfigureCors: "false"
-      Qwen__ApiKey: ${QWEN_API_KEY}
+      AiModels__Providers__Qwen__ApiKey: ${QWEN_API_KEY}
+      AiModels__Providers__MiniMax__ApiKey: ${MINIMAX_API_KEY}
     depends_on:
       postgres:
         condition: service_healthy

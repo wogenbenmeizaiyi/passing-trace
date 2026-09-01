@@ -41,7 +41,9 @@ flowchart LR
     API --> MinIO[(MinIO / S3)]
     Worker[AI Worker] --> TraceDb
     Worker --> MinIO
-    Worker --> Qwen[Qwen]
+    Worker --> MiniMax[MiniMax：图片与文本语义]
+    Events --> MiniMax[MiniMax：AI 问答]
+    Worker --> Qwen[百炼：向量]
     API --> AMap[高德 Web 服务]
 ```
 
@@ -52,7 +54,7 @@ flowchart LR
 - OpenIddict 7.6、JWT Bearer、PKCE
 - PostgreSQL 18、pgvector、Redis
 - MinIO / S3
-- Microsoft Agent Framework、Microsoft.Extensions.AI、Qwen
+- Microsoft Agent Framework、Microsoft.Extensions.AI、MiniMax、百炼 Qwen
 - Flutter（Android）、Vue 3、TypeScript、Vite
 - 高德 Android 定位 SDK 与高德 Web 服务
 
@@ -120,6 +122,7 @@ dotnet user-secrets set --project AppHost "Parameters:postgres-password" "change
 dotnet user-secrets set --project AppHost "Parameters:minio-access-key" "passingtrace-local"
 dotnet user-secrets set --project AppHost "Parameters:minio-secret-key" "change-this-minio-secret"
 dotnet user-secrets set --project AppHost "Parameters:qwen-api-key" "your-qwen-api-key"
+dotnet user-secrets set --project AppHost "Parameters:minimax-api-key" "your-minimax-api-key"
 dotnet user-secrets set --project AppHost "Parameters:amap-web-service-key" "your-amap-web-service-key"
 ```
 
@@ -135,7 +138,7 @@ Android 高德 Key 写入不会提交的 `passingtrace-mobile/android/local.prop
 AMAP_ANDROID_KEY=your-amap-android-key
 ```
 
-高德 Android Key 需要与 `com.passingtrace.passingtrace_mobile` 的包名和本机调试签名 SHA-1 匹配；后端使用的高德 Key 应选择“Web 服务”平台。没有有效的 Qwen 或高德 Key 时，对应的 AI、地点能力将不可用，但不应把真实 Key 写进源码或 `appsettings.json`。
+高德 Android Key 需要与 `com.passingtrace.passingtrace_mobile` 的包名和本机调试签名 SHA-1 匹配；后端使用的高德 Key 应选择“Web 服务”平台。AI 问答和图片/文本语义分析默认使用原生多模态的 MiniMax-M3，向量仍使用百炼；Provider、模型和 Endpoint 均在 `AiModels` 中按角色配置。没有有效的 MiniMax、Qwen 或高德 Key 时，对应能力将不可用，但不应把真实 Key 写进源码或 `appsettings.json`。
 
 ### 3. 启动完整环境
 

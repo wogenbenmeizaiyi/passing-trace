@@ -414,7 +414,10 @@ class _EventFormViewState extends State<EventFormView> {
       ),
     );
     if (accepted != true || !mounted) return;
-    setState(() => _locating = true);
+    setState(() {
+      _locating = true;
+      _error = null;
+    });
     try {
       if (!await _locationService.requestPermission()) {
         throw StateError('未授予前台定位权限。');
@@ -459,7 +462,9 @@ class _EventFormViewState extends State<EventFormView> {
         );
       }
     } catch (e) {
-      if (mounted) setState(() => _error = '地点选择失败：$e');
+      if (mounted) {
+        setState(() => _error = '地点选择失败：${friendlyLocationError(e)}');
+      }
     } finally {
       if (mounted) setState(() => _locating = false);
     }

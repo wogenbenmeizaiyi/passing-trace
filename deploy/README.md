@@ -46,7 +46,7 @@ cp deploy/.env.example deploy/.env
 chmod 600 deploy/.env
 ```
 
-编辑 `deploy/.env`，填入随机密码、雨云 S3 密钥、百炼 Key 与高德 Web 服务 Key。不要提交该文件。
+编辑 `deploy/.env`，填入随机密码、雨云 S3 密钥、MiniMax Key、百炼 Key 与高德 Web 服务 Key。不要提交该文件。AI 问答和图片/文本语义分析使用 MiniMax-M3；向量仍使用百炼，后续可通过 `AiModels` 配置独立切换各角色 Provider。
 
 ```bash
 sh deploy/update.sh
@@ -89,6 +89,7 @@ sh deploy/update.sh
 - `CERTIFICATE_PASSWORD`
 - `REGISTRATION_BOOTSTRAP_CODE`
 - `QWEN_API_KEY`
+- `MINIMAX_API_KEY`
 - `AMAP_WEB_SERVICE_KEY`
 
 并在 production Environment Variables 中配置：

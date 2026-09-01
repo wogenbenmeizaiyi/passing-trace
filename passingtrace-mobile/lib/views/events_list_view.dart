@@ -19,6 +19,7 @@ class EventsListView extends StatefulWidget {
     this.drawer,
     this.bottomNavigationBar,
     this.onSessionExpired,
+    this.eventApiClient,
   });
 
   final AuthService auth;
@@ -26,6 +27,7 @@ class EventsListView extends StatefulWidget {
   final Widget? drawer;
   final Widget? bottomNavigationBar;
   final Future<void> Function()? onSessionExpired;
+  final EventApiClient? eventApiClient;
 
   @override
   State<EventsListView> createState() => _EventsListViewState();
@@ -40,6 +42,8 @@ class _EventsListViewState extends State<EventsListView> {
   String? _error;
   EventTaxonomyModel? _taxonomy;
   EventFilterSelection _filters = EventFilterSelection();
+  bool _ownsApi = false;
+  bool _apiInitialized = false;
 
   @override
   void initState() {
@@ -48,9 +52,18 @@ class _EventsListViewState extends State<EventsListView> {
   }
 
   Future<void> _initApi() async {
+    if (widget.eventApiClient case final api?) {
+      _api = api;
+      _apiInitialized = true;
+      await _reload();
+      if (mounted) await _loadTaxonomy();
+      return;
+    }
     final baseUrl = await widget.auth.getEventsApiBaseUrl();
     if (!mounted) return;
     _api = EventApiClient(auth: widget.auth, baseUrl: baseUrl);
+    _apiInitialized = true;
+    _ownsApi = true;
     await _reload();
     if (mounted) await _loadTaxonomy();
   }
@@ -69,7 +82,7 @@ class _EventsListViewState extends State<EventsListView> {
 
   @override
   void dispose() {
-    _api.close();
+    if (_apiInitialized && _ownsApi) _api.close();
     super.dispose();
   }
 
@@ -220,8 +233,30 @@ class _EventsListViewState extends State<EventsListView> {
         onPressed: _openCreate,
       ),
     ),
+    floatingActionButton: _buildFixedFilterButton(),
+    floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     body: _buildBody(),
   );
+
+  Widget _buildFixedFilterButton() {
+    final colors = context.traceColors;
+    return SizedBox.square(
+      key: const Key('events-filter-button'),
+      dimension: 52,
+      child: TraceIconButton(
+        glyph: TraceGlyph.filter,
+        tooltip: _hasActiveFilters
+            ? '筛选记录，已应用 ${_filters.activeCount} 项'
+            : '筛选记录',
+        onPressed: _showFilters,
+        color: _hasActiveFilters ? colors.primaryStrong : colors.inkSecondary,
+        backgroundColor: _hasActiveFilters
+            ? colors.primarySoft
+            : colors.surface,
+        borderColor: _hasActiveFilters ? colors.primary : colors.lineStrong,
+      ),
+    );
+  }
 
   Widget _buildBody() {
     if (_initialLoading) {
@@ -296,44 +331,23 @@ class _EventsListViewState extends State<EventsListView> {
     final now = DateTime.now();
     return Padding(
       padding: const EdgeInsets.only(bottom: 26),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '${_monthLabel(now.month)}月的生活',
-                  style: TextStyle(
-                    color: colors.ink,
-                    fontSize: 26,
-                    height: 1.25,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -1,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  entry.hasFilters ? '正在显示筛选后的经历' : '你的经历按发生时间自然排列',
-                  style: TextStyle(color: colors.inkSecondary, fontSize: 13),
-                ),
-              ],
+          Text(
+            '${_monthLabel(now.month)}月的生活',
+            style: TextStyle(
+              color: colors.ink,
+              fontSize: 26,
+              height: 1.25,
+              fontWeight: FontWeight.w700,
+              letterSpacing: -1,
             ),
           ),
-          SizedBox.square(
-            dimension: 48,
-            child: TraceIconButton(
-              glyph: TraceGlyph.filter,
-              tooltip: _hasActiveFilters
-                  ? '筛选记录，已应用 ${_filters.activeCount} 项'
-                  : '筛选记录',
-              onPressed: _showFilters,
-              color: _hasActiveFilters
-                  ? colors.primaryStrong
-                  : colors.inkSecondary,
-              backgroundColor: _hasActiveFilters ? colors.primarySoft : null,
-            ),
+          const SizedBox(height: 4),
+          Text(
+            entry.hasFilters ? '正在显示筛选后的经历' : '你的经历按发生时间自然排列',
+            style: TextStyle(color: colors.inkSecondary, fontSize: 13),
           ),
         ],
       ),

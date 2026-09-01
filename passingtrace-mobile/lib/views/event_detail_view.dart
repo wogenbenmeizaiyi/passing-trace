@@ -46,6 +46,7 @@ class _EventDetailViewState extends State<EventDetailView> {
   bool _loading = true;
   bool _deleting = false;
   bool _showAiAnalysis = false;
+  final Map<String, Future<Uri>> _mediaUrls = {};
 
   @override
   void initState() {
@@ -77,6 +78,7 @@ class _EventDetailViewState extends State<EventDetailView> {
   }
 
   Future<void> _load() async {
+    _mediaUrls.clear();
     setState(() {
       _loading = true;
       _error = null;
@@ -424,10 +426,10 @@ class _EventDetailViewState extends State<EventDetailView> {
   }
 
   Widget _buildMedia(MediaAssetModel media) {
+    if (media.kind == MediaKind.image) return _buildImageMedia(media);
+
     final colors = context.traceColors;
-    final glyph = media.kind == MediaKind.image
-        ? TraceGlyph.image
-        : media.kind == MediaKind.video
+    final glyph = media.kind == MediaKind.video
         ? TraceGlyph.video
         : TraceGlyph.file;
     return Padding(
@@ -488,9 +490,164 @@ class _EventDetailViewState extends State<EventDetailView> {
     );
   }
 
+  Future<Uri> _mediaUrl(MediaAssetModel media) => _mediaUrls.putIfAbsent(
+    media.id,
+    () => _mediaApi.access(widget.session, media.id),
+  );
+
+  Widget _buildImageMedia(MediaAssetModel media) {
+    final colors = context.traceColors;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: FutureBuilder<Uri>(
+        future: _mediaUrl(media),
+        builder: (context, snapshot) {
+          if (snapshot.hasError) return _buildImageError(media);
+          final url = snapshot.data;
+          if (url == null) return _buildImagePlaceholder();
+          return Semantics(
+            button: true,
+            image: true,
+            label: '查看图片 ${media.fileName}',
+            child: Material(
+              color: colors.surfaceSoft,
+              borderRadius: BorderRadius.circular(16),
+              clipBehavior: Clip.antiAlias,
+              child: InkWell(
+                onTap: () => _openMedia(media),
+                child: Stack(
+                  children: [
+                    AspectRatio(
+                      aspectRatio: 4 / 3,
+                      child: Image.network(
+                        '$url',
+                        fit: BoxFit.cover,
+                        filterQuality: FilterQuality.medium,
+                        loadingBuilder: (context, child, progress) =>
+                            progress == null
+                            ? child
+                            : _buildImagePlaceholder(
+                                progress: progress.expectedTotalBytes == null
+                                    ? null
+                                    : progress.cumulativeBytesLoaded /
+                                          progress.expectedTotalBytes!,
+                              ),
+                        errorBuilder: (_, _, _) => _buildImageError(media),
+                      ),
+                    ),
+                    Positioned(
+                      top: 10,
+                      right: 10,
+                      child: Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: colors.surface.withValues(alpha: 0.88),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Center(
+                          child: TraceIcon(
+                            TraceGlyph.externalLink,
+                            size: 19,
+                            color: colors.ink,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildImagePlaceholder({double? progress}) {
+    final colors = context.traceColors;
+    return AspectRatio(
+      aspectRatio: 4 / 3,
+      child: ColoredBox(
+        color: colors.surfaceSoft,
+        child: Center(
+          child: SizedBox.square(
+            dimension: 28,
+            child: CircularProgressIndicator(
+              value: progress,
+              strokeWidth: 2.4,
+              color: colors.primary,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildImageError(MediaAssetModel media) {
+    final colors = context.traceColors;
+    return Material(
+      color: colors.surface,
+      shape: RoundedRectangleBorder(
+        side: BorderSide(color: colors.line),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () {
+          setState(() => _mediaUrls.remove(media.id));
+        },
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 112),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                TraceIcon(
+                  TraceGlyph.image,
+                  color: colors.inkTertiary,
+                  size: 26,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '图片暂时无法加载',
+                        style: TextStyle(
+                          color: colors.ink,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '点击重试',
+                        style: TextStyle(
+                          color: colors.inkTertiary,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                TraceIcon(
+                  TraceGlyph.refresh,
+                  color: colors.primaryStrong,
+                  size: 20,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _openMedia(MediaAssetModel media) async {
     try {
-      final url = await _mediaApi.access(widget.session, media.id);
+      final url = await _mediaUrl(media);
       if (!mounted) return;
       if (media.kind == MediaKind.image) {
         await showDialog<void>(
@@ -499,7 +656,26 @@ class _EventDetailViewState extends State<EventDetailView> {
             backgroundColor: Colors.black,
             child: Stack(
               children: [
-                Center(child: InteractiveViewer(child: Image.network('$url'))),
+                Center(
+                  child: InteractiveViewer(
+                    minScale: 0.8,
+                    maxScale: 5,
+                    child: Image.network(
+                      '$url',
+                      fit: BoxFit.contain,
+                      loadingBuilder: (_, child, progress) => progress == null
+                          ? child
+                          : const Center(child: CircularProgressIndicator()),
+                      errorBuilder: (_, _, _) => const Padding(
+                        padding: EdgeInsets.all(32),
+                        child: Text(
+                          '图片加载失败，请关闭后重试。',
+                          style: TextStyle(color: Colors.white),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
                 SafeArea(
                   child: IconButton(
                     color: Colors.white,

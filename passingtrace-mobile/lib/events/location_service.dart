@@ -1,5 +1,26 @@
 import 'package:flutter/services.dart';
 
+String friendlyLocationError(Object error) {
+  if (error is PlatformException) {
+    final detail = '${error.message ?? ''} ${error.details ?? ''}';
+    if (error.code == 'AMAP_8' ||
+        detail.contains('INVALID_USER_SCODE') ||
+        detail.contains('SHA1AndPackage')) {
+      return '当前安装包与地图服务配置不匹配。请安装最新版“星期八”后重试。';
+    }
+    if (error.code == 'PERMISSION_DENIED') return '未授予前台定位权限。';
+    if (error.code == 'PRIVACY_REQUIRED') return '需要先同意位置隐私说明。';
+    if (error.code == 'EMULATOR_LOCATION_UNAVAILABLE') {
+      return '模拟器尚未设置虚拟位置。';
+    }
+    return error.message?.trim().isNotEmpty == true
+        ? error.message!.trim()
+        : '地图服务暂时不可用，请稍后重试。';
+  }
+  if (error is StateError) return error.message;
+  return '地图服务暂时不可用，请稍后重试。';
+}
+
 class DeviceLocation {
   const DeviceLocation({
     required this.latitude,

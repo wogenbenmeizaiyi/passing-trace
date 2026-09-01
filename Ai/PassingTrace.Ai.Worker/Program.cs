@@ -16,11 +16,11 @@ builder.AddNpgsqlDbContext<TraceDbContext>(
         options.UseNpgsql(npgsql => npgsql.UseVector()));
 
 builder.Services.Configure<ObjectStorageOptions>(builder.Configuration.GetSection(ObjectStorageOptions.SectionName));
-builder.Services.Configure<QwenAiOptions>(builder.Configuration.GetSection(QwenAiOptions.SectionName));
+builder.Services.Configure<AiModelOptions>(builder.Configuration.GetSection(AiModelOptions.SectionName));
 builder.Services.AddSingleton<IObjectStorage, S3ObjectStorage>();
-builder.Services.AddSingleton<QwenClientFactory>();
-builder.Services.AddSingleton(provider => provider.GetRequiredService<QwenClientFactory>().ChatClient);
-builder.Services.AddSingleton(provider => provider.GetRequiredService<QwenClientFactory>().EmbeddingGenerator);
+builder.Services.AddSingleton<AiClientFactory>();
+builder.Services.AddSingleton(provider => provider.GetRequiredService<AiClientFactory>().SemanticChatClient);
+builder.Services.AddSingleton(provider => provider.GetRequiredService<AiClientFactory>().EmbeddingGenerator);
 builder.Services.AddScoped<SemanticPipeline>();
 builder.Services.AddSingleton<ImageDerivativeProcessor>();
 builder.Services.AddHostedService<AnalysisWorker>();

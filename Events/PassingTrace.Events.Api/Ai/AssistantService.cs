@@ -19,7 +19,7 @@ public sealed class AssistantService(
     PersonalRecordTools tools,
     IChatClient chatClient,
     IConnectionMultiplexer redis,
-    IOptions<QwenAiOptions> qwenOptions,
+    IOptions<AiModelOptions> aiOptions,
     ILoggerFactory loggerFactory,
     IServiceProvider services,
     TimeProvider clock)
@@ -99,7 +99,7 @@ public sealed class AssistantService(
         var summary = await db.ConversationSummaries.AsNoTracking()
             .Where(x => x.ConversationId == conversationId && x.UserId == currentUser.UserId)
             .Select(x => x.Content).FirstOrDefaultAsync(cancellationToken) ?? string.Empty;
-        var cacheKey = BuildCacheKey(currentUser.UserId, content, summary, watermark, qwenOptions.Value);
+        var cacheKey = BuildCacheKey(currentUser.UserId, content, summary, watermark, aiOptions.Value);
         var cache = redis.GetDatabase();
         var cached = await cache.StringGetAsync(cacheKey);
 
@@ -207,8 +207,8 @@ public sealed class AssistantService(
             Role = AiMessageRole.Assistant,
             Content = answer,
             EvidenceSnapshotJson = JsonSerializer.Serialize(evidence, JsonOptions),
-            Model = qwenOptions.Value.PrimaryModel,
-            PromptVersion = qwenOptions.Value.PromptVersion,
+            Model = aiOptions.Value.Assistant.PrimaryModel,
+            PromptVersion = aiOptions.Value.PromptVersion,
             DataWatermark = watermark,
             CreatedAt = now,
             ExpiresAt = now.AddDays(30),
@@ -275,10 +275,10 @@ public sealed class AssistantService(
         }
     }
 
-    private static string BuildCacheKey(long userId, string question, string summary, long watermark, QwenAiOptions options)
+    private static string BuildCacheKey(long userId, string question, string summary, long watermark, AiModelOptions options)
     {
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(
-            $"{userId}\n{question}\n{summary}\n{watermark}\n{options.PrimaryModel}\n{options.PromptVersion}"));
+            $"{userId}\n{question}\n{summary}\n{watermark}\n{options.Assistant.Provider}\n{options.Assistant.PrimaryModel}\n{options.PromptVersion}"));
         return $"passingtrace:ai:answer:{Convert.ToHexString(hash).ToLowerInvariant()}";
     }
 
