@@ -11,9 +11,29 @@
 | `@` | `A` | `154.36.164.76` |
 | `www` | `A` | `154.36.164.76` |
 | `auth` | `A` | `154.36.164.76` |
-| `files` | `A` | `154.36.164.76` |
 
-Caddy 需要公网放行 TCP `80`、TCP `443` 和可选的 UDP `443`。PostgreSQL、Redis、MinIO API 与 MinIO Console 不应对公网开放。
+Caddy 需要公网放行 TCP `80`、TCP `443` 和可选的 UDP `443`。PostgreSQL 和 Redis 不应对公网开放。生产附件不经过 Caddy 或云服务器，客户端通过 API 颁发的短效预签名 URL 直传、直读雨云对象存储。
+
+## 雨云 S3 对象存储
+
+本地开发仍由 AppHost 启动 MinIO，生产环境不启动 MinIO。雨云桶保持关闭「公共访问」，当前实例的配置是：
+
+- API Endpoint：`https://cn-nb1.rains3.com`
+- Bucket：`passingtrace`
+- 虚拟主机访问域名：`https://passingtrace.cn-nb1.rains3.com`
+- Region：`us-east-1`（S3 签名兼容值）
+- `ForcePathStyle=false`
+
+如果雨云控制台提供 CORS 设置，配置：
+
+- 来源：`https://passingtrace.com`
+- 方法：`GET`、`HEAD`、`PUT`
+- 允许请求头：`*`
+- 暴露响应头：`ETag`
+
+雨云 Access Key / Secret Key 只放在 GitHub production Environment Secrets 中，不进入 App 或仓库。如果密钥曾出现在截图、日志或聊天中，必须立即重新生成。
+
+APK 可以与附件放在同一个私有桶的 `releases/android/` 前缀下，由后端更新接口生成短效下载 URL；不需要开启公共访问，也不需要让 APK 经过云服务器。
 
 ## 首次部署
 
@@ -25,7 +45,7 @@ cp deploy/.env.example deploy/.env
 chmod 600 deploy/.env
 ```
 
-编辑 `deploy/.env`，填入随机密码、百炼 Key 与高德 Web 服务 Key。不要提交该文件。
+编辑 `deploy/.env`，填入随机密码、雨云 S3 密钥、百炼 Key 与高德 Web 服务 Key。不要提交该文件。
 
 ```bash
 sh deploy/update.sh
@@ -35,7 +55,8 @@ sh deploy/update.sh
 
 - Web 与 API：`https://passingtrace.com`
 - Identity：`https://auth.passingtrace.com`
-- 私有对象存储入口：`https://files.passingtrace.com`
+
+附件桶没有公开入口，只能通过 Events API 获取当前用户的短效访问地址。
 
 ## 后续更新
 
@@ -46,7 +67,7 @@ cd ~/projects/passing-trace
 sh deploy/update.sh
 ```
 
-脚本会从部署分支执行 `git pull --ff-only`，重新构建镜像并滚动替换容器。数据库、附件、Identity 证书和 Caddy 证书都存放在 Docker Volume 中，不会因容器重建而删除。
+脚本会从部署分支执行 `git pull --ff-only`，重新构建镜像并滚动替换容器。数据库、Identity 证书和 Caddy 证书保存在 Docker Volume 中，附件和 APK 保存在雨云对象存储中，都不会因容器重建而删除。
 
 ## GitHub Actions 自动部署
 
@@ -62,11 +83,19 @@ sh deploy/update.sh
 - `DEPLOY_SSH_PRIVATE_KEY`
 - `POSTGRES_PASSWORD`
 - `REDIS_PASSWORD`
-- `MINIO_SECRET_KEY`
+- `S3_ACCESS_KEY`
+- `S3_SECRET_KEY`
 - `CERTIFICATE_PASSWORD`
 - `REGISTRATION_BOOTSTRAP_CODE`
 - `QWEN_API_KEY`
 - `AMAP_WEB_SERVICE_KEY`
+
+并在 production Environment Variables 中配置：
+
+- `S3_ENDPOINT`：`https://cn-nb1.rains3.com`
+- `S3_PUBLIC_ENDPOINT`：`https://cn-nb1.rains3.com`
+- `S3_BUCKET`：`passingtrace`
+- `S3_REGION`：`us-east-1`
 
 工作流中的服务器地址、用户、部署目录和域名不是密钥，直接保存在工作流中。CI 使用专用 SSH Key，不应使用个人日常 SSH 私钥。
 
@@ -77,4 +106,4 @@ docker compose --env-file deploy/.env -f deploy/compose.yml ps
 docker compose --env-file deploy/.env -f deploy/compose.yml logs --tail=200 caddy identity events worker
 ```
 
-备份至少应包含 PostgreSQL 导出、MinIO 数据卷和 Identity 证书卷。不要把 `deploy/.env`、证书或数据库备份上传到 GitHub。
+备份至少应包含 PostgreSQL 导出、雨云对象存储数据和 Identity 证书卷。不要把 `deploy/.env`、证书或数据库备份上传到 GitHub。

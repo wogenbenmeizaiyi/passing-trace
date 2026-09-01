@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:passingtrace_mobile/auth_service.dart';
+import 'package:passingtrace_mobile/build_environment.dart';
 
 class _InvalidGrantAppAuth extends FlutterAppAuth {
   const _InvalidGrantAppAuth();
@@ -136,6 +137,40 @@ void main() {
         () => auth.setEventsApiBaseUrl('not a url'),
         throwsA(isA<AuthException>()),
       );
+    });
+
+    test('production 切换时清除旧环境凭据并锁定公网地址', () async {
+      store.addAll({
+        'identity_url': 'http://127.0.0.1:56229',
+        'events_api_url': 'http://127.0.0.1:54934',
+        'device_id': 'local-device',
+        'device_secret': 'local-secret',
+        'access_token': 'local-token',
+      });
+      const production = BuildEnvironment(
+        channel: 'production',
+        identityUrl: 'https://auth.passingtrace.com',
+        eventsApiUrl: 'https://passingtrace.com',
+        allowEndpointOverrides: false,
+      );
+      final productionAuth = AuthService(
+        storage: const FlutterSecureStorage(),
+        environment: production,
+      );
+
+      expect(await productionAuth.restore(), isNull);
+      expect(store, {'build_channel': 'production'});
+      expect(
+        await productionAuth.getEventsApiBaseUrl(),
+        'https://passingtrace.com',
+      );
+
+      await productionAuth.setEventsApiBaseUrl('http://127.0.0.1:54934');
+      expect(
+        await productionAuth.getEventsApiBaseUrl(),
+        'https://passingtrace.com',
+      );
+      expect(store, {'build_channel': 'production'});
     });
 
     test('refresh token 失效时只清除令牌并保留设备配置', () async {

@@ -26,7 +26,6 @@ PassingTrace 是一个面向个人的身份与活动记录平台。它以 Androi
 | --- | --- | --- |
 | Android App | `passingtrace-mobile/` | 注册与登录、记录生活、上传附件、定位地点、AI 问答、扫码批准电脑登录 |
 | Web | `passingtrace-web/` | 电脑端记录管理、AI 问答、分类与地点编辑、发起扫码登录 |
-| SSO Demo | `passingtrace-sso-demo/` | 独立验证 OIDC 单点登录流程 |
 
 ## 技术架构
 
@@ -68,7 +67,6 @@ PassingTrace.Core/               领域模型与共享抽象
 PassingTrace.Infrastructure/     EF Core、PostgreSQL 与数据访问
 passingtrace-mobile/             Flutter Android 主客户端
 passingtrace-web/                Vue 3 第一方 Web 客户端
-passingtrace-sso-demo/           OIDC SSO 验证站
 tests/                           后端集成测试
 deploy/                          部署相关文件
 ```
@@ -101,8 +99,6 @@ cd passing-trace
 dotnet restore PassingTrace.slnx
 
 cd passingtrace-web
-corepack pnpm install
-cd ..\passingtrace-sso-demo
 corepack pnpm install
 cd ..\passingtrace-mobile
 flutter pub get
@@ -154,7 +150,6 @@ dotnet run --project AppHost/AppHost.csproj
 默认开发地址：
 
 - Web：<http://localhost:5173>
-- SSO Demo：<http://localhost:5174>
 - Identity HTTP：<http://localhost:56229>
 - Events API HTTP：<http://localhost:54934>
 

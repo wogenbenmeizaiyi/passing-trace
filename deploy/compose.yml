@@ -33,18 +33,6 @@ services:
       REDIS_PASSWORD: ${REDIS_PASSWORD}
     networks: [backend]
 
-  minio:
-    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
-    restart: unless-stopped
-    command: ["server", "/data", "--console-address", ":9001"]
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
-      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
-      MINIO_API_CORS_ALLOW_ORIGIN: https://${WEB_DOMAIN}
-    volumes:
-      - minio-data:/data
-    networks: [backend]
-
   certificates:
     image: alpine:3.22
     profiles: [setup]
@@ -101,10 +89,15 @@ services:
       Database__AutoMigrate: "true"
       Identity__Authority: https://${AUTH_DOMAIN}/
       Identity__RequireHttpsMetadata: "true"
-      ObjectStorage__Endpoint: http://minio:9000
-      ObjectStorage__PublicEndpoint: https://${FILES_DOMAIN}
-      ObjectStorage__AccessKey: ${MINIO_ACCESS_KEY}
-      ObjectStorage__SecretKey: ${MINIO_SECRET_KEY}
+      ObjectStorage__Endpoint: ${S3_ENDPOINT}
+      ObjectStorage__PublicEndpoint: ${S3_PUBLIC_ENDPOINT}
+      ObjectStorage__AccessKey: ${S3_ACCESS_KEY}
+      ObjectStorage__SecretKey: ${S3_SECRET_KEY}
+      ObjectStorage__Bucket: ${S3_BUCKET}
+      ObjectStorage__Region: ${S3_REGION:-us-east-1}
+      ObjectStorage__ForcePathStyle: ${S3_FORCE_PATH_STYLE:-false}
+      ObjectStorage__CreateBucketIfMissing: "false"
+      ObjectStorage__ConfigureCors: "false"
       Qwen__ApiKey: ${QWEN_API_KEY}
       Amap__WebServiceKey: ${AMAP_WEB_SERVICE_KEY}
     depends_on:
@@ -112,8 +105,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      minio:
-        condition: service_started
       identity:
         condition: service_started
     networks: [backend]
@@ -127,16 +118,19 @@ services:
     environment:
       DOTNET_ENVIRONMENT: Production
       ConnectionStrings__trace: Host=postgres;Port=5432;Database=trace;Username=passingtrace;Password=${POSTGRES_PASSWORD}
-      ObjectStorage__Endpoint: http://minio:9000
-      ObjectStorage__PublicEndpoint: https://${FILES_DOMAIN}
-      ObjectStorage__AccessKey: ${MINIO_ACCESS_KEY}
-      ObjectStorage__SecretKey: ${MINIO_SECRET_KEY}
+      ObjectStorage__Endpoint: ${S3_ENDPOINT}
+      ObjectStorage__PublicEndpoint: ${S3_PUBLIC_ENDPOINT}
+      ObjectStorage__AccessKey: ${S3_ACCESS_KEY}
+      ObjectStorage__SecretKey: ${S3_SECRET_KEY}
+      ObjectStorage__Bucket: ${S3_BUCKET}
+      ObjectStorage__Region: ${S3_REGION:-us-east-1}
+      ObjectStorage__ForcePathStyle: ${S3_FORCE_PATH_STYLE:-false}
+      ObjectStorage__CreateBucketIfMissing: "false"
+      ObjectStorage__ConfigureCors: "false"
       Qwen__ApiKey: ${QWEN_API_KEY}
     depends_on:
       postgres:
         condition: service_healthy
-      minio:
-        condition: service_started
       events:
         condition: service_started
     networks: [backend]
@@ -153,7 +147,6 @@ services:
     environment:
       WEB_DOMAIN: ${WEB_DOMAIN}
       AUTH_DOMAIN: ${AUTH_DOMAIN}
-      FILES_DOMAIN: ${FILES_DOMAIN}
     ports:
       - "80:80"
       - "443:443"
@@ -166,8 +159,6 @@ services:
         condition: service_started
       events:
         condition: service_started
-      minio:
-        condition: service_started
     networks: [backend]
 
 networks:
@@ -176,7 +167,6 @@ networks:
 volumes:
   postgres-data:
   redis-data:
-  minio-data:
   identity-certificates:
   identity-data-protection:
   caddy-data:

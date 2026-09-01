@@ -11,6 +11,8 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 
+import 'build_environment.dart';
+
 const mobileClientId = 'passingtrace-mobile';
 const mobileRedirectUri = 'com.passingtrace.mobile:/oauth2redirect';
 const minimumPasswordLength = 8;
@@ -50,24 +52,16 @@ class AuthService {
     FlutterAppAuth? appAuth,
     http.Client? httpClient,
     AppLinks? appLinks,
+    this.environment = BuildEnvironment.current,
   }) : _storage = storage ?? const FlutterSecureStorage(),
        _appAuth = appAuth ?? const FlutterAppAuth(),
        _http = httpClient ?? http.Client(),
        _appLinks = appLinks ?? AppLinks();
 
-  // Android 真机通过 `adb reverse tcp:56229 tcp:56229` 访问本机 Identity。
-  // 其他环境可通过 `--dart-define=PASSINGTRACE_IDENTITY_URL=...` 覆盖。
-  static const defaultIdentityUrl = String.fromEnvironment(
-    'PASSINGTRACE_IDENTITY_URL',
-    defaultValue: 'http://localhost:56229',
-  );
-
-  /// 默认 Events API 地址：与 Identity 默认地址共用同一外网主机，端口切换到
-  /// `PassingTrace.Events.Api` 的 HTTP profile（见 launchSettings.json）。
-  static const defaultEventsApiUrl = String.fromEnvironment(
-    'PASSINGTRACE_EVENTS_API_URL',
-    defaultValue: 'http://localhost:54934',
-  );
+  static String get defaultIdentityUrl => BuildEnvironment.current.identityUrl;
+  static String get defaultEventsApiUrl =>
+      BuildEnvironment.current.eventsApiUrl;
+  static const _buildChannelKey = 'build_channel';
   static const _identityUrlKey = 'identity_url';
   static const _eventsApiUrlKey = 'events_api_url';
   static const _deviceIdKey = 'device_id';
@@ -81,18 +75,33 @@ class AuthService {
   final FlutterAppAuth _appAuth;
   final http.Client _http;
   final AppLinks _appLinks;
+  final BuildEnvironment environment;
   AuthSession? _latestSession;
   Future<AuthSession>? _refreshInFlight;
 
   Future<AuthSession?> restore() async {
     final values = await _storage.readAll();
+    final storedChannel = values[_buildChannelKey];
+    if (storedChannel != environment.channel) {
+      // Legacy builds did not persist a channel. Preserve their local session
+      // only for the internal channel; production must never inherit localhost
+      // endpoints or credentials issued by a development Identity server.
+      if (environment.isProduction || storedChannel != null) {
+        await _storage.deleteAll();
+        await _storage.write(key: _buildChannelKey, value: environment.channel);
+        return null;
+      }
+      await _storage.write(key: _buildChannelKey, value: environment.channel);
+    }
     final deviceId = values[_deviceIdKey];
     final deviceSecret = values[_deviceSecretKey];
     if (deviceId == null || deviceSecret == null) return null;
 
     final expiresText = values[_expiresAtKey];
     final session = AuthSession(
-      identityBaseUrl: values[_identityUrlKey] ?? defaultIdentityUrl,
+      identityBaseUrl: environment.allowEndpointOverrides
+          ? values[_identityUrlKey] ?? environment.identityUrl
+          : environment.identityUrl,
       deviceId: deviceId,
       deviceSecret: deviceSecret,
       accessToken: values[_accessTokenKey],
@@ -113,7 +122,7 @@ class AuthService {
     required String bootstrapCode,
     required String deviceName,
   }) async {
-    final baseUrl = _normalizeBaseUrl(identityBaseUrl);
+    final baseUrl = _resolveIdentityUrl(identityBaseUrl);
     final pkce = _createPkce();
     final state = _randomSecret(32);
     final nonce = _randomSecret(32);
@@ -140,6 +149,7 @@ class AuthService {
     );
 
     await _storage.write(key: _identityUrlKey, value: baseUrl);
+    await _storage.write(key: _buildChannelKey, value: environment.channel);
     await _storage.write(
       key: _deviceIdKey,
       value: registration['deviceId'] as String,
@@ -168,7 +178,7 @@ class AuthService {
     required String password,
     required String deviceName,
   }) async {
-    final baseUrl = _normalizeBaseUrl(identityBaseUrl);
+    final baseUrl = _resolveIdentityUrl(identityBaseUrl);
     final pkce = _createPkce();
     final state = _randomSecret(32);
     final nonce = _randomSecret(32);
@@ -184,6 +194,7 @@ class AuthService {
     });
 
     await _storage.write(key: _identityUrlKey, value: baseUrl);
+    await _storage.write(key: _buildChannelKey, value: environment.channel);
     await _storage.write(
       key: _deviceIdKey,
       value: response['deviceId'] as String,
@@ -350,13 +361,18 @@ class AuthService {
 
   /// 读取已保存的 Events API 地址；若未保存则回落到默认值。
   Future<String> getEventsApiBaseUrl() async {
+    if (!environment.allowEndpointOverrides) return environment.eventsApiUrl;
     final stored = await _storage.read(key: _eventsApiUrlKey);
-    if (stored == null || stored.isEmpty) return defaultEventsApiUrl;
+    if (stored == null || stored.isEmpty) return environment.eventsApiUrl;
     return _normalizeBaseUrl(stored);
   }
 
   /// 持久化一个新的 Events API 地址。空字符串视作"重置为默认值"。
   Future<void> setEventsApiBaseUrl(String? value) async {
+    if (!environment.allowEndpointOverrides) {
+      await _storage.delete(key: _eventsApiUrlKey);
+      return;
+    }
     if (value == null || value.trim().isEmpty) {
       await _storage.delete(key: _eventsApiUrlKey);
       return;
@@ -364,6 +380,11 @@ class AuthService {
     final normalized = _normalizeBaseUrl(value);
     await _storage.write(key: _eventsApiUrlKey, value: normalized);
   }
+
+  String _resolveIdentityUrl(String requestedUrl) =>
+      environment.allowEndpointOverrides
+      ? _normalizeBaseUrl(requestedUrl)
+      : _normalizeBaseUrl(environment.identityUrl);
 
   Future<AuthSession> _authorize({
     required String baseUrl,

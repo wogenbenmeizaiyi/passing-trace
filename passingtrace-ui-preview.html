@@ -1,0 +1,1080 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light" data-palette="pine">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="light dark" />
+  <title>PassingTrace · 静迹主题交互样稿</title>
+  <style>
+    :root {
+      color-scheme: light;
+      /* Primitive tokens: palette values are the only layer themes override. */
+      --tone-canvas: #e9ede8;
+      --tone-canvas-deep: #dce3dd;
+      --tone-surface: #ffffff;
+      --tone-surface-raised: #ffffff;
+      --tone-surface-soft: #f4f7f3;
+      --tone-surface-tint: #e5f0eb;
+      --tone-ink: #1c2520;
+      --tone-ink-secondary: #526159;
+      --tone-ink-tertiary: #68756d;
+      --tone-line: #d9e1db;
+      --tone-line-strong: #c4cec7;
+      --tone-primary: #2f6b57;
+      --tone-primary-strong: #245443;
+      --tone-on-primary: #ffffff;
+      --tone-primary-soft: #dcebe4;
+      --tone-accent: #c96c47;
+      --tone-accent-soft: #f6e3da;
+      --tone-focus: rgba(47, 107, 87, 0.28);
+
+      /* Semantic tokens: components only consume this layer. */
+      --canvas: var(--tone-canvas);
+      --canvas-deep: var(--tone-canvas-deep);
+      --surface: var(--tone-surface);
+      --surface-raised: var(--tone-surface-raised);
+      --surface-soft: var(--tone-surface-soft);
+      --surface-tint: var(--tone-surface-tint);
+      --ink: var(--tone-ink);
+      --ink-secondary: var(--tone-ink-secondary);
+      --ink-tertiary: var(--tone-ink-tertiary);
+      --line: var(--tone-line);
+      --line-strong: var(--tone-line-strong);
+      --primary: var(--tone-primary);
+      --primary-strong: var(--tone-primary-strong);
+      --on-primary: var(--tone-on-primary);
+      --primary-soft: var(--tone-primary-soft);
+      --accent: var(--tone-accent);
+      --accent-soft: var(--tone-accent-soft);
+      --warning: #a56712;
+      --danger: #b4443d;
+      --success: #317251;
+      --scrim: rgba(16, 24, 20, 0.52);
+      --shadow-1: 0 1px 2px rgba(25, 42, 33, 0.05), 0 6px 18px rgba(25, 42, 33, 0.06);
+      --shadow-2: 0 18px 48px rgba(25, 42, 33, 0.16);
+      --radius-sm: 8px;
+      --radius-md: 12px;
+      --radius-lg: 18px;
+      --radius-xl: 28px;
+      --space-1: 4px;
+      --space-2: 8px;
+      --space-3: 12px;
+      --space-4: 16px;
+      --space-5: 20px;
+      --space-6: 24px;
+      --space-8: 32px;
+      --space-10: 40px;
+      --focus: 0 0 0 3px var(--tone-focus);
+      --motion-fast: 140ms;
+      --motion-base: 220ms;
+      --ease-out: cubic-bezier(.2, .8, .2, 1);
+      font-family: Inter, "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+      font-synthesis: none;
+    }
+
+    html[data-theme="dark"] {
+      color-scheme: dark;
+      --tone-canvas: #101713;
+      --tone-canvas-deep: #0b100d;
+      --tone-surface: #18211c;
+      --tone-surface-raised: #202b25;
+      --tone-surface-soft: #1d2822;
+      --tone-surface-tint: #243a31;
+      --tone-ink: #f1f5f2;
+      --tone-ink-secondary: #bcc8c0;
+      --tone-ink-tertiary: #92a097;
+      --tone-line: #334139;
+      --tone-line-strong: #46564c;
+      --tone-primary: #75b89f;
+      --tone-primary-strong: #8dcbb4;
+      --tone-on-primary: #102019;
+      --tone-primary-soft: #29483b;
+      --tone-accent: #e29a79;
+      --tone-accent-soft: #4c3027;
+      --tone-focus: rgba(117, 184, 159, 0.34);
+      --warning: #e5b05d;
+      --danger: #f18a82;
+      --success: #83c9a3;
+      --scrim: rgba(0, 0, 0, 0.66);
+      --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.2), 0 6px 18px rgba(0, 0, 0, 0.16);
+      --shadow-2: 0 18px 48px rgba(0, 0, 0, 0.38);
+    }
+
+    /* Palette 02 · 潮汐 */
+    html[data-palette="tide"] {
+      --tone-canvas: #e8eef0;
+      --tone-canvas-deep: #d9e3e6;
+      --tone-surface: #ffffff;
+      --tone-surface-raised: #ffffff;
+      --tone-surface-soft: #f2f6f7;
+      --tone-surface-tint: #e0edf1;
+      --tone-ink: #17252a;
+      --tone-ink-secondary: #4c6067;
+      --tone-ink-tertiary: #64777e;
+      --tone-line: #d6e0e3;
+      --tone-line-strong: #bbcbd0;
+      --tone-primary: #2b6678;
+      --tone-primary-strong: #215364;
+      --tone-on-primary: #ffffff;
+      --tone-primary-soft: #d8eaf0;
+      --tone-accent: #c76849;
+      --tone-accent-soft: #f5e1d9;
+      --tone-focus: rgba(43, 102, 120, 0.28);
+    }
+    html[data-theme="dark"][data-palette="tide"] {
+      --tone-canvas: #0d171b;
+      --tone-canvas-deep: #091014;
+      --tone-surface: #142127;
+      --tone-surface-raised: #1c2d34;
+      --tone-surface-soft: #17262c;
+      --tone-surface-tint: #203b45;
+      --tone-ink: #edf4f6;
+      --tone-ink-secondary: #b5c7cd;
+      --tone-ink-tertiary: #8da3aa;
+      --tone-line: #30444b;
+      --tone-line-strong: #435b63;
+      --tone-primary: #76b3c6;
+      --tone-primary-strong: #92c7d7;
+      --tone-on-primary: #0e1d22;
+      --tone-primary-soft: #254553;
+      --tone-accent: #e7a184;
+      --tone-accent-soft: #4c3127;
+      --tone-focus: rgba(118, 179, 198, 0.34);
+    }
+
+    /* Palette 03 · 暮紫 */
+    html[data-palette="plum"] {
+      --tone-canvas: #eeeaf0;
+      --tone-canvas-deep: #e2dae5;
+      --tone-surface: #ffffff;
+      --tone-surface-raised: #ffffff;
+      --tone-surface-soft: #f7f4f8;
+      --tone-surface-tint: #eee5f1;
+      --tone-ink: #291f2c;
+      --tone-ink-secondary: #625568;
+      --tone-ink-tertiary: #77697c;
+      --tone-line: #e2d9e5;
+      --tone-line-strong: #cfc2d3;
+      --tone-primary: #725a7d;
+      --tone-primary-strong: #5c4667;
+      --tone-on-primary: #ffffff;
+      --tone-primary-soft: #e9ddec;
+      --tone-accent: #b95863;
+      --tone-accent-soft: #f4dfe2;
+      --tone-focus: rgba(114, 90, 125, 0.28);
+    }
+    html[data-theme="dark"][data-palette="plum"] {
+      --tone-canvas: #18131a;
+      --tone-canvas-deep: #100c12;
+      --tone-surface: #211a24;
+      --tone-surface-raised: #2c2330;
+      --tone-surface-soft: #271f2a;
+      --tone-surface-tint: #3b2d40;
+      --tone-ink: #f5f0f6;
+      --tone-ink-secondary: #cbbfce;
+      --tone-ink-tertiary: #a596aa;
+      --tone-line: #433749;
+      --tone-line-strong: #5b4b62;
+      --tone-primary: #c1a1cb;
+      --tone-primary-strong: #d2b8da;
+      --tone-on-primary: #271c2a;
+      --tone-primary-soft: #493751;
+      --tone-accent: #e49aa1;
+      --tone-accent-soft: #503036;
+      --tone-focus: rgba(193, 161, 203, 0.34);
+    }
+
+    /* Palette 04 · 沙丘 */
+    html[data-palette="dune"] {
+      --tone-canvas: #eeece5;
+      --tone-canvas-deep: #e2ded0;
+      --tone-surface: #fffdf9;
+      --tone-surface-raised: #fffdf9;
+      --tone-surface-soft: #f7f4ec;
+      --tone-surface-tint: #f2ebd6;
+      --tone-ink: #28241a;
+      --tone-ink-secondary: #665f4d;
+      --tone-ink-tertiary: #746a54;
+      --tone-line: #e3ddcd;
+      --tone-line-strong: #cec5ae;
+      --tone-primary: #77622a;
+      --tone-primary-strong: #5f4e20;
+      --tone-on-primary: #ffffff;
+      --tone-primary-soft: #ece4c7;
+      --tone-accent: #b85f38;
+      --tone-accent-soft: #f4e1d5;
+      --tone-focus: rgba(119, 98, 42, 0.30);
+    }
+    html[data-theme="dark"][data-palette="dune"] {
+      --tone-canvas: #181710;
+      --tone-canvas-deep: #100f0b;
+      --tone-surface: #222017;
+      --tone-surface-raised: #2d2a1e;
+      --tone-surface-soft: #28251b;
+      --tone-surface-tint: #403a25;
+      --tone-ink: #f5f2e9;
+      --tone-ink-secondary: #cbc5b3;
+      --tone-ink-tertiary: #a59d85;
+      --tone-line: #443f30;
+      --tone-line-strong: #5c5540;
+      --tone-primary: #c9b56b;
+      --tone-primary-strong: #dac983;
+      --tone-on-primary: #251f0e;
+      --tone-primary-soft: #4a4228;
+      --tone-accent: #e7a178;
+      --tone-accent-soft: #503328;
+      --tone-focus: rgba(201, 181, 107, 0.34);
+    }
+
+    * { box-sizing: border-box; }
+    html { min-width: 320px; background: var(--canvas); }
+    body { margin: 0; overflow-x: hidden; color: var(--ink); background: var(--canvas); line-height: 1.5; }
+    button, input, textarea { color: inherit; font: inherit; }
+    button { cursor: pointer; touch-action: manipulation; }
+    button:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus-visible {
+      outline: 0;
+      box-shadow: var(--focus);
+    }
+    button:disabled { cursor: not-allowed; opacity: .45; }
+    [hidden] { display: none !important; }
+    svg { display: block; }
+    .svg-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
+    .icon { width: 22px; height: 22px; flex: 0 0 auto; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .icon-sm { width: 18px; height: 18px; }
+    .icon-lg { width: 26px; height: 26px; }
+    .sr-only { width: 1px; height: 1px; padding: 0; position: absolute; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+    .skip-link { position: fixed; z-index: 2000; top: 8px; left: 8px; padding: 10px 14px; color: var(--on-primary); background: var(--primary); transform: translateY(-150%); }
+    .skip-link:focus { transform: translateY(0); }
+
+    .studio-header {
+      min-height: 72px;
+      padding: 12px clamp(16px, 4vw, 48px);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      border-bottom: 1px solid var(--line);
+      background: color-mix(in srgb, var(--surface) 88%, transparent);
+      backdrop-filter: blur(16px);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .studio-brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+    .brand-mark { width: 40px; height: 40px; display: grid; place-items: center; color: var(--on-primary); background: var(--primary); border-radius: 13px; }
+    .brand-mark .icon { width: 25px; height: 25px; stroke-width: 2; }
+    .studio-brand strong { display: block; font-size: 16px; letter-spacing: -.02em; }
+    .studio-brand span { display: block; margin-top: 1px; color: var(--ink-secondary); font-size: 12px; }
+    .header-actions { display: flex; align-items: center; gap: 8px; }
+    .theme-button { min-width: 48px; min-height: 48px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface); transition: background var(--motion-fast), border-color var(--motion-fast); }
+    .theme-button:hover { background: var(--surface-soft); border-color: var(--line-strong); }
+
+    .studio-main {
+      width: min(1440px, 100%);
+      min-height: calc(100dvh - 72px);
+      margin: 0 auto;
+      padding: clamp(20px, 4vw, 48px);
+      display: grid;
+      grid-template-columns: minmax(250px, 320px) minmax(420px, 1fr) minmax(240px, 300px);
+      gap: clamp(24px, 4vw, 56px);
+      align-items: start;
+    }
+    .studio-main > * { min-width: 0; }
+
+    .panel-label { margin: 0 0 8px; color: var(--primary); font-size: 12px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+    .design-notes h1 { margin: 0; max-width: 11ch; font-size: clamp(30px, 3.2vw, 48px); line-height: 1.12; letter-spacing: -.045em; }
+    .design-notes .intro { margin: 20px 0 28px; color: var(--ink-secondary); font-size: 15px; line-height: 1.75; }
+    .screen-picker { display: grid; gap: 8px; margin-bottom: 32px; }
+    .screen-picker button {
+      min-width: 0;
+      min-height: 48px;
+      padding: 0 14px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      border: 1px solid transparent;
+      border-radius: var(--radius-md);
+      color: var(--ink-secondary);
+      background: transparent;
+      text-align: left;
+      transition: color var(--motion-fast), background var(--motion-fast), border-color var(--motion-fast);
+    }
+    .screen-picker button:hover { color: var(--ink); background: var(--surface-soft); }
+    .screen-picker button[aria-pressed="true"] { color: var(--primary-strong); background: var(--primary-soft); border-color: color-mix(in srgb, var(--primary) 25%, transparent); font-weight: 700; }
+    .screen-picker .index { width: 24px; font-size: 12px; font-variant-numeric: tabular-nums; opacity: .65; }
+
+    .principles { padding-top: 24px; border-top: 1px solid var(--line); }
+    .principles h2, .token-panel h2 { margin: 0 0 14px; font-size: 14px; }
+    .principles ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 11px; color: var(--ink-secondary); font-size: 13px; }
+    .principles li { display: grid; grid-template-columns: 18px 1fr; gap: 8px; }
+    .principles li::before { content: ""; width: 6px; height: 6px; margin-top: 7px; border-radius: 50%; background: var(--accent); }
+
+    .preview-stage { width: 100%; min-width: 0; display: grid; place-items: start center; }
+    .phone-shell {
+      width: min(390px, 100%);
+      max-width: 100%;
+      height: min(844px, calc(100dvh - 118px));
+      min-height: 660px;
+      padding: 9px;
+      position: sticky;
+      top: 92px;
+      border: 1px solid color-mix(in srgb, var(--ink) 22%, transparent);
+      border-radius: 40px;
+      background: #111713;
+      box-shadow: 0 40px 90px rgba(27, 46, 36, .24), inset 0 0 0 2px rgba(255,255,255,.06);
+    }
+    .phone-viewport { width: 100%; height: 100%; position: relative; overflow: hidden; border-radius: 32px; color: var(--ink); background: var(--surface-soft); }
+    .system-bar { height: 32px; padding: 7px 18px 0; display: flex; align-items: flex-start; justify-content: space-between; color: var(--ink); background: var(--surface); font-size: 11px; font-weight: 700; }
+    .system-icons { display: flex; align-items: center; gap: 5px; }
+    .system-icons i { display: block; width: 12px; height: 7px; border: 1.5px solid currentColor; border-radius: 2px; }
+    .app-frame { height: calc(100% - 32px); position: relative; overflow: hidden; }
+    .app-screen { height: 100%; display: none; flex-direction: column; background: var(--surface-soft); }
+    .app-screen.is-active { display: flex; animation: screen-in var(--motion-base) var(--ease-out); }
+    @keyframes screen-in { from { opacity: .4; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+
+    .app-bar { min-height: 64px; padding: 8px 12px; display: grid; grid-template-columns: 48px 1fr 48px; align-items: center; color: var(--ink); background: var(--surface); border-bottom: 1px solid var(--line); }
+    .app-bar h2 { margin: 0; font-size: 18px; line-height: 1.2; letter-spacing: -.02em; text-align: center; }
+    .icon-button { width: 48px; height: 48px; padding: 0; display: grid; place-items: center; border: 0; border-radius: 12px; color: var(--ink); background: transparent; transition: background var(--motion-fast), color var(--motion-fast); }
+    .icon-button:hover { background: var(--surface-soft); }
+    .icon-button:active { background: var(--primary-soft); color: var(--primary-strong); }
+
+    .screen-scroll { flex: 1; overflow: auto; overscroll-behavior: contain; scrollbar-width: none; }
+    .screen-scroll::-webkit-scrollbar { display: none; }
+    .record-list { padding: 20px 18px 104px; }
+    .list-heading { margin: 0 0 4px; font-size: 26px; line-height: 1.25; letter-spacing: -.04em; }
+    .list-subtitle { margin: 0 0 26px; color: var(--ink-secondary); font-size: 13px; }
+    .day-section + .day-section { margin-top: 28px; }
+    .day-label { margin: 0 0 12px; display: flex; align-items: baseline; gap: 8px; }
+    .day-label strong { font-size: 15px; }
+    .day-label span { color: var(--ink-tertiary); font-size: 12px; }
+
+    .timeline { position: relative; display: grid; gap: 12px; }
+    .timeline::before { content: ""; position: absolute; top: 8px; bottom: 8px; left: 5px; width: 1px; background: var(--line-strong); }
+    .record-row { position: relative; padding-left: 22px; }
+    .record-row::before { content: ""; position: absolute; z-index: 1; top: 21px; left: 1px; width: 9px; height: 9px; border: 2px solid var(--surface-soft); border-radius: 50%; background: var(--primary); box-shadow: 0 0 0 1px var(--primary); }
+    .record-card { width: 100%; padding: 16px; display: block; border: 1px solid var(--line); border-radius: var(--radius-lg); color: inherit; background: var(--surface); box-shadow: var(--shadow-1); text-align: left; transition: border-color var(--motion-fast), background var(--motion-fast); }
+    .record-card:hover { border-color: color-mix(in srgb, var(--primary) 42%, var(--line)); }
+    .record-card:active { background: var(--surface-tint); }
+    .record-meta { margin-bottom: 7px; display: flex; justify-content: space-between; gap: 12px; color: var(--ink-tertiary); font-size: 11px; }
+    .record-card h3 { margin: 0; font-size: 16px; line-height: 1.4; letter-spacing: -.015em; }
+    .record-card p { margin: 7px 0 0; color: var(--ink-secondary); font-size: 13px; line-height: 1.6; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .record-footer { margin-top: 13px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .tag-list { min-width: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+    .tag { min-height: 26px; padding: 3px 9px; display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--line); border-radius: 999px; color: var(--ink-secondary); background: var(--surface-soft); font-size: 11px; white-space: nowrap; }
+    .tag.category { color: var(--primary-strong); background: var(--primary-soft); border-color: transparent; font-weight: 700; }
+    .tag-ai { color: var(--accent); }
+    .tag-ai .icon { width: 12px; height: 12px; stroke-width: 2; }
+    .location-mini { display: flex; align-items: center; gap: 3px; color: var(--ink-tertiary); font-size: 11px; white-space: nowrap; }
+
+    .bottom-nav { min-height: 72px; padding: 6px 52px 10px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 32px; position: absolute; z-index: 15; right: 0; bottom: 0; left: 0; border-top: 1px solid var(--line); background: color-mix(in srgb, var(--surface) 94%, transparent); backdrop-filter: blur(14px); }
+    .nav-item { min-height: 52px; padding: 4px 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; border: 0; border-radius: var(--radius-md); color: var(--ink-tertiary); background: transparent; font-size: 11px; }
+    .nav-item .active-mark { width: 22px; height: 2px; border-radius: 2px; background: transparent; }
+    .nav-item[aria-current="page"] { color: var(--primary-strong); font-weight: 700; }
+    .nav-item[aria-current="page"] .active-mark { background: var(--primary); }
+
+    .assistant-scroll { padding: 20px 16px 106px; }
+    .assistant-intro { padding: 8px 8px 28px; }
+    .assistant-intro .mark { width: 42px; height: 42px; margin-bottom: 14px; display: grid; place-items: center; border-radius: 14px; color: var(--primary-strong); background: var(--primary-soft); }
+    .assistant-intro h3 { margin: 0; font-size: 22px; letter-spacing: -.035em; }
+    .assistant-intro p { margin: 8px 0 0; color: var(--ink-secondary); font-size: 13px; line-height: 1.7; }
+    .suggestions { margin-top: 18px; display: grid; gap: 8px; }
+    .suggestion { min-height: 46px; padding: 10px 12px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid var(--line); border-radius: var(--radius-md); color: var(--ink-secondary); background: var(--surface); text-align: left; font-size: 12px; }
+    .suggestion:hover { border-color: var(--primary); color: var(--ink); }
+    .message { max-width: 88%; margin-bottom: 14px; }
+    .message.user { margin-left: auto; padding: 11px 14px; border-radius: 18px 18px 5px 18px; color: var(--on-primary); background: var(--primary); font-size: 13px; }
+    .message.assistant { padding: 15px; border: 1px solid var(--line); border-radius: 5px 18px 18px 18px; background: var(--surface); box-shadow: var(--shadow-1); }
+    .message.assistant p { margin: 0 0 10px; font-size: 13px; line-height: 1.7; }
+    .message.assistant ul { margin: 0 0 12px; padding-left: 20px; color: var(--ink-secondary); font-size: 13px; line-height: 1.65; }
+    .evidence-link { width: 100%; min-height: 48px; padding: 9px 10px; display: grid; grid-template-columns: 28px 1fr auto; align-items: center; gap: 8px; border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--line)); border-radius: 10px; color: var(--ink); background: var(--accent-soft); text-align: left; }
+    .evidence-link strong { display: block; overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+    .evidence-link span { display: block; margin-top: 1px; color: var(--ink-secondary); font-size: 10px; }
+    .composer { position: absolute; z-index: 16; right: 10px; bottom: 80px; left: 10px; padding: 7px 7px 7px 14px; display: grid; grid-template-columns: 1fr 48px; align-items: end; gap: 6px; border: 1px solid var(--line-strong); border-radius: 18px; background: var(--surface); box-shadow: var(--shadow-2); }
+    .composer textarea { min-height: 42px; max-height: 96px; padding: 10px 0 6px; resize: none; border: 0; outline: 0; background: transparent; font-size: 13px; line-height: 1.5; }
+    .send-button { width: 48px; height: 48px; display: grid; place-items: center; border: 0; border-radius: 14px; color: var(--on-primary); background: var(--primary); }
+
+    .form-scroll { padding: 22px 18px 110px; background: var(--surface); }
+    .kind-tabs { margin: -6px 0 24px; display: grid; grid-template-columns: 1fr 1fr; border-bottom: 1px solid var(--line); }
+    .kind-tab { min-height: 48px; position: relative; border: 0; color: var(--ink-tertiary); background: transparent; font-size: 13px; }
+    .kind-tab[aria-selected="true"] { color: var(--primary-strong); font-weight: 700; }
+    .kind-tab[aria-selected="true"]::after { content: ""; position: absolute; right: 18px; bottom: -1px; left: 18px; height: 2px; border-radius: 2px 2px 0 0; background: var(--primary); }
+    .field { margin-bottom: 20px; }
+    .field > label, .field-label { margin-bottom: 8px; display: block; color: var(--ink-secondary); font-size: 12px; font-weight: 700; }
+    .text-input, .body-input { width: 100%; border: 1px solid var(--line-strong); border-radius: var(--radius-md); color: var(--ink); background: var(--surface-soft); transition: border-color var(--motion-fast), box-shadow var(--motion-fast); }
+    .text-input { min-height: 50px; padding: 0 14px; }
+    .body-input { min-height: 150px; padding: 14px; resize: vertical; line-height: 1.7; vertical-align: top; }
+    .text-input:focus, .body-input:focus { border-color: var(--primary); background: var(--surface); }
+    .body-input::placeholder { color: var(--ink-tertiary); }
+    .form-row-button { width: 100%; min-height: 56px; padding: 8px 10px; display: grid; grid-template-columns: 36px 1fr 24px; align-items: center; gap: 10px; border: 1px solid var(--line); border-radius: var(--radius-md); color: var(--ink); background: var(--surface); text-align: left; }
+    .row-icon { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 10px; color: var(--primary-strong); background: var(--primary-soft); }
+    .row-copy strong { display: block; font-size: 13px; }
+    .row-copy span { display: block; margin-top: 2px; color: var(--ink-tertiary); font-size: 11px; }
+    .attachment-row { display: flex; gap: 8px; }
+    .attachment-button { min-height: 48px; padding: 0 14px; display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--line-strong); border-radius: var(--radius-md); background: var(--surface); font-size: 12px; }
+    details { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+    details summary { min-height: 52px; display: flex; align-items: center; justify-content: space-between; gap: 12px; cursor: pointer; list-style: none; color: var(--ink-secondary); font-size: 12px; font-weight: 700; }
+    details summary::-webkit-details-marker { display: none; }
+    .tag-editor { padding: 0 0 16px; display: flex; flex-wrap: wrap; gap: 8px; }
+    .tag-choice { min-height: 36px; padding: 0 12px; border: 1px solid var(--line); border-radius: 999px; color: var(--ink-secondary); background: var(--surface-soft); font-size: 11px; }
+    .tag-choice[aria-pressed="true"] { color: var(--primary-strong); border-color: var(--primary); background: var(--primary-soft); font-weight: 700; }
+    .form-action-bar { position: absolute; z-index: 12; right: 0; bottom: 0; left: 0; min-height: 78px; padding: 12px 18px 16px; border-top: 1px solid var(--line); background: var(--surface); }
+    .primary-button { width: 100%; min-height: 50px; border: 0; border-radius: var(--radius-md); color: var(--on-primary); background: var(--primary); font-weight: 700; }
+    .primary-button:hover { background: var(--primary-strong); }
+
+    .drawer-layer, .sheet-layer { position: absolute; z-index: 80; inset: 0; pointer-events: none; visibility: hidden; }
+    .drawer-layer.is-open, .sheet-layer.is-open { pointer-events: auto; visibility: visible; }
+    .drawer-scrim, .sheet-scrim { position: absolute; inset: 0; padding: 0; border: 0; background: var(--scrim); opacity: 0; transition: opacity var(--motion-base); }
+    .drawer-layer.is-open .drawer-scrim, .sheet-layer.is-open .sheet-scrim { opacity: 1; }
+    .drawer-panel { width: min(82%, 300px); height: 100%; padding: 20px 14px; position: relative; z-index: 1; display: flex; flex-direction: column; border-right: 1px solid var(--line); background: var(--surface); box-shadow: var(--shadow-2); transform: translateX(-102%); transition: transform var(--motion-base) var(--ease-out); }
+    .drawer-layer.is-open .drawer-panel { transform: translateX(0); }
+    .drawer-head { min-height: 72px; padding: 5px 2px 14px 10px; display: grid; grid-template-columns: 1fr 48px; align-items: center; gap: 8px; border-bottom: 1px solid var(--line); }
+    .drawer-user strong { display: block; font-size: 17px; }
+    .drawer-user span { display: block; margin-top: 3px; color: var(--ink-tertiary); font-size: 11px; }
+    .scan-button { width: 48px; height: 48px; display: grid; place-items: center; border: 1px solid var(--line-strong); border-radius: 14px; color: var(--primary-strong); background: var(--primary-soft); }
+    .drawer-nav { padding: 14px 0; display: grid; gap: 4px; }
+    .drawer-nav button { min-height: 50px; padding: 0 12px; display: grid; grid-template-columns: 30px 1fr auto; align-items: center; gap: 10px; border: 0; border-radius: var(--radius-md); color: var(--ink-secondary); background: transparent; text-align: left; }
+    .drawer-nav button:hover { color: var(--ink); background: var(--surface-soft); }
+    .drawer-nav button.is-current { color: var(--primary-strong); background: var(--primary-soft); font-weight: 700; }
+    .drawer-secondary { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--line); }
+    .drawer-hint { padding: 10px 12px 0; color: var(--ink-tertiary); font-size: 10px; line-height: 1.5; }
+
+    .bottom-sheet { min-height: 74%; position: absolute; z-index: 1; right: 0; bottom: 0; left: 0; border-radius: 24px 24px 0 0; background: var(--surface); box-shadow: var(--shadow-2); transform: translateY(102%); transition: transform var(--motion-base) var(--ease-out); overflow: hidden; }
+    .sheet-layer.is-open .bottom-sheet { transform: translateY(0); }
+    .sheet-grabber { width: 36px; height: 4px; margin: 9px auto 6px; border-radius: 2px; background: var(--line-strong); }
+    .sheet-head { min-height: 52px; padding: 0 14px 8px; display: grid; grid-template-columns: 48px 1fr 48px; align-items: center; }
+    .sheet-head h3 { margin: 0; font-size: 16px; text-align: center; }
+    .map { height: 168px; position: relative; overflow: hidden; background-color: #dfe8df; background-image: linear-gradient(22deg, transparent 45%, rgba(255,255,255,.8) 46%, rgba(255,255,255,.8) 51%, transparent 52%), linear-gradient(112deg, transparent 37%, rgba(255,255,255,.65) 38%, rgba(255,255,255,.65) 43%, transparent 44%); cursor: crosshair; }
+    html[data-theme="dark"] .map { filter: brightness(.7) saturate(.7); }
+    .map::before, .map::after { content: ""; position: absolute; background: rgba(116, 153, 131, .4); border-radius: 50%; }
+    .map::before { width: 110px; height: 70px; left: -18px; top: 18px; }
+    .map::after { width: 145px; height: 90px; right: -28px; bottom: -35px; }
+    .map-pin { width: 38px; height: 46px; position: absolute; z-index: 2; left: 50%; top: 48%; display: grid; place-items: start center; color: var(--primary-strong); transform: translate(-50%, -100%); filter: drop-shadow(0 4px 5px rgba(0,0,0,.2)); transition: left var(--motion-fast), top var(--motion-fast); }
+    .map-pin .icon { width: 38px; height: 38px; fill: var(--surface); stroke-width: 2.2; }
+    .map-label { position: absolute; z-index: 3; left: 10px; bottom: 9px; padding: 5px 8px; border-radius: 7px; color: #234538; background: rgba(255,255,255,.88); font-size: 9px; }
+    .places { padding: 12px 14px 24px; }
+    .search-field { min-height: 48px; padding: 0 11px; display: grid; grid-template-columns: 24px 1fr 32px; align-items: center; gap: 7px; border: 1px solid var(--line-strong); border-radius: var(--radius-md); background: var(--surface-soft); }
+    .search-field input { min-width: 0; height: 44px; border: 0; outline: 0; background: transparent; font-size: 12px; }
+    .search-field button { width: 32px; height: 32px; display: grid; place-items: center; border: 0; border-radius: 8px; background: transparent; }
+    .place-list { margin-top: 8px; display: grid; }
+    .place-option { min-height: 58px; padding: 7px 3px; display: grid; grid-template-columns: 36px 1fr auto; align-items: center; gap: 9px; border: 0; border-bottom: 1px solid var(--line); background: transparent; text-align: left; }
+    .place-option:last-child { border-bottom: 0; }
+    .place-option strong { display: block; font-size: 12px; }
+    .place-option span { display: block; margin-top: 2px; color: var(--ink-tertiary); font-size: 10px; }
+    .distance { color: var(--ink-tertiary); font-size: 10px; }
+
+    .appearance-sheet { min-height: 76%; }
+    .appearance-content { padding: 8px 16px 28px; overflow: auto; }
+    .appearance-section + .appearance-section { margin-top: 24px; }
+    .appearance-title { margin: 0 0 10px; color: var(--ink-secondary); font-size: 12px; font-weight: 700; }
+    .mode-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .mode-option { min-height: 56px; padding: 8px 5px; display: grid; place-items: center; gap: 2px; border: 1px solid var(--line); border-radius: var(--radius-md); color: var(--ink-secondary); background: var(--surface-soft); font-size: 11px; }
+    .mode-option:hover { border-color: var(--line-strong); }
+    .mode-option[aria-pressed="true"] { color: var(--primary-strong); border-color: var(--primary); background: var(--primary-soft); font-weight: 700; }
+    .mode-option .icon { width: 19px; height: 19px; }
+    .palette-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .palette-card {
+      min-height: 102px;
+      padding: 11px;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      justify-content: space-between;
+      border: 1px solid var(--line);
+      border-radius: 15px;
+      color: var(--ink);
+      background: var(--surface-soft);
+      text-align: left;
+      transition: border-color var(--motion-fast), background var(--motion-fast);
+    }
+    .palette-card:hover { border-color: var(--line-strong); }
+    .palette-card[aria-pressed="true"] { border-color: var(--primary); background: var(--surface); box-shadow: 0 0 0 1px var(--primary); }
+    .palette-preview { height: 32px; padding: 6px; display: flex; align-items: center; gap: 5px; border-radius: 9px; background: var(--preview-bg); }
+    .palette-preview i { width: 18px; height: 18px; display: block; border-radius: 50%; background: var(--preview-primary); }
+    .palette-preview i:nth-child(2) { width: 13px; height: 13px; background: var(--preview-accent); }
+    .palette-preview i:nth-child(3) { width: 9px; height: 9px; background: var(--preview-ink); }
+    .palette-card strong { display: block; margin-top: 8px; font-size: 12px; }
+    .palette-card small { display: block; margin-top: 1px; color: var(--ink-tertiary); font-size: 9px; }
+    .palette-check { width: 22px; height: 22px; position: absolute; top: 7px; right: 7px; display: none; place-items: center; border-radius: 50%; color: var(--on-primary); background: var(--primary); }
+    .palette-check .icon { width: 14px; height: 14px; stroke-width: 2.4; }
+    .palette-card[aria-pressed="true"] .palette-check { display: grid; }
+    .palette-card[data-palette-choice="pine"] { --preview-bg: #e5f0eb; --preview-primary: #2f6b57; --preview-accent: #c96c47; --preview-ink: #1c2520; }
+    .palette-card[data-palette-choice="tide"] { --preview-bg: #e0edf1; --preview-primary: #2b6678; --preview-accent: #c76849; --preview-ink: #17252a; }
+    .palette-card[data-palette-choice="plum"] { --preview-bg: #eee5f1; --preview-primary: #725a7d; --preview-accent: #b95863; --preview-ink: #291f2c; }
+    .palette-card[data-palette-choice="dune"] { --preview-bg: #f2ebd6; --preview-primary: #77622a; --preview-accent: #b85f38; --preview-ink: #28241a; }
+    .appearance-footnote { margin: 14px 0 0; color: var(--ink-tertiary); font-size: 10px; line-height: 1.55; }
+
+    .token-panel { position: sticky; top: 100px; }
+    .token-panel > p { margin: 0 0 20px; color: var(--ink-secondary); font-size: 13px; line-height: 1.7; }
+    .swatches { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+    .swatch { min-height: 78px; padding: 10px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface); box-shadow: var(--shadow-1); }
+    .swatch-color { height: 26px; margin-bottom: 8px; border-radius: 7px; background: var(--swatch); }
+    .swatch strong { display: block; font-size: 11px; }
+    .swatch code { color: var(--ink-tertiary); font-size: 9px; }
+    .component-sample { margin-top: 28px; padding-top: 22px; border-top: 1px solid var(--line); }
+    .component-sample h3 { margin: 0 0 14px; font-size: 13px; }
+    .mini-buttons { display: grid; gap: 8px; }
+    .mini-buttons button { min-height: 46px; border-radius: var(--radius-md); font-size: 12px; font-weight: 700; }
+    .mini-primary { border: 0; color: var(--on-primary); background: var(--primary); }
+    .mini-secondary { border: 1px solid var(--line-strong); background: var(--surface); }
+    .mini-text { border: 0; color: var(--primary-strong); background: transparent; }
+    .type-scale { margin-top: 24px; display: grid; gap: 6px; }
+    .type-scale span:nth-child(1) { font-size: 24px; font-weight: 700; letter-spacing: -.04em; }
+    .type-scale span:nth-child(2) { font-size: 16px; font-weight: 700; }
+    .type-scale span:nth-child(3) { color: var(--ink-secondary); font-size: 14px; }
+    .type-scale span:nth-child(4) { color: var(--ink-tertiary); font-size: 12px; }
+
+    .preview-note { max-width: 420px; margin: 18px auto 0; color: var(--ink-tertiary); font-size: 11px; line-height: 1.6; text-align: center; }
+
+    @media (max-width: 1080px) {
+      .studio-main { grid-template-columns: 260px 1fr; }
+      .token-panel { display: none; }
+    }
+    @media (max-width: 760px) {
+      .studio-header { position: relative; }
+      .studio-main { padding: 22px 16px 40px; display: block; }
+      .design-notes h1 { max-width: none; font-size: 34px; }
+      .design-notes .intro { margin-bottom: 18px; }
+      .screen-picker { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-bottom: 24px; }
+      .screen-picker button { padding: 0 10px; }
+      .principles { display: none; }
+      .preview-stage { margin-top: 24px; }
+      .phone-shell { height: min(780px, calc(100dvh - 36px)); min-height: 640px; position: relative; top: auto; }
+    }
+    @media (max-width: 390px) {
+      .studio-header { padding-inline: 12px; }
+      .studio-brand span { display: none; }
+      .studio-main { padding-inline: 8px; }
+      .design-notes { padding-inline: 8px; }
+      .screen-picker .index { display: none; }
+      .phone-shell { width: 100%; padding: 5px; border-radius: 30px; }
+      .phone-viewport { border-radius: 25px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#preview">跳到交互样稿</a>
+
+  <svg class="svg-defs" aria-hidden="true">
+    <symbol id="i-trace" viewBox="0 0 24 24"><path d="M5 17.5c3.4 0 3-8 6.4-8s2 5 5.1 5c1.4 0 2.1-.8 2.5-1.7"/><circle cx="5" cy="17.5" r="2"/><circle cx="11.4" cy="9.5" r="2"/><circle cx="19" cy="10.8" r="2"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-journal" viewBox="0 0 24 24"><path d="M5 4.5h11a2 2 0 0 1 2 2v13H7a2 2 0 0 1-2-2z"/><path d="M8 4.5v15M11 9h4M11 13h4"/></symbol>
+    <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M12 3c.8 4.5 2.5 6.2 7 7-4.5.8-6.2 2.5-7 7-.8-4.5-2.5-6.2-7-7 4.5-.8 6.2-2.5 7-7zM19 16c.3 1.8 1.2 2.7 3 3-1.8.3-2.7 1.2-3 3-.3-1.8-1.2-2.7-3-3 1.8-.3 2.7-1.2 3-3z"/></symbol>
+    <symbol id="i-history" viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.3-5.7L4 8.6"/><path d="M4 4v4.6h4.6M12 8v4l2.7 1.7"/></symbol>
+    <symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+    <symbol id="i-arrow-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+    <symbol id="i-send" viewBox="0 0 24 24"><path d="m21 3-7.4 18-3.2-7.4L3 10.4zM10.4 13.6 21 3"/></symbol>
+    <symbol id="i-map-pin" viewBox="0 0 24 24"><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0z"/><circle cx="12" cy="10" r="2.5"/></symbol>
+    <symbol id="i-paperclip" viewBox="0 0 24 24"><path d="m8.5 12.5 6.7-6.7a3 3 0 0 1 4.2 4.2l-8.7 8.7a5 5 0 0 1-7.1-7.1L12 3.2"/></symbol>
+    <symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20.5 14.2A8 8 0 0 1 9.8 3.5 8.6 8.6 0 1 0 20.5 14.2z"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.5"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+    <symbol id="i-scan" viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3M7 12h10"/></symbol>
+    <symbol id="i-memory" viewBox="0 0 24 24"><path d="M9 4.5a3 3 0 0 0-5 2.2A3.5 3.5 0 0 0 4.5 13 3 3 0 0 0 9 16v3.5M15 4.5a3 3 0 0 1 5 2.2 3.5 3.5 0 0 1-.5 6.3 3 3 0 0 1-4.5 3v3.5M9 6.5c.8.8 1.8 1.2 3 1.2s2.2-.4 3-1.2M9 14c.8-.8 1.8-1.2 3-1.2s2.2.4 3 1.2M12 7.7v5.1"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19 13.5v-3l-2-.7a7 7 0 0 0-.8-1.8l.9-1.9L15 4l-1.9.9a7 7 0 0 0-2.2 0L9 4 6.9 6.1 7.8 8A7 7 0 0 0 7 9.8l-2 .7v3l2 .7a7 7 0 0 0 .8 1.8l-.9 1.9L9 20l1.9-.9a7 7 0 0 0 2.2 0l1.9.9 2.1-2.1-.9-1.9a7 7 0 0 0 .8-1.8z"/></symbol>
+    <symbol id="i-logout" viewBox="0 0 24 24"><path d="M10 5H5v14h5M14 8l4 4-4 4M9 12h9"/></symbol>
+    <symbol id="i-note" viewBox="0 0 24 24"><path d="M5 3h11l3 3v15H5zM15 3v4h4M8 11h8M8 15h6"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.2 4.2"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="m7 7 10 10M17 7 7 17"/></symbol>
+    <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.5"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></symbol>
+    <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18"/></symbol>
+    <symbol id="i-palette" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 0 18h1.2a1.8 1.8 0 0 0 1.2-3.1 1.7 1.7 0 0 1 1.1-2.9H18a3 3 0 0 0 3-3A9 9 0 0 0 12 3z"/><circle cx="7.5" cy="11.5" r="1"/><circle cx="9.5" cy="7.5" r="1"/><circle cx="14.5" cy="7.5" r="1"/></symbol>
+    <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.2 4.2L19 7"/></symbol>
+  </svg>
+
+  <header class="studio-header">
+    <div class="studio-brand">
+      <span class="brand-mark" aria-hidden="true"><svg class="icon"><use href="#i-trace" /></svg></span>
+      <div><strong>PassingTrace · 静迹</strong><span>产品界面方向稿 / 交互原型 01</span></div>
+    </div>
+    <div class="header-actions">
+      <button class="theme-button" id="theme-toggle" type="button" aria-label="切换深色主题" aria-pressed="false">
+        <svg class="icon theme-icon-light" aria-hidden="true"><use href="#i-moon" /></svg>
+        <svg class="icon theme-icon-dark" aria-hidden="true" hidden><use href="#i-sun" /></svg>
+      </button>
+    </div>
+  </header>
+
+  <main class="studio-main">
+    <aside class="design-notes" aria-label="样稿说明">
+      <p class="panel-label">Quiet Trace</p>
+      <h1>让记录本身成为界面主角</h1>
+      <p class="intro">这不是现有主题的换色，而是一套新的产品视觉。弱化装饰和身份信息，用清晰的记录时间线、可靠的 AI 证据与自然的输入流程建立体验。</p>
+
+      <nav class="screen-picker" aria-label="切换样稿页面">
+        <button type="button" data-show="records" aria-pressed="true"><span class="index">01</span><svg class="icon" aria-hidden="true"><use href="#i-journal" /></svg>记录首页</button>
+        <button type="button" data-show="assistant" aria-pressed="false"><span class="index">02</span><svg class="icon" aria-hidden="true"><use href="#i-sparkle" /></svg>AI 对话</button>
+        <button type="button" data-show="compose" aria-pressed="false"><span class="index">03</span><svg class="icon" aria-hidden="true"><use href="#i-plus" /></svg>新建记录</button>
+        <button type="button" data-action="drawer" aria-pressed="false"><span class="index">04</span><svg class="icon" aria-hidden="true"><use href="#i-menu" /></svg>侧栏菜单</button>
+        <button type="button" data-action="appearance" aria-pressed="false"><span class="index">05</span><svg class="icon" aria-hidden="true"><use href="#i-palette" /></svg>主题选择</button>
+      </nav>
+
+      <section class="principles">
+        <h2>本稿遵守的规则</h2>
+        <ul>
+          <li>记录与 AI 是两个一级入口，记忆和扫码属于侧栏二级能力。</li>
+          <li>痕迹与计划使用下划线页签，不用胶囊切换。</li>
+          <li>输入框有可见标签，正文提示从左上角开始。</li>
+          <li>标签仅在表达分类时使用胶囊；按钮和导航不滥用胶囊。</li>
+          <li>48dp 触控区、4/8 间距、明确焦点和深浅色对比。</li>
+          <li>四套主题只替换令牌，不改变组件位置和使用方式。</li>
+        </ul>
+      </section>
+    </aside>
+
+    <section class="preview-stage" id="preview" aria-label="手机界面交互样稿">
+      <div class="phone-shell">
+        <div class="phone-viewport">
+          <div class="system-bar" aria-hidden="true"><span>14:32</span><span class="system-icons">5G <i></i></span></div>
+          <div class="app-frame">
+            <section class="app-screen is-active" data-screen="records" aria-label="记录首页">
+              <header class="app-bar">
+                <button class="icon-button menu-trigger" type="button" aria-label="打开菜单"><svg class="icon"><use href="#i-menu" /></svg></button>
+                <h2>我的记录</h2>
+                <button class="icon-button" type="button" data-show="compose" aria-label="新建记录"><svg class="icon"><use href="#i-plus" /></svg></button>
+              </header>
+              <div class="screen-scroll record-list">
+                <h1 class="list-heading">八月的最后一天</h1>
+                <p class="list-subtitle">你的经历按发生时间自然排列</p>
+
+                <section class="day-section">
+                  <h2 class="day-label"><strong>今天</strong><span>8 月 31 日 · 星期一</span></h2>
+                  <div class="timeline">
+                    <article class="record-row">
+                      <button class="record-card" type="button">
+                        <div class="record-meta"><span>19:20</span><span>已完成</span></div>
+                        <h3>沿江骑了十二公里</h3>
+                        <p>晚风比前几天凉快，沿着江边慢慢骑回家，路上停下来拍了两张落日。</p>
+                        <div class="record-footer">
+                          <div class="tag-list"><span class="tag category">运动</span><span class="tag tag-ai"><svg class="icon" aria-hidden="true"><use href="#i-sparkle" /></svg>骑行</span></div>
+                          <span class="location-mini"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-map-pin" /></svg>滨江绿道</span>
+                        </div>
+                      </button>
+                    </article>
+                    <article class="record-row">
+                      <button class="record-card" type="button">
+                        <div class="record-meta"><span>10:18</span><span>AI 已分析</span></div>
+                        <h3>把附件上传的问题修好了</h3>
+                        <p>定位到预签名地址的协议配置错误，真机重新上传图片和文件都正常。</p>
+                        <div class="record-footer">
+                          <div class="tag-list"><span class="tag category">工作</span><span class="tag tag-ai"><svg class="icon" aria-hidden="true"><use href="#i-sparkle" /></svg>编程</span></div>
+                        </div>
+                      </button>
+                    </article>
+                  </div>
+                </section>
+
+                <section class="day-section">
+                  <h2 class="day-label"><strong>昨天</strong><span>8 月 30 日 · 星期日</span></h2>
+                  <div class="timeline">
+                    <article class="record-row">
+                      <button class="record-card" type="button">
+                        <div class="record-meta"><span>14:30</span><span>3 个附件</span></div>
+                        <h3>八月生活小结</h3>
+                        <p>这个月主要在推进个人项目，也保持了几次运动和外出，希望下个月更规律。</p>
+                        <div class="record-footer">
+                          <div class="tag-list"><span class="tag category">生活</span><span class="tag">月度回顾</span></div>
+                        </div>
+                      </button>
+                    </article>
+                  </div>
+                </section>
+              </div>
+              <nav class="bottom-nav" aria-label="主导航">
+                <button class="nav-item" type="button" data-show="records" aria-current="page"><span class="active-mark"></span><svg class="icon" aria-hidden="true"><use href="#i-journal" /></svg><span>记录</span></button>
+                <button class="nav-item" type="button" data-show="assistant"><span class="active-mark"></span><svg class="icon" aria-hidden="true"><use href="#i-sparkle" /></svg><span>问 AI</span></button>
+              </nav>
+            </section>
+
+            <section class="app-screen" data-screen="assistant" aria-label="AI 对话">
+              <header class="app-bar">
+                <button class="icon-button menu-trigger" type="button" aria-label="打开菜单"><svg class="icon"><use href="#i-menu" /></svg></button>
+                <h2>问问记录</h2>
+                <button class="icon-button" type="button" aria-label="查看聊天记录"><svg class="icon"><use href="#i-history" /></svg></button>
+              </header>
+              <div class="screen-scroll assistant-scroll">
+                <section class="assistant-intro">
+                  <span class="mark" aria-hidden="true"><svg class="icon icon-lg"><use href="#i-sparkle" /></svg></span>
+                  <h3>我能从你的记录里找答案</h3>
+                  <p>具体经历会检索原始记录，次数和金额会重新统计，回答中的证据可以直接打开。</p>
+                  <div class="suggestions">
+                    <button class="suggestion" type="button"><span>帮我总结这个月的生活</span><svg class="icon icon-sm" aria-hidden="true"><use href="#i-arrow-right" /></svg></button>
+                    <button class="suggestion" type="button"><span>我最近去过哪些值得再去的地方？</span><svg class="icon icon-sm" aria-hidden="true"><use href="#i-arrow-right" /></svg></button>
+                  </div>
+                </section>
+
+                <div class="message user">帮我总结一下这个月坚持下来的事情。</div>
+                <div class="message assistant">
+                  <p>这个月你最稳定地坚持了三件事：</p>
+                  <ul><li>运动 5 次，以骑行和步行为主。</li><li>持续推进 PassingTrace 的上传与 AI 功能。</li><li>开始主动记录月度回顾。</li></ul>
+                  <button class="evidence-link" type="button" data-show="records">
+                    <svg class="icon" aria-hidden="true"><use href="#i-note" /></svg>
+                    <span><strong>沿江骑了十二公里</strong><span>8 月 31 日 · 运动 / 骑行</span></span>
+                    <svg class="icon icon-sm" aria-hidden="true"><use href="#i-arrow-right" /></svg>
+                  </button>
+                </div>
+              </div>
+              <form class="composer">
+                <textarea id="assistant-question" rows="1" aria-label="询问自己的记录" placeholder="询问自己的记录…"></textarea>
+                <button class="send-button" type="button" aria-label="发送问题"><svg class="icon"><use href="#i-send" /></svg></button>
+              </form>
+              <nav class="bottom-nav" aria-label="主导航">
+                <button class="nav-item" type="button" data-show="records"><span class="active-mark"></span><svg class="icon" aria-hidden="true"><use href="#i-journal" /></svg><span>记录</span></button>
+                <button class="nav-item" type="button" data-show="assistant" aria-current="page"><span class="active-mark"></span><svg class="icon" aria-hidden="true"><use href="#i-sparkle" /></svg><span>问 AI</span></button>
+              </nav>
+            </section>
+
+            <section class="app-screen" data-screen="compose" aria-label="新建记录">
+              <header class="app-bar">
+                <button class="icon-button" type="button" data-show="records" aria-label="返回记录"><svg class="icon"><use href="#i-arrow-left" /></svg></button>
+                <h2>记一笔</h2>
+                <span></span>
+              </header>
+              <div class="screen-scroll form-scroll">
+                <div class="kind-tabs" role="tablist" aria-label="记录类型">
+                  <button class="kind-tab" type="button" role="tab" aria-selected="true">记录当下</button>
+                  <button class="kind-tab" type="button" role="tab" aria-selected="false">写下计划</button>
+                </div>
+                <form>
+                  <div class="field">
+                    <label for="record-title">标题</label>
+                    <input class="text-input" id="record-title" type="text" placeholder="给这件事一个名字" />
+                  </div>
+                  <div class="field">
+                    <label for="record-body">正文</label>
+                    <textarea class="body-input" id="record-body" placeholder="写下发生了什么、当时的感受，或者任何想保留的细节…"></textarea>
+                  </div>
+                  <div class="field">
+                    <span class="field-label">发生时间</span>
+                    <button class="form-row-button" type="button">
+                      <span class="row-icon"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-calendar" /></svg></span>
+                      <span class="row-copy"><strong>2026 年 8 月 31 日 14:32</strong><span>点击选择日期和时间</span></span>
+                      <svg class="icon icon-sm" aria-hidden="true"><use href="#i-arrow-right" /></svg>
+                    </button>
+                  </div>
+                  <div class="field">
+                    <span class="field-label">地点（可选）</span>
+                    <button class="form-row-button" id="location-trigger" type="button">
+                      <span class="row-icon"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-map-pin" /></svg></span>
+                      <span class="row-copy"><strong id="selected-place">添加这件事发生的地点</strong><span>地图选点、附近地点或精确搜索</span></span>
+                      <svg class="icon icon-sm" aria-hidden="true"><use href="#i-arrow-right" /></svg>
+                    </button>
+                  </div>
+                  <div class="field">
+                    <span class="field-label">附件（可选）</span>
+                    <div class="attachment-row">
+                      <button class="attachment-button" type="button"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-paperclip" /></svg>选择图片、视频或文件</button>
+                    </div>
+                  </div>
+                  <details>
+                    <summary>分类与标签（可选）<svg class="icon icon-sm" aria-hidden="true"><use href="#i-chevron-down" /></svg></summary>
+                    <div class="tag-editor">
+                      <button class="tag-choice" type="button" aria-pressed="true">运动</button><button class="tag-choice" type="button" aria-pressed="false">美食</button><button class="tag-choice" type="button" aria-pressed="false">工作</button><button class="tag-choice" type="button" aria-pressed="false">旅行</button><button class="tag-choice" type="button" aria-pressed="false">+ 自定义</button>
+                    </div>
+                  </details>
+                </form>
+              </div>
+              <div class="form-action-bar"><button class="primary-button" type="button">创建记录</button></div>
+            </section>
+
+            <div class="drawer-layer" id="drawer" aria-hidden="true">
+              <button class="drawer-scrim" type="button" aria-label="关闭菜单"></button>
+              <aside class="drawer-panel" role="dialog" aria-modal="true" aria-label="应用菜单">
+                <div class="drawer-head">
+                  <div class="drawer-user"><strong>我的 PassingTrace</strong><span>仅自己可见的生活档案</span></div>
+                  <button class="scan-button" type="button" aria-label="扫一扫"><svg class="icon icon-lg"><use href="#i-scan" /></svg></button>
+                </div>
+                <nav class="drawer-nav" aria-label="功能菜单">
+                  <button class="is-current" type="button" data-show="records"><svg class="icon" aria-hidden="true"><use href="#i-journal" /></svg><span>我的记录</span><svg class="icon icon-sm" aria-hidden="true"><use href="#i-arrow-right" /></svg></button>
+                  <button type="button" data-show="assistant"><svg class="icon" aria-hidden="true"><use href="#i-sparkle" /></svg><span>问问记录</span><svg class="icon icon-sm" aria-hidden="true"><use href="#i-arrow-right" /></svg></button>
+                  <button type="button"><svg class="icon" aria-hidden="true"><use href="#i-memory" /></svg><span>我的记忆</span><svg class="icon icon-sm" aria-hidden="true"><use href="#i-arrow-right" /></svg></button>
+                </nav>
+                <nav class="drawer-nav drawer-secondary" aria-label="其他菜单">
+                  <button id="appearance-trigger" type="button"><svg class="icon" aria-hidden="true"><use href="#i-palette" /></svg><span>主题与外观</span><span class="distance" id="drawer-theme-name">松间</span></button>
+                  <button type="button"><svg class="icon" aria-hidden="true"><use href="#i-settings" /></svg><span>设置</span></button>
+                  <button type="button"><svg class="icon" aria-hidden="true"><use href="#i-logout" /></svg><span>退出登录</span></button>
+                </nav>
+                <p class="drawer-hint">这里没有关闭按钮。点击菜单外的暗色区域或按 Esc 即可收起。</p>
+              </aside>
+            </div>
+
+            <div class="sheet-layer" id="location-sheet" aria-hidden="true">
+              <button class="sheet-scrim" type="button" aria-label="关闭地点选择"></button>
+              <section class="bottom-sheet" role="dialog" aria-modal="true" aria-labelledby="place-title">
+                <div class="sheet-grabber"></div>
+                <header class="sheet-head">
+                  <button class="icon-button sheet-close" type="button" aria-label="返回"><svg class="icon"><use href="#i-arrow-left" /></svg></button>
+                  <h3 id="place-title">选择地点</h3><span></span>
+                </header>
+                <button class="map" id="map" type="button" aria-label="点击地图移动定位点">
+                  <span class="map-pin" id="map-pin"><svg class="icon"><use href="#i-map-pin" /></svg></span>
+                  <span class="map-label">拖动地图或点击位置来移动定位点</span>
+                </button>
+                <div class="places">
+                  <div class="search-field"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-search" /></svg><label class="sr-only" for="place-search">搜索店名、建筑或地点</label><input id="place-search" type="search" placeholder="输入店名、建筑或地点" /><button type="button" aria-label="清空地点搜索"><svg class="icon icon-sm"><use href="#i-close" /></svg></button></div>
+                  <div class="place-list">
+                    <button class="place-option" type="button" data-place="滨江绿道">
+                      <span class="row-icon"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-target" /></svg></span><span><strong>使用地图中心位置</strong><span>滨江区闻涛路附近</span></span><span class="distance">当前位置</span>
+                    </button>
+                    <button class="place-option" type="button" data-place="滨江绿道驿站">
+                      <span class="row-icon"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-map-pin" /></svg></span><span><strong>滨江绿道驿站</strong><span>闻涛路与江汉路交叉口</span></span><span class="distance">120 m</span>
+                    </button>
+                    <button class="place-option" type="button" data-place="江畔咖啡">
+                      <span class="row-icon"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-map-pin" /></svg></span><span><strong>江畔咖啡</strong><span>滨盛路 1777 号</span></span><span class="distance">260 m</span>
+                    </button>
+                  </div>
+                </div>
+              </section>
+            </div>
+
+            <div class="sheet-layer" id="appearance-sheet" aria-hidden="true">
+              <button class="sheet-scrim" type="button" aria-label="关闭主题选择"></button>
+              <section class="bottom-sheet appearance-sheet" role="dialog" aria-modal="true" aria-labelledby="appearance-title">
+                <div class="sheet-grabber"></div>
+                <header class="sheet-head">
+                  <button class="icon-button appearance-close" type="button" aria-label="返回"><svg class="icon"><use href="#i-arrow-left" /></svg></button>
+                  <h3 id="appearance-title">主题与外观</h3><span></span>
+                </header>
+                <div class="appearance-content">
+                  <section class="appearance-section" aria-labelledby="mode-title">
+                    <h4 class="appearance-title" id="mode-title">显示模式</h4>
+                    <div class="mode-grid">
+                      <button class="mode-option" type="button" data-mode="system" aria-pressed="true"><svg class="icon" aria-hidden="true"><use href="#i-monitor" /></svg><span>跟随系统</span></button>
+                      <button class="mode-option" type="button" data-mode="light" aria-pressed="false"><svg class="icon" aria-hidden="true"><use href="#i-sun" /></svg><span>浅色</span></button>
+                      <button class="mode-option" type="button" data-mode="dark" aria-pressed="false"><svg class="icon" aria-hidden="true"><use href="#i-moon" /></svg><span>深色</span></button>
+                    </div>
+                  </section>
+                  <section class="appearance-section" aria-labelledby="palette-title">
+                    <h4 class="appearance-title" id="palette-title">颜色主题</h4>
+                    <div class="palette-grid">
+                      <button class="palette-card" type="button" data-palette-choice="pine" aria-pressed="true">
+                        <span class="palette-check"><svg class="icon" aria-hidden="true"><use href="#i-check" /></svg></span>
+                        <span class="palette-preview" aria-hidden="true"><i></i><i></i><i></i></span><span><strong>松间</strong><small>常青绿 · 温和自然</small></span>
+                      </button>
+                      <button class="palette-card" type="button" data-palette-choice="tide" aria-pressed="false">
+                        <span class="palette-check"><svg class="icon" aria-hidden="true"><use href="#i-check" /></svg></span>
+                        <span class="palette-preview" aria-hidden="true"><i></i><i></i><i></i></span><span><strong>潮汐</strong><small>雾蓝色 · 清醒安静</small></span>
+                      </button>
+                      <button class="palette-card" type="button" data-palette-choice="plum" aria-pressed="false">
+                        <span class="palette-check"><svg class="icon" aria-hidden="true"><use href="#i-check" /></svg></span>
+                        <span class="palette-preview" aria-hidden="true"><i></i><i></i><i></i></span><span><strong>暮紫</strong><small>灰紫色 · 柔和内敛</small></span>
+                      </button>
+                      <button class="palette-card" type="button" data-palette-choice="dune" aria-pressed="false">
+                        <span class="palette-check"><svg class="icon" aria-hidden="true"><use href="#i-check" /></svg></span>
+                        <span class="palette-preview" aria-hidden="true"><i></i><i></i><i></i></span><span><strong>沙丘</strong><small>沙金色 · 温暖沉静</small></span>
+                      </button>
+                    </div>
+                    <p class="appearance-footnote">主题只影响你的设备显示，不会写入记录，也不会改变附件和 AI 内容。</p>
+                  </section>
+                  <p class="sr-only" id="appearance-live" aria-live="polite"></p>
+                </div>
+              </section>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p class="preview-note">样稿为单文件 HTML，不依赖外部字体、图片或组件库。点击左侧“主题选择”，可在手机内切换四套主题及跟随系统、浅色、深色显示模式。</p>
+    </section>
+
+    <aside class="token-panel" aria-label="视觉令牌">
+      <p class="panel-label">System tokens</p>
+      <h2 id="token-theme-name">松间 · 克制、自然、可信</h2>
+      <p>组件结构保持稳定，当前主题只通过原始色阶映射到背景、文字、主色和强调色等语义令牌。</p>
+      <div class="swatches">
+        <div class="swatch"><div class="swatch-color" style="--swatch: var(--primary)"></div><strong>主题主色</strong><code>--primary</code></div>
+        <div class="swatch"><div class="swatch-color" style="--swatch: var(--accent)"></div><strong>强调色</strong><code>--accent</code></div>
+        <div class="swatch"><div class="swatch-color" style="--swatch: var(--surface-soft)"></div><strong>弱表面</strong><code>--surface-soft</code></div>
+        <div class="swatch"><div class="swatch-color" style="--swatch: var(--ink)"></div><strong>主文字</strong><code>--ink</code></div>
+      </div>
+      <section class="component-sample">
+        <h3>按钮层级</h3>
+        <div class="mini-buttons"><button class="mini-primary" type="button">主要操作</button><button class="mini-secondary" type="button">次要操作</button><button class="mini-text" type="button">文字操作</button></div>
+      </section>
+      <section class="type-scale" aria-label="字体层级"><span>页面标题 24</span><span>记录标题 16</span><span>正文内容 14 / 1.7</span><span>辅助信息 12</span></section>
+    </aside>
+  </main>
+
+  <script>
+    const root = document.documentElement;
+    const screens = [...document.querySelectorAll('[data-screen]')];
+    const screenButtons = [...document.querySelectorAll('[data-show]')];
+    const drawer = document.querySelector('#drawer');
+    const locationSheet = document.querySelector('#location-sheet');
+    const appearanceSheet = document.querySelector('#appearance-sheet');
+    const themeToggle = document.querySelector('#theme-toggle');
+    const systemScheme = window.matchMedia('(prefers-color-scheme: dark)');
+    const paletteMeta = {
+      pine: { name: '松间', description: '克制、自然、可信' },
+      tide: { name: '潮汐', description: '清醒、安静、通透' },
+      plum: { name: '暮紫', description: '柔和、内敛、沉思' },
+      dune: { name: '沙丘', description: '温暖、沉静、从容' },
+    };
+    const allowedModes = new Set(['system', 'light', 'dark']);
+
+    function readPreference(key, fallback) {
+      try { return localStorage.getItem(key) || fallback; }
+      catch { return fallback; }
+    }
+
+    function writePreference(key, value) {
+      try { localStorage.setItem(key, value); }
+      catch { /* File previews can run with storage disabled. */ }
+    }
+
+    const appearance = {
+      palette: readPreference('passingtrace.preview.palette', 'pine'),
+      mode: readPreference('passingtrace.preview.mode', 'system'),
+    };
+    if (!paletteMeta[appearance.palette]) appearance.palette = 'pine';
+    if (!allowedModes.has(appearance.mode)) appearance.mode = 'system';
+
+    function applyAppearance({ persist = false, announce = false } = {}) {
+      const isDark = appearance.mode === 'dark' || (appearance.mode === 'system' && systemScheme.matches);
+      const meta = paletteMeta[appearance.palette];
+      root.dataset.palette = appearance.palette;
+      root.dataset.theme = isDark ? 'dark' : 'light';
+
+      document.querySelectorAll('[data-mode]').forEach((button) => {
+        button.setAttribute('aria-pressed', String(button.dataset.mode === appearance.mode));
+      });
+      document.querySelectorAll('[data-palette-choice]').forEach((button) => {
+        button.setAttribute('aria-pressed', String(button.dataset.paletteChoice === appearance.palette));
+      });
+
+      themeToggle.setAttribute('aria-pressed', String(isDark));
+      themeToggle.setAttribute('aria-label', isDark ? '切换浅色主题' : '切换深色主题');
+      document.querySelector('.theme-icon-light').hidden = isDark;
+      document.querySelector('.theme-icon-dark').hidden = !isDark;
+      document.querySelector('#drawer-theme-name').textContent = meta.name;
+      document.querySelector('#token-theme-name').textContent = `${meta.name} · ${meta.description}`;
+
+      if (persist) {
+        writePreference('passingtrace.preview.palette', appearance.palette);
+        writePreference('passingtrace.preview.mode', appearance.mode);
+      }
+      if (announce) {
+        const modeName = appearance.mode === 'system' ? '跟随系统' : appearance.mode === 'dark' ? '深色' : '浅色';
+        document.querySelector('#appearance-live').textContent = `已应用${meta.name}主题，${modeName}模式。`;
+      }
+    }
+
+    function showScreen(name) {
+      screens.forEach((screen) => screen.classList.toggle('is-active', screen.dataset.screen === name));
+      screenButtons.forEach((button) => {
+        if (button.closest('.screen-picker')) button.setAttribute('aria-pressed', String(button.dataset.show === name));
+      });
+      closeDrawer();
+    }
+
+    function openDrawer() {
+      drawer.classList.add('is-open');
+      drawer.setAttribute('aria-hidden', 'false');
+      document.querySelector('.scan-button').focus();
+    }
+
+    function closeDrawer() {
+      drawer.classList.remove('is-open');
+      drawer.setAttribute('aria-hidden', 'true');
+    }
+
+    function openLocationSheet() {
+      locationSheet.classList.add('is-open');
+      locationSheet.setAttribute('aria-hidden', 'false');
+      document.querySelector('#place-search').focus();
+    }
+
+    function closeLocationSheet() {
+      locationSheet.classList.remove('is-open');
+      locationSheet.setAttribute('aria-hidden', 'true');
+    }
+
+    function openAppearanceSheet() {
+      closeDrawer();
+      appearanceSheet.classList.add('is-open');
+      appearanceSheet.setAttribute('aria-hidden', 'false');
+      document.querySelector('[data-action="appearance"]').setAttribute('aria-pressed', 'true');
+      document.querySelector(`[data-palette-choice="${appearance.palette}"]`).focus();
+    }
+
+    function closeAppearanceSheet() {
+      appearanceSheet.classList.remove('is-open');
+      appearanceSheet.setAttribute('aria-hidden', 'true');
+      document.querySelector('[data-action="appearance"]').setAttribute('aria-pressed', 'false');
+    }
+
+    screenButtons.forEach((button) => button.addEventListener('click', () => showScreen(button.dataset.show)));
+    document.querySelectorAll('.menu-trigger').forEach((button) => button.addEventListener('click', openDrawer));
+    document.querySelector('[data-action="drawer"]').addEventListener('click', openDrawer);
+    document.querySelector('[data-action="appearance"]').addEventListener('click', openAppearanceSheet);
+    document.querySelector('#appearance-trigger').addEventListener('click', openAppearanceSheet);
+    document.querySelector('.drawer-scrim').addEventListener('click', closeDrawer);
+    document.querySelector('#location-trigger').addEventListener('click', openLocationSheet);
+    locationSheet.querySelector('.sheet-scrim').addEventListener('click', closeLocationSheet);
+    document.querySelector('.sheet-close').addEventListener('click', closeLocationSheet);
+    appearanceSheet.querySelector('.sheet-scrim').addEventListener('click', closeAppearanceSheet);
+    document.querySelector('.appearance-close').addEventListener('click', closeAppearanceSheet);
+
+    themeToggle.addEventListener('click', () => {
+      appearance.mode = root.dataset.theme === 'dark' ? 'light' : 'dark';
+      applyAppearance({ persist: true, announce: true });
+    });
+
+    document.querySelectorAll('[data-mode]').forEach((button) => button.addEventListener('click', () => {
+      appearance.mode = button.dataset.mode;
+      applyAppearance({ persist: true, announce: true });
+    }));
+
+    document.querySelectorAll('[data-palette-choice]').forEach((button) => button.addEventListener('click', () => {
+      appearance.palette = button.dataset.paletteChoice;
+      applyAppearance({ persist: true, announce: true });
+    }));
+
+    systemScheme.addEventListener('change', () => {
+      if (appearance.mode === 'system') applyAppearance();
+    });
+
+    document.querySelectorAll('.kind-tab').forEach((tab) => tab.addEventListener('click', () => {
+      document.querySelectorAll('.kind-tab').forEach((item) => item.setAttribute('aria-selected', String(item === tab)));
+    }));
+    document.querySelectorAll('.tag-choice').forEach((tag) => tag.addEventListener('click', () => {
+      tag.setAttribute('aria-pressed', String(tag.getAttribute('aria-pressed') !== 'true'));
+    }));
+
+    document.querySelectorAll('[data-place]').forEach((option) => option.addEventListener('click', () => {
+      document.querySelector('#selected-place').textContent = option.dataset.place;
+      closeLocationSheet();
+    }));
+
+    document.querySelector('#map').addEventListener('click', (event) => {
+      const map = event.currentTarget;
+      const rect = map.getBoundingClientRect();
+      const left = Math.max(8, Math.min(92, ((event.clientX - rect.left) / rect.width) * 100));
+      const top = Math.max(18, Math.min(88, ((event.clientY - rect.top) / rect.height) * 100));
+      const pin = document.querySelector('#map-pin');
+      pin.style.left = `${left}%`;
+      pin.style.top = `${top}%`;
+    });
+
+    document.querySelector('.search-field button').addEventListener('click', () => {
+      const input = document.querySelector('#place-search');
+      input.value = '';
+      input.focus();
+    });
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key !== 'Escape') return;
+      if (appearanceSheet.classList.contains('is-open')) closeAppearanceSheet();
+      else if (locationSheet.classList.contains('is-open')) closeLocationSheet();
+      else if (drawer.classList.contains('is-open')) closeDrawer();
+    });
+
+    applyAppearance();
+    if (location.hash === '#appearance') openAppearanceSheet();
+  </script>
+</body>
+</html>

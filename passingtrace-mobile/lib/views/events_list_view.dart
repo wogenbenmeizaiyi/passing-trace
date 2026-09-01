@@ -8,7 +8,7 @@ import 'package:flutter/material.dart';
 import '../auth_service.dart';
 import '../events/event_model.dart';
 import '../events/events_api.dart';
-import '../main.dart';
+import '../theme/passingtrace_theme.dart';
 import 'event_detail_view.dart';
 import 'event_form_view.dart';
 import 'event_widgets.dart';
@@ -19,12 +19,14 @@ class EventsListView extends StatefulWidget {
     required this.auth,
     required this.session,
     this.drawer,
+    this.bottomNavigationBar,
     this.onSessionExpired,
   });
 
   final AuthService auth;
   final AuthSession session;
   final Widget? drawer;
+  final Widget? bottomNavigationBar;
   final Future<void> Function()? onSessionExpired;
 
   @override
@@ -183,22 +185,18 @@ class _EventsListViewState extends State<EventsListView> {
   Widget build(BuildContext context) {
     return Scaffold(
       drawer: widget.drawer,
+      bottomNavigationBar: widget.bottomNavigationBar,
       appBar: AppBar(
-        title: const Text(
-          '我的记录',
-          style: TextStyle(
-            fontFamily: 'serif',
-            fontWeight: FontWeight.w600,
-            fontSize: 19,
-          ),
-        ),
+        title: const Text('我的记录'),
         actions: [
           IconButton(
             tooltip: _filtersOpen ? '收起筛选' : '筛选',
             onPressed: _toggleFilter,
             icon: Icon(
               _filtersOpen ? Icons.filter_alt : Icons.filter_alt_outlined,
-              color: _hasActiveFilters ? PassingTraceApp.coral : null,
+              color: _hasActiveFilters
+                  ? Theme.of(context).colorScheme.primary
+                  : null,
             ),
           ),
         ],
@@ -206,8 +204,6 @@ class _EventsListViewState extends State<EventsListView> {
       body: _buildBody(),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _openCreate,
-        backgroundColor: PassingTraceApp.coral,
-        foregroundColor: Colors.white,
         icon: const Icon(Icons.edit_outlined),
         label: const Text('记一笔'),
       ),
@@ -260,8 +256,9 @@ class _EventsListViewState extends State<EventsListView> {
   }
 
   Widget _buildFilterBar() {
+    final colors = context.traceColors;
     return Container(
-      color: Colors.white.withValues(alpha: 0.6),
+      color: colors.surface,
       padding: const EdgeInsets.fromLTRB(20, 8, 12, 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -270,7 +267,7 @@ class _EventsListViewState extends State<EventsListView> {
             '类型',
             style: TextStyle(
               fontSize: 11,
-              color: PassingTraceApp.ink.withValues(alpha: 0.5),
+              color: colors.inkSecondary,
               fontWeight: FontWeight.w700,
               letterSpacing: 1.2,
             ),
@@ -303,7 +300,7 @@ class _EventsListViewState extends State<EventsListView> {
             '状态',
             style: TextStyle(
               fontSize: 11,
-              color: PassingTraceApp.ink.withValues(alpha: 0.5),
+              color: colors.inkSecondary,
               fontWeight: FontWeight.w700,
               letterSpacing: 1.2,
             ),
@@ -340,24 +337,22 @@ class _EventsListViewState extends State<EventsListView> {
     required String label,
     required bool selected,
     required VoidCallback onSelected,
-  }) => ChoiceChip(
-    label: Text(label),
-    selected: selected,
-    showCheckmark: false,
-    onSelected: (_) => onSelected(),
-    selectedColor: PassingTraceApp.coral.withValues(alpha: 0.15),
-    labelStyle: TextStyle(
-      color: selected ? PassingTraceApp.coral : PassingTraceApp.ink,
-      fontSize: 12,
-      fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-    ),
-    shape: const RoundedRectangleBorder(),
-    side: BorderSide(
-      color: selected
-          ? PassingTraceApp.coral
-          : PassingTraceApp.ink.withValues(alpha: 0.18),
-    ),
-  );
+  }) {
+    final colors = context.traceColors;
+    return ChoiceChip(
+      label: Text(label),
+      selected: selected,
+      showCheckmark: false,
+      onSelected: (_) => onSelected(),
+      selectedColor: colors.primarySoft,
+      labelStyle: TextStyle(
+        color: selected ? colors.primaryStrong : colors.ink,
+        fontSize: 12,
+        fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+      ),
+      side: BorderSide(color: selected ? colors.primary : colors.lineStrong),
+    );
+  }
 
   Widget _buildFooter() {
     if (_nextCursor == null) {
@@ -368,7 +363,7 @@ class _EventsListViewState extends State<EventsListView> {
             '已经到底了。',
             style: TextStyle(
               fontSize: 12,
-              color: PassingTraceApp.ink.withValues(alpha: 0.4),
+              color: context.traceColors.inkTertiary,
             ),
           ),
         ),
@@ -382,7 +377,10 @@ class _EventsListViewState extends State<EventsListView> {
             children: [
               Text(
                 _error!,
-                style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.error,
+                  fontSize: 12,
+                ),
               ),
               const SizedBox(height: 6),
               OutlinedButton(
@@ -434,10 +432,10 @@ class _MessageView extends StatelessWidget {
         children: [
           Text(
             title,
-            style: const TextStyle(
-              fontFamily: 'serif',
+            style: TextStyle(
+              color: context.traceColors.ink,
               fontSize: 22,
-              fontWeight: FontWeight.w600,
+              fontWeight: FontWeight.w700,
             ),
           ),
           const SizedBox(height: 10),
@@ -445,7 +443,7 @@ class _MessageView extends StatelessWidget {
             detail,
             textAlign: TextAlign.center,
             style: TextStyle(
-              color: PassingTraceApp.ink.withValues(alpha: 0.55),
+              color: context.traceColors.inkSecondary,
               fontSize: 13,
             ),
           ),

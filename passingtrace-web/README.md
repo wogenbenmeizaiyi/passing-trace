@@ -34,7 +34,3 @@ corepack pnpm type-check
 corepack pnpm test:unit
 corepack pnpm build
 ```
-
-## 可视化验证 SSO
-
-仓库根目录的 `passingtrace-sso-demo` 是另一个独立客户端，运行在 `http://localhost:5174`。先在本主站登录，再到验证站点击“发起 SSO 授权”；如果不再出现密码页并直接显示相同用户，说明 Identity SSO 生效。两个站点不会共享各自的 Token 存储。

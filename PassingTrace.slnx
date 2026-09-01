@@ -21,9 +21,6 @@
     <File Path="passingtrace-web/package.json" />
     <File Path="passingtrace-web/vite.config.ts" />
     <File Path="passingtrace-web/README.md" />
-    <File Path="passingtrace-sso-demo/package.json" />
-    <File Path="passingtrace-sso-demo/vite.config.ts" />
-    <File Path="passingtrace-sso-demo/README.md" />
   </Folder>
   <Folder Name="/Events/">
     <Project Path="Events/PassingTrace.Events.Api/PassingTrace.Events.Api.csproj" />

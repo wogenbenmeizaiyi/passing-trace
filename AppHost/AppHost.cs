@@ -86,11 +86,6 @@ if (builder.Environment.IsProduction())
             "passingtrace-web",
             "passingtrace-web")
         .WithHttpEndpoint(port: 80, targetPort: 80);
-
-    builder.AddContainer(
-            "passingtrace-sso-demo",
-            "passingtrace-sso-demo")
-        .WithHttpEndpoint(port: 80, targetPort: 80);
 }
 else
 {
@@ -105,14 +100,6 @@ else
         .WaitFor(api)
         .WithExternalHttpEndpoints();
 
-    builder.AddViteApp("passingtrace-sso-demo", "../passingtrace-sso-demo")
-        .WithPnpm(installArgs: ["--config.confirmModulesPurge=false"])
-        .WithEndpoint("http", endpoint => endpoint.Port = 5174)
-        .WithEnvironment("VITE_IDENTITY_AUTHORITY", identity.GetEndpoint("http"))
-        .WithEnvironment("VITE_MAIN_WEB_URL", "http://localhost:5173")
-        .WithReference(identity)
-        .WaitFor(identity)
-        .WithExternalHttpEndpoints();
 }
 
 

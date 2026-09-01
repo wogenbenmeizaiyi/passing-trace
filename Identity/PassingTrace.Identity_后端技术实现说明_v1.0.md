@@ -281,13 +281,10 @@ Access Token 的关键 Claim：
 | `passingtrace-mobile` | Flutter App | `com.passingtrace.mobile:/oauth2redirect` |
 | `passingtrace-desktop` | 桌面端 | `com.passingtrace.desktop:/oauth2redirect` |
 | `passingtrace-web` | Vue SPA | 登录：`http://localhost:5173/auth/callback`；退出：`http://localhost:5173/auth/logout-callback` |
-| `passingtrace-sso-demo` | 独立 SSO 验证站 | 登录：`http://localhost:5174/auth/callback`；退出：`http://localhost:5174/auth/logout-callback` |
 
 `OpenIddictSeeder` 在启动时幂等创建或更新这些客户端和 `passingtrace.api` Scope。客户端配置改变后重启服务即可同步，不需要手工修改协议表。
 
 SSO 的含义是：同一个浏览器已经拥有 Identity Cookie 时，另一个第一方客户端再次打开 `/connect/authorize`，可以直接取得新授权码，不必重复输入密码。每个客户端仍拥有各自的 Access/Refresh Token，不能互相读取。
-
-仓库中的 `passingtrace-sso-demo` 是可视化证明：它运行在不同 Origin、使用不同 Client ID 和独立 `sessionStorage`。先在 5173 主站登录，再从 5174 发起授权；如果直接回到验证站并显示同一 `sub`，说明复用的是 Identity Cookie，而不是复制主站 Token。
 
 Vue 使用 `sessionStorage` 保存自己的 Token；Flutter/桌面端应使用操作系统安全存储。服务端永远不相信“客户端说自己已登录”，只验证 Cookie 或签名 Token。
 

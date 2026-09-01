@@ -15,7 +15,7 @@ import '../events/event_model.dart';
 import '../events/events_api.dart';
 import '../events/media_api.dart';
 import '../events/location_service.dart';
-import '../main.dart';
+import '../theme/passingtrace_theme.dart';
 import 'nearby_place_sheet.dart';
 
 class EventFormView extends StatefulWidget {
@@ -509,11 +509,7 @@ class _EventFormViewState extends State<EventFormView> {
       appBar: AppBar(
         title: Text(
           _isEdit ? '编辑记录' : '记一笔',
-          style: const TextStyle(
-            fontFamily: 'serif',
-            fontWeight: FontWeight.w600,
-            fontSize: 19,
-          ),
+          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 19),
         ),
       ),
       body: _loading
@@ -744,7 +740,10 @@ class _EventFormViewState extends State<EventFormView> {
             const SizedBox(height: 14),
             Text(
               _error!,
-              style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.error,
+                fontSize: 12,
+              ),
             ),
           ],
           const SizedBox(height: 24),
@@ -768,14 +767,12 @@ class _EventFormViewState extends State<EventFormView> {
                   onPressed: _submitting ? null : _submit,
                   style: FilledButton.styleFrom(
                     minimumSize: const Size.fromHeight(50),
-                    backgroundColor: PassingTraceApp.coral,
-                    shape: const RoundedRectangleBorder(),
                   ),
                   child: _submitting
-                      ? const SizedBox.square(
+                      ? SizedBox.square(
                           dimension: 18,
                           child: CircularProgressIndicator(
-                            color: Colors.white,
+                            color: Theme.of(context).colorScheme.onPrimary,
                             strokeWidth: 2,
                           ),
                         )
@@ -831,7 +828,7 @@ class _EventFormViewState extends State<EventFormView> {
 
   Widget _buildMediaRow(_FormMediaItem item, int index) => Card(
     elevation: 0,
-    color: Colors.white.withValues(alpha: 0.58),
+    color: context.traceColors.surfaceSoft,
     child: Padding(
       padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
       child: Row(
@@ -856,15 +853,18 @@ class _EventFormViewState extends State<EventFormView> {
                     item.error!,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.redAccent,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
                       fontSize: 11,
                     ),
                   )
                 else
-                  const Text(
+                  Text(
                     '已上传',
-                    style: TextStyle(fontSize: 11, color: Colors.black54),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: context.traceColors.inkTertiary,
+                    ),
                   ),
               ],
             ),
@@ -900,13 +900,6 @@ class _EventFormViewState extends State<EventFormView> {
   InputDecoration _decoration(String label, String? hint) => InputDecoration(
     labelText: label,
     hintText: hint,
-    filled: true,
-    fillColor: Colors.white.withValues(alpha: 0.6),
-    enabledBorder: OutlineInputBorder(
-      borderSide: BorderSide(
-        color: PassingTraceApp.ink.withValues(alpha: 0.18),
-      ),
-    ),
     counterText: label == '标题' ? null : '',
   );
 }
@@ -926,11 +919,7 @@ class _EventKindSelector extends StatelessWidget {
   Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(
-            color: PassingTraceApp.ink.withValues(alpha: 0.16),
-          ),
-        ),
+        border: Border(bottom: BorderSide(color: context.traceColors.line)),
       ),
       child: Row(
         children: [
@@ -950,7 +939,9 @@ class _EventKindSelector extends StatelessWidget {
     final selected = value == kind;
     final color = selected
         ? Theme.of(context).colorScheme.primary
-        : PassingTraceApp.ink.withValues(alpha: enabled ? 0.62 : 0.38);
+        : enabled
+        ? context.traceColors.inkSecondary
+        : context.traceColors.inkTertiary;
     return Expanded(
       child: InkWell(
         onTap: enabled ? () => onChanged(kind) : null,

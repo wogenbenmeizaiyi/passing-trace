@@ -1926,8 +1926,7 @@ PassingTrace.slnx
 ├─ tests
 │  └─ PassingTrace.Identity.IntegrationTests
 ├─ passingtrace-web
-├─ passingtrace-mobile
-└─ passingtrace-sso-demo
+└─ passingtrace-mobile
 ```
 
 ### 25.1 代码组织规则

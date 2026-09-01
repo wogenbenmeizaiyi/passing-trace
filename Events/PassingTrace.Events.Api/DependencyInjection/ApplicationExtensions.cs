@@ -5,6 +5,7 @@ using PassingTrace.Events.Api.Common;
 using PassingTrace.Events.Api.Events;
 using PassingTrace.Events.Api.Media;
 using PassingTrace.Events.Api.Places;
+using PassingTrace.Events.Api.Updates;
 
 namespace PassingTrace.Events.Api.DependencyInjection;
 
@@ -34,6 +35,8 @@ public static class ApplicationExtensions
         services.AddScoped<AssistantService>();
         services.AddScoped<UserMemoryService>();
         services.AddSingleton<IObjectStorage, S3ObjectStorage>();
+        services.Configure<AppUpdateOptions>(configuration.GetSection(AppUpdateOptions.SectionName));
+        services.AddSingleton<AppUpdateService>();
         services.AddScoped<IAnalysisOutbox, AnalysisOutbox>();
         services.AddScoped<MediaService>();
         services.AddScoped<IEventMediaService>(provider => provider.GetRequiredService<MediaService>());

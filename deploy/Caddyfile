@@ -27,8 +27,3 @@ www.{$WEB_DOMAIN} {
 	reverse_proxy identity:8080
 	header -Server
 }
-
-{$FILES_DOMAIN} {
-	reverse_proxy minio:9000
-	header -Server
-}

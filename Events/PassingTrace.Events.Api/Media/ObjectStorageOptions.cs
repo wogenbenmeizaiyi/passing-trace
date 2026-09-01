@@ -10,4 +10,6 @@ public sealed class ObjectStorageOptions
     public string Bucket { get; set; } = "passingtrace-private";
     public string Region { get; set; } = "us-east-1";
     public bool ForcePathStyle { get; set; } = true;
+    public bool CreateBucketIfMissing { get; set; } = true;
+    public bool ConfigureCors { get; set; } = true;
 }

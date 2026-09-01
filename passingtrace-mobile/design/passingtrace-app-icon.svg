@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" role="img" aria-labelledby="title description">
+  <title id="title">PassingTrace app icon</title>
+  <desc id="description">A warm orange starting point connected to a white endpoint by a winding life trace.</desc>
+  <rect x="3" y="3" width="102" height="102" rx="28" fill="#2F6B57"/>
+  <path
+    d="M32 35 C42 27 56 28 64 36 C72 44 68 54 56 56 C43 58 38 65 45 73 C52 80 65 79 76 69"
+    fill="none"
+    stroke="#FFFDF9"
+    stroke-width="7"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <circle cx="32" cy="35" r="7.5" fill="#E29A79"/>
+  <circle cx="32" cy="35" r="2.4" fill="#FFFDF9"/>
+  <circle cx="76" cy="69" r="7.5" fill="#FFFDF9"/>
+  <circle cx="76" cy="69" r="2.4" fill="#2F6B57"/>
+</svg>

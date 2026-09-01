@@ -1,10 +1,9 @@
 // Event 相关的视觉辅助：徽章、卡片、状态色。
-// 复用现有「纸·墨·朱砂·青」配色，不引入新主题。
 
 import 'package:flutter/material.dart';
 
 import '../events/event_model.dart';
-import '../main.dart';
+import '../theme/passingtrace_theme.dart';
 
 class EventKindBadge extends StatelessWidget {
   const EventKindBadge(this.kind, {super.key});
@@ -13,7 +12,7 @@ class EventKindBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = PassingTraceApp.coral;
+    final color = context.traceColors.primary;
     return _PillBadge(text: kind.label, color: color);
   }
 }
@@ -25,16 +24,17 @@ class EventStatusBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.traceColors;
     final Color color;
     switch (status) {
       case EventStatus.planned:
-        color = PassingTraceApp.sage;
+        color = colors.accent;
         break;
       case EventStatus.completed:
-        color = const Color(0xff2e6a4a);
+        color = colors.success;
         break;
       case EventStatus.cancelled:
-        color = PassingTraceApp.ink.withValues(alpha: 0.4);
+        color = colors.inkTertiary;
         break;
     }
     return _PillBadge(text: status.label, color: color);
@@ -74,6 +74,7 @@ class EventCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.traceColors;
     final title = event.title?.isNotEmpty == true
         ? event.title!
         : (event.rawContent?.isNotEmpty == true ? event.rawContent! : '（无标题）');
@@ -106,7 +107,7 @@ class EventCard extends StatelessWidget {
                       Text(
                         timeText,
                         style: TextStyle(
-                          color: PassingTraceApp.ink.withValues(alpha: 0.5),
+                          color: colors.inkTertiary,
                           fontSize: 11,
                         ),
                       ),
@@ -117,11 +118,10 @@ class EventCard extends StatelessWidget {
                     title,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: PassingTraceApp.ink,
-                      fontFamily: 'serif',
+                    style: TextStyle(
+                      color: colors.ink,
                       fontSize: 17,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.w700,
                       height: 1.35,
                     ),
                   ),
@@ -132,7 +132,7 @@ class EventCard extends StatelessWidget {
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        color: PassingTraceApp.ink.withValues(alpha: 0.55),
+                        color: colors.inkSecondary,
                         fontSize: 12,
                         height: 1.6,
                       ),
@@ -150,10 +150,7 @@ class EventCard extends StatelessWidget {
                             .take(2)
                             .map((x) => '${x.isAi ? '✦' : ''}${x.displayName}'),
                       ].join(' · '),
-                      style: TextStyle(
-                        color: PassingTraceApp.coral.withValues(alpha: 0.85),
-                        fontSize: 11,
-                      ),
+                      style: TextStyle(color: colors.primary, fontSize: 11),
                     ),
                   ],
                 ],

@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PassingTrace App 图标候选</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --paper: #f5f0e6;
+        --paper-2: #fffdf7;
+        --ink: #27352f;
+        --muted: #758078;
+        --pine: #2f6b57;
+        --coral: #e28a62;
+        --line: rgba(47, 107, 87, 0.18);
+        font-family: "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at 12% 0%, rgba(226, 138, 98, 0.13), transparent 31rem),
+          linear-gradient(rgba(47, 107, 87, 0.035) 1px, transparent 1px),
+          var(--paper);
+        background-size: auto, 100% 32px, auto;
+      }
+
+      main { width: min(1240px, calc(100% - 40px)); margin: 0 auto; padding: 60px 0 72px; }
+      header { display: grid; grid-template-columns: 1fr auto; gap: 32px; align-items: end; margin-bottom: 34px; }
+      .eyebrow { margin: 0 0 10px; color: var(--coral); font: 700 12px/1.2 ui-monospace, monospace; letter-spacing: .16em; text-transform: uppercase; }
+      h1 { margin: 0; font: 700 clamp(30px, 5vw, 54px)/1.08 Georgia, "Noto Serif SC", serif; letter-spacing: -.035em; }
+      .intro { max-width: 620px; margin: 16px 0 0; color: var(--muted); font-size: 15px; line-height: 1.8; }
+      .legend { display: flex; gap: 14px; color: var(--muted); font-size: 12px; white-space: nowrap; }
+      .legend span { display: inline-flex; gap: 7px; align-items: center; }
+      .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--pine); }
+      .dot.coral { background: var(--coral); }
+
+      .launcher {
+        display: flex;
+        align-items: center;
+        gap: 18px;
+        padding: 18px 22px;
+        margin: 0 0 28px;
+        overflow-x: auto;
+        border: 1px solid var(--line);
+        border-radius: 22px;
+        background: rgba(255, 253, 247, .78);
+        box-shadow: 0 18px 48px rgba(43, 68, 58, .06);
+      }
+      .launcher-label { min-width: 126px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+      .launcher-item { display: grid; justify-items: center; gap: 7px; min-width: 58px; color: var(--muted); font: 600 11px/1 ui-monospace, monospace; }
+      .launcher img { width: 52px; height: 52px; filter: drop-shadow(0 7px 8px rgba(39, 53, 47, .16)); }
+
+      .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+      article {
+        position: relative;
+        min-height: 300px;
+        padding: 24px;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 26px;
+        background: rgba(255, 253, 247, .9);
+        box-shadow: 0 18px 50px rgba(43, 68, 58, .07);
+      }
+      article::after { content: ""; position: absolute; right: -32px; bottom: -42px; width: 130px; height: 130px; border: 1px solid rgba(226, 138, 98, .18); border-radius: 50%; }
+      .card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+      .hero-icon { width: 112px; height: 112px; filter: drop-shadow(0 16px 18px rgba(39, 53, 47, .18)); }
+      .masks { display: flex; gap: 10px; padding-top: 6px; }
+      .mask { display: grid; place-items: center; width: 52px; height: 52px; background: #e8e8e5; box-shadow: inset 0 0 0 1px rgba(39, 53, 47, .08); }
+      .mask.circle { border-radius: 50%; }
+      .mask.rounded { border-radius: 15px; }
+      .mask img { width: 52px; height: 52px; }
+      .mask.circle img { clip-path: circle(50%); }
+      .mask.rounded img { clip-path: inset(0 round 15px); }
+      .number { display: inline-grid; place-items: center; width: 28px; height: 28px; margin-top: 25px; border: 1px solid var(--line); border-radius: 50%; color: var(--pine); font: 700 12px/1 ui-monospace, monospace; }
+      h2 { margin: 13px 0 8px; font: 700 22px/1.25 Georgia, "Noto Serif SC", serif; }
+      article p { position: relative; z-index: 1; margin: 0; color: var(--muted); font-size: 13px; line-height: 1.7; }
+      .tag { display: inline-block; margin-top: 15px; padding: 6px 10px; border-radius: 999px; color: var(--pine); background: rgba(168, 204, 186, .26); font-size: 11px; font-weight: 700; }
+      footer { margin-top: 28px; padding: 20px 4px 0; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; line-height: 1.7; }
+      footer strong { color: var(--ink); }
+
+      @media (max-width: 900px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } header { grid-template-columns: 1fr; } .legend { display: none; } }
+      @media (max-width: 600px) { main { width: min(100% - 24px, 1240px); padding-top: 32px; } .grid { grid-template-columns: 1fr; } article { min-height: 280px; } }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div>
+          <p class="eyebrow">PassingTrace · Icon Study 02</p>
+          <h1>留住发生过的。</h1>
+          <p class="intro">这一轮只比较符号，不替换当前 App 图标。六版统一使用松绿、纸白与朱砂点，分别强调连接、时间、品牌字标、记录、穿行和东方印记。</p>
+        </div>
+        <div class="legend"><span><i class="dot"></i>松绿：长期与可靠</span><span><i class="dot coral"></i>朱砂：发生的时刻</span></div>
+      </header>
+
+      <section class="launcher" aria-label="桌面小尺寸对比">
+        <div class="launcher-label">桌面真实尺寸<br />先看谁最容易认</div>
+        <div class="launcher-item"><img src="./icon-concepts/01-dual-moments.svg" alt="双时刻" /><span>01</span></div>
+        <div class="launcher-item"><img src="./icon-concepts/02-time-loop.svg" alt="时间环" /><span>02</span></div>
+        <div class="launcher-item"><img src="./icon-concepts/03-pt-monogram.svg" alt="PT 字标" /><span>03</span></div>
+        <div class="launcher-item"><img src="./icon-concepts/04-memory-page.svg" alt="记忆页" /><span>04</span></div>
+        <div class="launcher-item"><img src="./icon-concepts/05-time-gate.svg" alt="时光门" /><span>05</span></div>
+        <div class="launcher-item"><img src="./icon-concepts/06-trace-seal.svg" alt="留痕印章" /><span>06</span></div>
+      </section>
+
+      <section class="grid">
+        <article>
+          <div class="card-top"><img class="hero-icon" src="./icon-concepts/01-dual-moments.svg" alt="01 双时刻" /><div class="masks"><span class="mask circle"><img src="./icon-concepts/01-dual-moments.svg" alt="" /></span><span class="mask rounded"><img src="./icon-concepts/01-dual-moments.svg" alt="" /></span></div></div>
+          <span class="number">01</span><h2>双时刻</h2><p>两个被记住的时刻，以一段向上的轨迹连接。最直观、最接近“记录人生”的表达。</p><span class="tag">清晰 · 友好</span>
+        </article>
+        <article>
+          <div class="card-top"><img class="hero-icon" src="./icon-concepts/02-time-loop.svg" alt="02 时间环" /><div class="masks"><span class="mask circle"><img src="./icon-concepts/02-time-loop.svg" alt="" /></span><span class="mask rounded"><img src="./icon-concepts/02-time-loop.svg" alt="" /></span></div></div>
+          <span class="number">02</span><h2>时间环</h2><p>开放的环代表回顾不是倒退，而是从过去继续出发。识别性强，但会稍微偏向“时间工具”。</p><span class="tag">时间 · 连续</span>
+        </article>
+        <article>
+          <div class="card-top"><img class="hero-icon" src="./icon-concepts/03-pt-monogram.svg" alt="03 PT 字标" /><div class="masks"><span class="mask circle"><img src="./icon-concepts/03-pt-monogram.svg" alt="" /></span><span class="mask rounded"><img src="./icon-concepts/03-pt-monogram.svg" alt="" /></span></div></div>
+          <span class="number">03</span><h2>PT 字标</h2><p>把 PassingTrace 的 P 与 T 融成一个连续符号。产品品牌感最强，也最适合以后延展启动动画。</p><span class="tag">品牌 · 利落</span>
+        </article>
+        <article>
+          <div class="card-top"><img class="hero-icon" src="./icon-concepts/04-memory-page.svg" alt="04 记忆页" /><div class="masks"><span class="mask circle"><img src="./icon-concepts/04-memory-page.svg" alt="" /></span><span class="mask rounded"><img src="./icon-concepts/04-memory-page.svg" alt="" /></span></div></div>
+          <span class="number">04</span><h2>记忆页</h2><p>纸页承载文字、附件和一串时间节点。功能含义最明确，温和但会更像一款笔记应用。</p><span class="tag">记录 · 具体</span>
+        </article>
+        <article>
+          <div class="card-top"><img class="hero-icon" src="./icon-concepts/05-time-gate.svg" alt="05 时光门" /><div class="masks"><span class="mask circle"><img src="./icon-concepts/05-time-gate.svg" alt="" /></span><span class="mask rounded"><img src="./icon-concepts/05-time-gate.svg" alt="" /></span></div></div>
+          <span class="number">05</span><h2>时光门</h2><p>轨迹穿入一道门，表达“经过、留下、重新打开”。概念感最强，适合偏叙事的产品方向。</p><span class="tag">穿行 · 故事</span>
+        </article>
+        <article>
+          <div class="card-top"><img class="hero-icon" src="./icon-concepts/06-trace-seal.svg" alt="06 留痕印章" /><div class="masks"><span class="mask circle"><img src="./icon-concepts/06-trace-seal.svg" alt="" /></span><span class="mask rounded"><img src="./icon-concepts/06-trace-seal.svg" alt="" /></span></div></div>
+          <span class="number">06</span><h2>留痕印章</h2><p>现代方印包住一条折线痕迹，与纸墨朱砂的界面语言最统一，也有更明显的东方辨识度。</p><span class="tag">东方 · 稳重</span>
+        </article>
+      </section>
+
+      <footer><strong>怎么选：</strong>直接告诉我编号，例如“选 03”；也可以说“把 03 的字标和 06 的方印融合”。确认方向后我再精修线宽、安全区与 Android 自适应图标，不会直接拿草稿上线。</footer>
+    </main>
+  </body>
+</html>

@@ -4,7 +4,7 @@ import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import '../auth_service.dart';
 import '../events/ai_api.dart';
 import '../events/events_api.dart';
-import '../main.dart';
+import '../theme/passingtrace_theme.dart';
 import 'event_detail_view.dart';
 
 class AssistantView extends StatefulWidget {
@@ -13,11 +13,13 @@ class AssistantView extends StatefulWidget {
     required this.auth,
     required this.session,
     this.drawer,
+    this.bottomNavigationBar,
     this.onSessionExpired,
   });
   final AuthService auth;
   final AuthSession session;
   final Widget? drawer;
+  final Widget? bottomNavigationBar;
   final Future<void> Function()? onSessionExpired;
 
   @override
@@ -311,8 +313,9 @@ class _AssistantViewState extends State<AssistantView> {
   @override
   Widget build(BuildContext context) => Scaffold(
     drawer: widget.drawer,
+    bottomNavigationBar: widget.bottomNavigationBar,
     appBar: AppBar(
-      title: const Text('AI 问答', style: TextStyle(fontFamily: 'serif')),
+      title: const Text('问问记录'),
       actions: [
         IconButton(
           tooltip: '聊天记录',
@@ -329,197 +332,210 @@ class _AssistantViewState extends State<AssistantView> {
     body: _buildChat(),
   );
 
-  Widget _buildChat() => Column(
-    children: [
-      Expanded(
-        child: _initialLoading
-            ? const Center(child: CircularProgressIndicator())
-            : _messages.isEmpty
-            ? _buildEmptyChat()
-            : ListView.builder(
-                padding: const EdgeInsets.all(16),
-                itemCount: _messages.length,
-                itemBuilder: (_, index) {
-                  final message = _messages[index];
-                  final mine = message.role == 'user';
-                  return Align(
-                    alignment: mine
-                        ? Alignment.centerRight
-                        : Alignment.centerLeft,
-                    child: Container(
-                      constraints: const BoxConstraints(maxWidth: 330),
-                      margin: const EdgeInsets.only(bottom: 12),
-                      padding: const EdgeInsets.all(14),
-                      color: mine ? PassingTraceApp.coral : Colors.white,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          AssistantMessageContent(
-                            text: message.text,
-                            isUser: mine,
-                            eventTitles: message.eventTitles,
-                            onOpenEvent: (id) => Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => EventDetailView(
-                                  auth: widget.auth,
-                                  session: widget.session,
-                                  eventId: id,
+  Widget _buildChat() {
+    final colors = context.traceColors;
+    return Column(
+      children: [
+        Expanded(
+          child: _initialLoading
+              ? const Center(child: CircularProgressIndicator())
+              : _messages.isEmpty
+              ? _buildEmptyChat()
+              : ListView.builder(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: _messages.length,
+                  itemBuilder: (_, index) {
+                    final message = _messages[index];
+                    final mine = message.role == 'user';
+                    return Align(
+                      alignment: mine
+                          ? Alignment.centerRight
+                          : Alignment.centerLeft,
+                      child: Container(
+                        constraints: const BoxConstraints(maxWidth: 330),
+                        margin: const EdgeInsets.only(bottom: 12),
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: mine ? colors.primary : colors.surface,
+                          borderRadius: BorderRadius.only(
+                            topLeft: Radius.circular(mine ? 18 : 5),
+                            topRight: const Radius.circular(18),
+                            bottomLeft: const Radius.circular(18),
+                            bottomRight: Radius.circular(mine ? 5 : 18),
+                          ),
+                          border: mine ? null : Border.all(color: colors.line),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            AssistantMessageContent(
+                              text: message.text,
+                              isUser: mine,
+                              eventTitles: message.eventTitles,
+                              onOpenEvent: (id) => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => EventDetailView(
+                                    auth: widget.auth,
+                                    session: widget.session,
+                                    eventId: id,
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                          if (message.eventTitles.isNotEmpty) ...[
-                            const SizedBox(height: 8),
-                            Wrap(
-                              spacing: 6,
-                              runSpacing: 6,
-                              children: message.eventTitles.entries
-                                  .map(
-                                    (record) => ActionChip(
-                                      label: Text(
-                                        record.value.isEmpty
-                                            ? '记录 #${record.key}'
-                                            : record.value,
-                                      ),
-                                      backgroundColor: PassingTraceApp.coral
-                                          .withValues(alpha: 0.1),
-                                      side: BorderSide(
-                                        color: PassingTraceApp.coral.withValues(
-                                          alpha: 0.45,
+                            if (message.eventTitles.isNotEmpty) ...[
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 6,
+                                runSpacing: 6,
+                                children: message.eventTitles.entries
+                                    .map(
+                                      (record) => ActionChip(
+                                        label: Text(
+                                          record.value.isEmpty
+                                              ? '记录 #${record.key}'
+                                              : record.value,
                                         ),
-                                      ),
-                                      onPressed: () => Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (_) => EventDetailView(
-                                            auth: widget.auth,
-                                            session: widget.session,
-                                            eventId: record.key,
+                                        backgroundColor: colors.accentSoft,
+                                        side: BorderSide(color: colors.accent),
+                                        onPressed: () => Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (_) => EventDetailView(
+                                              auth: widget.auth,
+                                              session: widget.session,
+                                              eventId: record.key,
+                                            ),
                                           ),
                                         ),
                                       ),
-                                    ),
-                                  )
-                                  .toList(),
-                            ),
+                                    )
+                                    .toList(),
+                              ),
+                            ],
                           ],
-                        ],
+                        ),
                       ),
-                    ),
-                  );
-                },
-              ),
-      ),
-      if (_error != null)
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Text(_error!, style: const TextStyle(color: Colors.redAccent)),
-        ),
-      SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _input,
-                  minLines: 1,
-                  maxLines: 4,
-                  decoration: const InputDecoration(
-                    hintText: '询问自己的记录…',
-                    filled: true,
-                  ),
-                  onSubmitted: (_) => _send(),
+                    );
+                  },
                 ),
-              ),
-              const SizedBox(width: 8),
-              IconButton.filled(
-                onPressed: _busy || _conversationId == null ? null : _send,
-                icon: _busy
-                    ? const SizedBox.square(
-                        dimension: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.send),
-              ),
-            ],
-          ),
         ),
-      ),
-    ],
-  );
-
-  Widget _buildEmptyChat() => ListView(
-    padding: const EdgeInsets.fromLTRB(24, 72, 24, 24),
-    children: [
-      Center(
-        child: Container(
-          width: 64,
-          height: 64,
-          decoration: BoxDecoration(
-            color: PassingTraceApp.coral.withValues(alpha: 0.12),
-            shape: BoxShape.circle,
-          ),
-          child: const Icon(
-            Icons.auto_awesome,
-            color: PassingTraceApp.coral,
-            size: 30,
-          ),
-        ),
-      ),
-      const SizedBox(height: 20),
-      const Text(
-        '问问你的记录',
-        textAlign: TextAlign.center,
-        style: TextStyle(
-          fontFamily: 'serif',
-          fontSize: 25,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-      const SizedBox(height: 10),
-      Text(
-        '我会结合你的文字、图片分析和长期记忆来回答，并给出记录证据。',
-        textAlign: TextAlign.center,
-        style: TextStyle(
-          height: 1.6,
-          color: PassingTraceApp.ink.withValues(alpha: 0.58),
-        ),
-      ),
-      const SizedBox(height: 30),
-      for (final suggestion in const [
-        '我最近去过哪些地方？',
-        '帮我总结这个月的生活。',
-        '我记录过哪些值得回顾的事？',
-      ])
-        Padding(
-          padding: const EdgeInsets.only(bottom: 10),
-          child: OutlinedButton(
-            onPressed: () {
-              _input.text = suggestion;
-              _send();
-            },
-            style: OutlinedButton.styleFrom(
-              alignment: Alignment.centerLeft,
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 15),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
+        if (_error != null)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              _error!,
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
             ),
+          ),
+        SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.all(12),
             child: Row(
               children: [
-                const Icon(Icons.chat_bubble_outline, size: 18),
-                const SizedBox(width: 12),
-                Expanded(child: Text(suggestion)),
-                const Icon(Icons.arrow_forward_ios, size: 13),
+                Expanded(
+                  child: TextField(
+                    controller: _input,
+                    minLines: 1,
+                    maxLines: 4,
+                    decoration: const InputDecoration(
+                      hintText: '询问自己的记录…',
+                      filled: true,
+                    ),
+                    onSubmitted: (_) => _send(),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                IconButton.filled(
+                  onPressed: _busy || _conversationId == null ? null : _send,
+                  icon: _busy
+                      ? const SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.send),
+                ),
               ],
             ),
           ),
         ),
-    ],
-  );
+      ],
+    );
+  }
+
+  Widget _buildEmptyChat() {
+    final colors = context.traceColors;
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(24, 56, 24, 24),
+      children: [
+        Center(
+          child: Container(
+            width: 64,
+            height: 64,
+            decoration: BoxDecoration(
+              color: colors.primarySoft,
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: Icon(
+              Icons.auto_awesome,
+              color: colors.primaryStrong,
+              size: 30,
+            ),
+          ),
+        ),
+        const SizedBox(height: 20),
+        Text(
+          '问问你的记录',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: colors.ink,
+            fontSize: 25,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 10),
+        Text(
+          '我会结合你的文字、图片分析和长期记忆来回答，并给出记录证据。',
+          textAlign: TextAlign.center,
+          style: TextStyle(height: 1.6, color: colors.inkSecondary),
+        ),
+        const SizedBox(height: 30),
+        for (final suggestion in const [
+          '我最近去过哪些地方？',
+          '帮我总结这个月的生活。',
+          '我记录过哪些值得回顾的事？',
+        ])
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: OutlinedButton(
+              onPressed: () {
+                _input.text = suggestion;
+                _send();
+              },
+              style: OutlinedButton.styleFrom(
+                alignment: Alignment.centerLeft,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 18,
+                  vertical: 15,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.chat_bubble_outline, size: 18),
+                  const SizedBox(width: 12),
+                  Expanded(child: Text(suggestion)),
+                  const Icon(Icons.arrow_forward_ios, size: 13),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
 }
 
 class MemoriesView extends StatefulWidget {
@@ -599,9 +615,7 @@ class _MemoriesViewState extends State<MemoriesView> {
   @override
   Widget build(BuildContext context) => Scaffold(
     drawer: widget.drawer,
-    appBar: AppBar(
-      title: const Text('我的记忆', style: TextStyle(fontFamily: 'serif')),
-    ),
+    appBar: AppBar(title: const Text('我的记忆')),
     body: _loading
         ? const Center(child: CircularProgressIndicator())
         : RefreshIndicator(
@@ -610,10 +624,10 @@ class _MemoriesViewState extends State<MemoriesView> {
                 ? ListView(
                     children: [
                       const SizedBox(height: 190),
-                      const Icon(
+                      Icon(
                         Icons.psychology_outlined,
                         size: 42,
-                        color: PassingTraceApp.coral,
+                        color: context.traceColors.primary,
                       ),
                       const SizedBox(height: 14),
                       const Center(child: Text('还没有有证据的长期记忆。')),
@@ -624,7 +638,9 @@ class _MemoriesViewState extends State<MemoriesView> {
                           child: Text(
                             _error!,
                             textAlign: TextAlign.center,
-                            style: const TextStyle(color: Colors.redAccent),
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.error,
+                            ),
                           ),
                         ),
                       ],
@@ -690,10 +706,11 @@ class AssistantMessageContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.traceColors;
     if (isUser || text.isEmpty) {
       return Text(
         text.isEmpty ? '正在检索…' : text,
-        style: TextStyle(color: isUser ? Colors.white : PassingTraceApp.ink),
+        style: TextStyle(color: isUser ? colors.onPrimary : colors.ink),
       );
     }
 
@@ -707,50 +724,40 @@ class AssistantMessageContent extends StatelessWidget {
         if (eventId != null) onOpenEvent?.call(eventId);
       },
       styleSheet: MarkdownStyleSheet(
-        p: const TextStyle(
-          color: PassingTraceApp.ink,
-          fontSize: 15,
-          height: 1.55,
-        ),
-        h1: const TextStyle(
-          color: PassingTraceApp.ink,
+        p: TextStyle(color: colors.ink, fontSize: 15, height: 1.55),
+        h1: TextStyle(
+          color: colors.ink,
           fontSize: 22,
           fontWeight: FontWeight.w700,
           height: 1.4,
         ),
-        h2: const TextStyle(
-          color: PassingTraceApp.ink,
+        h2: TextStyle(
+          color: colors.ink,
           fontSize: 19,
           fontWeight: FontWeight.w700,
           height: 1.4,
         ),
-        h3: const TextStyle(
-          color: PassingTraceApp.ink,
+        h3: TextStyle(
+          color: colors.ink,
           fontSize: 17,
           fontWeight: FontWeight.w700,
           height: 1.4,
         ),
-        listBullet: const TextStyle(
-          color: PassingTraceApp.coral,
-          fontSize: 15,
-          height: 1.55,
-        ),
+        listBullet: TextStyle(color: colors.accent, fontSize: 15, height: 1.55),
         a: TextStyle(
-          color: PassingTraceApp.coral,
-          backgroundColor: PassingTraceApp.coral.withValues(alpha: 0.1),
+          color: colors.accent,
+          backgroundColor: colors.accentSoft,
           fontWeight: FontWeight.w700,
           decoration: TextDecoration.underline,
-          decorationColor: PassingTraceApp.coral,
+          decorationColor: colors.accent,
         ),
         blockquoteDecoration: BoxDecoration(
-          color: PassingTraceApp.paper,
-          border: const Border(
-            left: BorderSide(color: PassingTraceApp.coral, width: 3),
-          ),
+          color: colors.surfaceSoft,
+          border: Border(left: BorderSide(color: colors.accent, width: 3)),
         ),
         code: TextStyle(
-          color: PassingTraceApp.ink,
-          backgroundColor: PassingTraceApp.paper,
+          color: colors.ink,
+          backgroundColor: colors.surfaceSoft,
           fontFamily: 'monospace',
         ),
       ),

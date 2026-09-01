@@ -95,15 +95,19 @@ jobs:
           cat > passingtrace.env <<EOF
           WEB_DOMAIN=passingtrace.com
           AUTH_DOMAIN=auth.passingtrace.com
-          FILES_DOMAIN=files.passingtrace.com
           IDENTITY_IMAGE=${IMAGE_NAMESPACE}/passingtrace-identity:${GITHUB_SHA}
           EVENTS_IMAGE=${IMAGE_NAMESPACE}/passingtrace-events:${GITHUB_SHA}
           WORKER_IMAGE=${IMAGE_NAMESPACE}/passingtrace-worker:${GITHUB_SHA}
           CADDY_IMAGE=${IMAGE_NAMESPACE}/passingtrace-caddy:${GITHUB_SHA}
           POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
           REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }}
-          MINIO_ACCESS_KEY=passingtrace-production
-          MINIO_SECRET_KEY=${{ secrets.MINIO_SECRET_KEY }}
+          S3_ENDPOINT=${{ vars.S3_ENDPOINT }}
+          S3_PUBLIC_ENDPOINT=${{ vars.S3_PUBLIC_ENDPOINT }}
+          S3_BUCKET=${{ vars.S3_BUCKET }}
+          S3_REGION=${{ vars.S3_REGION }}
+          S3_FORCE_PATH_STYLE=false
+          S3_ACCESS_KEY=${{ secrets.S3_ACCESS_KEY }}
+          S3_SECRET_KEY=${{ secrets.S3_SECRET_KEY }}
           CERTIFICATE_PASSWORD=${{ secrets.CERTIFICATE_PASSWORD }}
           REGISTRATION_BOOTSTRAP_CODE=${{ secrets.REGISTRATION_BOOTSTRAP_CODE }}
           QWEN_API_KEY=${{ secrets.QWEN_API_KEY }}

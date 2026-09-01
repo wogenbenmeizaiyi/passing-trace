@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" role="img" aria-labelledby="title desc">
+  <title id="title">PassingTrace PT 字标图标</title>
+  <desc id="desc">由 P 与 T 融合而成的单线品牌字标</desc>
+  <rect x="3" y="3" width="102" height="102" rx="28" fill="#2F6B57"/>
+  <path d="M34 80 V31 H57 C71 31 79 38 79 49 C79 60 71 67 57 67 H34 M55 43 H82" fill="none" stroke="#FFFDF7" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="34" cy="80" r="8" fill="#E28A62"/>
+  <circle cx="34" cy="80" r="2.5" fill="#FFFDF7"/>
+</svg>

@@ -44,38 +44,41 @@ public sealed class S3ObjectStorage : IObjectStorage, IDisposable
                 throw new InvalidOperationException("对象存储凭据未配置。请设置 ObjectStorage:AccessKey 与 SecretKey。");
             }
 
-            if (!await AmazonS3Util.DoesS3BucketExistV2Async(_internalClient, _options.Bucket))
+            if (_options.CreateBucketIfMissing &&
+                !await AmazonS3Util.DoesS3BucketExistV2Async(_internalClient, _options.Bucket))
             {
                 await _internalClient.PutBucketAsync(new PutBucketRequest { BucketName = _options.Bucket }, cancellationToken);
             }
 
-            try
+            if (_options.ConfigureCors)
             {
-                await _internalClient.PutCORSConfigurationAsync(new PutCORSConfigurationRequest
+                try
                 {
-                    BucketName = _options.Bucket,
-                    Configuration = new CORSConfiguration
+                    await _internalClient.PutCORSConfigurationAsync(new PutCORSConfigurationRequest
                     {
-                        Rules =
-                        [
-                            new CORSRule
-                            {
-                                AllowedOrigins = ["*"],
-                                AllowedMethods = ["GET", "HEAD", "PUT"],
-                                AllowedHeaders = ["*"],
-                                ExposeHeaders = ["ETag"],
-                                MaxAgeSeconds = 3600,
-                            },
-                        ],
-                    },
-                }, cancellationToken);
-            }
-            catch (AmazonS3Exception exception) when (
-                exception.StatusCode == HttpStatusCode.NotImplemented ||
-                string.Equals(exception.ErrorCode, "NotImplemented", StringComparison.OrdinalIgnoreCase))
-            {
-                // MinIO 通过 MINIO_API_CORS_ALLOW_ORIGIN 配置 CORS，部分版本不实现
-                // S3 PutBucketCors。对象读写仍完全兼容，只有这一能力改由容器配置。
+                        BucketName = _options.Bucket,
+                        Configuration = new CORSConfiguration
+                        {
+                            Rules =
+                            [
+                                new CORSRule
+                                {
+                                    AllowedOrigins = ["*"],
+                                    AllowedMethods = ["GET", "HEAD", "PUT"],
+                                    AllowedHeaders = ["*"],
+                                    ExposeHeaders = ["ETag"],
+                                    MaxAgeSeconds = 3600,
+                                },
+                            ],
+                        },
+                    }, cancellationToken);
+                }
+                catch (AmazonS3Exception exception) when (
+                    exception.StatusCode == HttpStatusCode.NotImplemented ||
+                    string.Equals(exception.ErrorCode, "NotImplemented", StringComparison.OrdinalIgnoreCase))
+                {
+                    // MinIO 可通过容器环境配置 CORS，部分版本不实现 S3 PutBucketCors。
+                }
             }
 
             _bucketReady = true;
@@ -220,14 +223,9 @@ public sealed class S3ObjectStorage : IObjectStorage, IDisposable
 
     private Uri NormalizePublicUrl(string generatedUrl)
     {
-        var configuredEndpoint = new Uri(_options.PublicEndpoint.TrimEnd('/'));
-        var generatedUri = new Uri(generatedUrl);
-        return new UriBuilder(generatedUri)
-        {
-            Scheme = configuredEndpoint.Scheme,
-            Host = configuredEndpoint.Host,
-            Port = configuredEndpoint.Port,
-        }.Uri;
+        // URL 由使用 PublicEndpoint 创建的独立签名客户端生成。不能在签名后替换 Host，
+        // 否则会破坏 SigV4；对 COS 还会丢失 <bucket>.cos.<region> 虚拟主机前缀。
+        return new Uri(generatedUrl);
     }
 
     private sealed class ResponseOwnedStream(GetObjectResponse response) : Stream

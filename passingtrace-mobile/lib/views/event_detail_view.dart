@@ -9,7 +9,7 @@ import '../events/event_datetime.dart';
 import '../events/event_model.dart';
 import '../events/events_api.dart';
 import '../events/media_api.dart';
-import '../main.dart';
+import '../theme/passingtrace_theme.dart';
 import 'event_form_view.dart';
 import 'event_widgets.dart';
 
@@ -113,7 +113,7 @@ class _EventDetailViewState extends State<EventDetailView> {
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
             style: FilledButton.styleFrom(
-              backgroundColor: PassingTraceApp.coral,
+              backgroundColor: context.traceColors.danger,
             ),
             child: const Text('删除'),
           ),
@@ -157,11 +157,7 @@ class _EventDetailViewState extends State<EventDetailView> {
       appBar: AppBar(
         title: const Text(
           '记录详情',
-          style: TextStyle(
-            fontFamily: 'serif',
-            fontWeight: FontWeight.w600,
-            fontSize: 19,
-          ),
+          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 19),
         ),
         actions: [
           if (_event != null)
@@ -213,10 +209,9 @@ class _EventDetailViewState extends State<EventDetailView> {
           Text(
             title,
             style: const TextStyle(
-              fontFamily: 'serif',
               fontSize: 28,
               height: 1.3,
-              fontWeight: FontWeight.w600,
+              fontWeight: FontWeight.w700,
             ),
           ),
           if (event.effectiveClassification.primaryCategory != null ||
@@ -252,11 +247,7 @@ class _EventDetailViewState extends State<EventDetailView> {
             const SizedBox(height: 24),
             const Text(
               '附件',
-              style: TextStyle(
-                fontFamily: 'serif',
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-              ),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 10),
             for (final media in event.media) _buildMedia(media),
@@ -282,7 +273,10 @@ class _EventDetailViewState extends State<EventDetailView> {
             const SizedBox(height: 24),
             Container(
               padding: const EdgeInsets.all(16),
-              color: PassingTraceApp.coral.withValues(alpha: 0.08),
+              decoration: BoxDecoration(
+                color: context.traceColors.primarySoft,
+                borderRadius: BorderRadius.circular(16),
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -316,7 +310,7 @@ class _EventDetailViewState extends State<EventDetailView> {
               fontSize: 11,
               letterSpacing: 1.5,
               fontWeight: FontWeight.w800,
-              color: PassingTraceApp.ink.withValues(alpha: 0.5),
+              color: context.traceColors.inkTertiary,
             ),
           ),
           const SizedBox(height: 8),
@@ -514,16 +508,11 @@ class _DetailRow extends StatelessWidget {
             label,
             style: TextStyle(
               fontSize: 12,
-              color: PassingTraceApp.ink.withValues(alpha: 0.5),
+              color: context.traceColors.inkTertiary,
             ),
           ),
         ),
-        Expanded(
-          child: Text(
-            value,
-            style: const TextStyle(fontSize: 14, fontFamily: 'serif'),
-          ),
-        ),
+        Expanded(child: Text(value, style: const TextStyle(fontSize: 14))),
       ],
     ),
   );
@@ -544,18 +533,14 @@ class _ErrorView extends StatelessWidget {
         children: [
           Text(
             '无法加载',
-            style: const TextStyle(
-              fontFamily: 'serif',
-              fontSize: 22,
-              fontWeight: FontWeight.w600,
-            ),
+            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 10),
           Text(
             message,
             textAlign: TextAlign.center,
             style: TextStyle(
-              color: PassingTraceApp.ink.withValues(alpha: 0.6),
+              color: context.traceColors.inkSecondary,
               fontSize: 13,
             ),
           ),

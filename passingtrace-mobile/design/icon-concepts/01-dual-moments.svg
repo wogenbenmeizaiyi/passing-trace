@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" role="img" aria-labelledby="title desc">
+  <title id="title">PassingTrace 双时刻图标</title>
+  <desc id="desc">两个时刻节点通过一条上升轨迹相连</desc>
+  <rect x="3" y="3" width="102" height="102" rx="28" fill="#2F6B57"/>
+  <path d="M29 73 C36 73 39 59 48 59 C57 59 58 39 77 34" fill="none" stroke="#FFFDF7" stroke-width="8" stroke-linecap="round"/>
+  <circle cx="29" cy="73" r="10" fill="#E28A62"/>
+  <circle cx="29" cy="73" r="3" fill="#FFFDF7"/>
+  <circle cx="78" cy="34" r="10" fill="#FFFDF7"/>
+  <circle cx="78" cy="34" r="3" fill="#2F6B57"/>
+</svg>

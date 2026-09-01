@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" role="img" aria-labelledby="title desc">
+  <title id="title">PassingTrace 记忆页图标</title>
+  <desc id="desc">一张承载时间节点的记录纸页</desc>
+  <rect x="3" y="3" width="102" height="102" rx="28" fill="#2F6B57"/>
+  <path d="M29 23 H65 L80 38 V84 H29 Z" fill="#FFFDF7" stroke="#FFFDF7" stroke-width="4" stroke-linejoin="round"/>
+  <path d="M65 23 V38 H80" fill="#A8CCBA" stroke="#2F6B57" stroke-width="4" stroke-linejoin="round"/>
+  <path d="M43 49 V70 M43 55 H64 M43 70 H69" fill="none" stroke="#2F6B57" stroke-width="5" stroke-linecap="round"/>
+  <circle cx="43" cy="49" r="6.5" fill="#E28A62"/>
+</svg>
