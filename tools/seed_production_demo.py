@@ -164,7 +164,9 @@ class PassingTraceClient:
         elif form is not None:
             body = urllib.parse.urlencode(form).encode("ascii")
             request_headers["Content-Type"] = "application/x-www-form-urlencoded"
-        if self.access_token:
+        request_host = urllib.parse.urlparse(url).netloc.lower()
+        events_host = urllib.parse.urlparse(self.events_url).netloc.lower()
+        if self.access_token and request_host == events_host:
             request_headers["Authorization"] = f"Bearer {self.access_token}"
         request_headers.update(headers or {})
         request = urllib.request.Request(url, data=body, headers=request_headers, method=method)

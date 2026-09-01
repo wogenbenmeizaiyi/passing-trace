@@ -45,6 +45,27 @@ class DemoSeedTests(unittest.TestCase):
     def test_strips_html_from_commons_attribution(self):
         self.assertEqual("Tyler Valentine", MODULE._plain_metadata('<a href="/wiki/User:X">Tyler</a> Valentine'))
 
+    def test_bearer_token_is_only_sent_to_events_host(self):
+        client = MODULE.PassingTraceClient("https://auth.example", "https://api.example")
+        client.access_token = "private-token"
+        seen_headers = []
+
+        class Response:
+            headers = {"Content-Type": "application/json"}
+            def getcode(self): return 200
+            def read(self): return b"{}"
+
+        def open_request(request, timeout):
+            seen_headers.append(dict(request.header_items()))
+            return Response()
+
+        client.opener.open = open_request
+        client.request("GET", "https://commons.wikimedia.org/w/api.php")
+        client.request("GET", "https://api.example/api/v1/events")
+
+        self.assertNotIn("Bearer private-token", seen_headers[0].values())
+        self.assertIn("Bearer private-token", seen_headers[1].values())
+
 
 if __name__ == "__main__":
     unittest.main()
