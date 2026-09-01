@@ -63,8 +63,6 @@ services:
       OpenIddict__AllowedOrigins__1: https://${WEB_DOMAIN}
       OpenIddict__Clients__2__RedirectUris__0: https://${WEB_DOMAIN}/auth/callback
       OpenIddict__Clients__2__PostLogoutRedirectUris__0: https://${WEB_DOMAIN}/auth/logout-callback
-      OpenIddict__Clients__3__RedirectUris__0: https://${WEB_DOMAIN}/auth/callback
-      OpenIddict__Clients__3__PostLogoutRedirectUris__0: https://${WEB_DOMAIN}/auth/logout-callback
       MobileRegistration__BootstrapCode: ${REGISTRATION_BOOTSTRAP_CODE}
       QrLogin__PublicOrigin: https://${AUTH_DOMAIN}
     volumes:
