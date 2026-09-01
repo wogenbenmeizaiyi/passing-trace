@@ -4,13 +4,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import HomeView from '@/views/HomeView.vue'
 
-describe('PassingTrace web home', () => {
+describe('星期八 Web 首页', () => {
   afterEach(() => vi.unstubAllGlobals())
 
   it('默认展示产品介绍、Android 下载和 Web 登录入口', () => {
     const wrapper = mount(HomeView, {
       global: { plugins: [createPinia()], stubs: { RouterLink: { template: '<a><slot /></a>' } } },
     })
+    expect(wrapper.text()).toContain('星期八')
     expect(wrapper.text()).toContain('下载 Android 版')
     expect(wrapper.text()).toContain('在网页端登录')
     expect(wrapper.text()).toContain('多媒体记录')

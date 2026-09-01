@@ -29,6 +29,9 @@ const deleting = ref(false)
 const editMode = ref(false)
 const mediaUrls = ref<Record<string, string>>({})
 const semantic = ref<SemanticResult | null>(null)
+const showSemantic = ref(false)
+const semanticLoading = ref(false)
+const semanticError = ref<string | null>(null)
 const reparsing = ref(false)
 
 let activeController: AbortController | null = null
@@ -49,6 +52,9 @@ async function load() {
   activeController = controller
   loading.value = true
   error.value = null
+  semantic.value = null
+  showSemantic.value = false
+  semanticError.value = null
   try {
     item.value = await eventsApi.get(eventId.value, { signal: controller.signal })
     const accesses = await Promise.all(
@@ -58,7 +64,6 @@ async function load() {
       }),
     )
     mediaUrls.value = Object.fromEntries(accesses)
-    semantic.value = await aiApi.getSemantic(item.value.id)
   } catch (reason) {
     if (controller.signal.aborted) return
     if (reason instanceof HttpError && reason.status === 404) {
@@ -74,15 +79,33 @@ async function load() {
   }
 }
 
+async function toggleSemantic() {
+  showSemantic.value = !showSemantic.value
+  if (!showSemantic.value || semantic.value || semanticLoading.value || !item.value) return
+
+  semanticLoading.value = true
+  semanticError.value = null
+  try {
+    semantic.value = await aiApi.getSemantic(item.value.id)
+  } catch (reason) {
+    semanticError.value = reason instanceof Error ? reason.message : '详细分析暂时无法读取。'
+  } finally {
+    semanticLoading.value = false
+  }
+}
+
 async function reparse() {
   if (!item.value || reparsing.value) return
   reparsing.value = true
+  semanticError.value = null
   try {
     await aiApi.reparse(item.value.id)
     semantic.value = {
       ...(semantic.value ?? (await aiApi.getSemantic(item.value.id))),
       status: 'Pending',
     }
+  } catch (reason) {
+    semanticError.value = reason instanceof Error ? reason.message : '重新分析失败，请稍后重试。'
   } finally {
     reparsing.value = false
   }
@@ -134,7 +157,7 @@ async function navigateToLocation() {
   const url = new URL('https://uri.amap.com/navigation')
   url.searchParams.set('to', `${target.longitude},${target.latitude},${target.name}`)
   url.searchParams.set('mode', 'car')
-  url.searchParams.set('src', 'PassingTrace')
+  url.searchParams.set('src', '星期八')
   window.open(url.toString(), '_blank', 'noopener')
 }
 
@@ -191,7 +214,28 @@ onUnmounted(() => {
           </div>
         </header>
 
-        <h1 class="detail-title">{{ item.title ?? '（无标题）' }}</h1>
+        <div class="detail-title-row">
+          <h1 class="detail-title">{{ item.title ?? '（无标题）' }}</h1>
+          <button
+            class="semantic-toggle"
+            :class="{ active: showSemantic }"
+            type="button"
+            :aria-label="showSemantic ? '收起 AI 分析' : '查看 AI 分析'"
+            :aria-expanded="showSemantic"
+            aria-controls="event-semantic-panel"
+            :title="showSemantic ? '收起 AI 分析' : '查看 AI 分析'"
+            @click="toggleSemantic"
+          >
+            <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M12 3c.8 4.5 2.5 6.2 7 7-4.5.8-6.2 2.5-7 7-.8-4.5-2.5-6.2-7-7 4.5-.8 6.2-2.5 7-7Z"
+              />
+              <path
+                d="M19 16c.3 1.8 1.2 2.7 3 3-1.8.3-2.7 1.2-3 3-.3-1.8-1.2-2.7-3-3 1.8-.3 2.7-1.2 3-3Z"
+              />
+            </svg>
+          </button>
+        </div>
         <div
           v-if="
             item.effectiveClassification.primaryCategory || item.effectiveClassification.tags.length
@@ -210,13 +254,41 @@ onUnmounted(() => {
           </span>
         </div>
 
+        <Transition name="semantic-panel">
+          <section
+            v-if="showSemantic"
+            id="event-semantic-panel"
+            class="semantic-card"
+            :data-status="semantic?.status ?? item.semanticStatus"
+            aria-label="AI 分析详情"
+            aria-live="polite"
+          >
+            <div>
+              <p class="section-label">AI 分析 · {{ semantic?.status ?? item.semanticStatus }}</p>
+              <p v-if="semantic?.summary ?? item.semanticSummary">
+                {{ semantic?.summary ?? item.semanticSummary }}
+              </p>
+              <p v-else-if="semanticLoading">正在读取详细分析…</p>
+              <p v-else>Worker 会在后台分析正文与图片，记录保存不需要等待。</p>
+              <small v-if="semantic?.model"
+                >{{ semantic.model }} · {{ semantic.pipelineVersion }}</small
+              >
+              <small v-if="semantic?.error" class="semantic-error">{{ semantic.error }}</small>
+              <small v-if="semanticError" class="semantic-error">{{ semanticError }}</small>
+            </div>
+            <button class="text-button" :disabled="reparsing || semanticLoading" @click="reparse">
+              {{ reparsing ? '已排队' : '重新分析' }}
+            </button>
+          </section>
+        </Transition>
+
         <dl class="source">
           <div v-if="item.kind === EventKind.Trace">
             <dt>发生时间</dt>
             <dd>{{ fmt(item.happenedAt) }}</dd>
           </div>
           <div v-if="item.kind === EventKind.Plan">
-            <dt>计划时间</dt>
+            <dt>预定时间</dt>
             <dd>{{ fmt(item.plannedAt) }}</dd>
           </div>
           <div v-if="item.completedAt">
@@ -254,22 +326,6 @@ onUnmounted(() => {
           </div>
         </section>
 
-        <section class="semantic-card" :data-status="semantic?.status ?? item.semanticStatus">
-          <div>
-            <p class="section-label">AI 分析 · {{ semantic?.status ?? item.semanticStatus }}</p>
-            <p v-if="semantic?.summary ?? item.semanticSummary">
-              {{ semantic?.summary ?? item.semanticSummary }}
-            </p>
-            <p v-else>Worker 会在后台分析正文与图片，记录保存不需要等待。</p>
-            <small v-if="semantic?.model"
-              >{{ semantic.model }} · {{ semantic.pipelineVersion }}</small
-            >
-            <small v-if="semantic?.error" class="semantic-error">{{ semantic.error }}</small>
-          </div>
-          <button class="text-button" :disabled="reparsing" @click="reparse">
-            {{ reparsing ? '已排队' : '重新分析' }}
-          </button>
-        </section>
         <section v-if="item.locations.length" class="semantic-card">
           <div>
             <p class="section-label">地点</p>
@@ -314,7 +370,7 @@ onUnmounted(() => {
     </main>
 
     <footer>
-      <span>PassingTrace © 2026</span>
+      <span>星期八 © 2026</span>
       <span>记录 · 个人时间线</span>
     </footer>
   </div>
@@ -356,12 +412,44 @@ onUnmounted(() => {
   display: flex;
   gap: 10px;
 }
-.detail-title {
+.detail-title-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
   margin: 0 0 28px;
+}
+.detail-title {
+  min-width: 0;
+  flex: 1;
+  margin: 0;
   font-size: clamp(28px, 4vw, 42px);
   font-weight: 750;
   line-height: 1.2;
   letter-spacing: -0.045em;
+}
+.semantic-toggle {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  display: grid;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  color: var(--ink-tertiary);
+  background: transparent;
+  transition:
+    color var(--motion-fast) var(--ease-out),
+    border-color var(--motion-fast) var(--ease-out),
+    background-color var(--motion-fast) var(--ease-out);
+}
+.semantic-toggle:hover {
+  color: var(--primary-strong);
+  background: var(--surface-soft);
+}
+.semantic-toggle.active {
+  color: var(--primary-strong);
+  border-color: color-mix(in srgb, var(--primary) 32%, var(--line));
+  background: var(--primary-soft);
 }
 .label-row {
   margin: -14px 0 28px;
@@ -487,6 +575,24 @@ onUnmounted(() => {
 }
 .semantic-card .semantic-error {
   color: var(--danger);
+}
+.semantic-panel-enter-active,
+.semantic-panel-leave-active {
+  transition:
+    opacity var(--motion-fast) var(--ease-out),
+    transform var(--motion-fast) var(--ease-out);
+}
+.semantic-panel-enter-from,
+.semantic-panel-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .semantic-toggle,
+  .semantic-panel-enter-active,
+  .semantic-panel-leave-active {
+    transition: none;
+  }
 }
 .source-meta {
   border-top: 1px solid var(--line);

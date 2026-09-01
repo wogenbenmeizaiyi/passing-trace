@@ -5,10 +5,10 @@ PassingTrace — 基于 OIDC 的个人身份与活动事件平台，包含 .NET 
 ## Setup commands
 
 - 后端依赖还原（首次或更新包后）：`dotnet restore PassingTrace.slnx`
-- Web 客户端安装：`corepack pnpm install`（在 `passingtrace-web/` 与 `passingtrace-sso-demo/` 中分别执行）
+- Web 客户端安装：`corepack pnpm install`（在 `passingtrace-web/` 中执行）
 - 移动端依赖：`flutter pub get`（在 `passingtrace-mobile/` 中执行）
 - 本地一键起全栈： `dotnet run --project AppHost/AppHost.csproj`（Aspire 13 编排，PostgreSQL + Identity + Events 一起拉起；推荐入口）
-- 仅起前端：`corepack pnpm dev`（`passingtrace-web` 默认 `http://localhost:5173`；`passingtrace-sso-demo` 默认 `:5174`）
+- 仅起前端：`corepack pnpm dev`（`passingtrace-web` 默认 `http://localhost:5173`）
 - 仅起移动端：`flutter run`（需先用 HTTP profile 启动 `PassingTrace.Identity.AuthorizationServer`，默认端口 `56229`；模拟器内访问宿主用 `http://10.0.2.2:56229`）
 
 ## Build
@@ -40,7 +40,6 @@ PassingTrace — 基于 OIDC 的个人身份与活动事件平台，包含 .NET 
 - `Identity/` — Identity 领域 `Domain` / 应用 `Application` / 基础设施 `Infrastructure` / `AuthorizationServer`（OpenIddict 7.6 + QRCoder）
 - `tests/PassingTrace.Identity.IntegrationTests/` — 集成测试（xUnit）
 - `passingtrace-web/` — Vue 3 + Vite 8 + TS 6 第一方客户端（OIDC 公共客户端，sessionStorage Token）
-- `passingtrace-sso-demo/` — 独立 SSO 验证站（`:5174`），用于可视化验证 Identity SSO
 - `passingtrace-mobile/` — Android-only Flutter 应用（`mobile_scanner` + `flutter_appauth` + `flutter_secure_storage`）
 - `theme-showcase.html` — 视觉/品牌总览（"纸·墨·朱砂"）
 

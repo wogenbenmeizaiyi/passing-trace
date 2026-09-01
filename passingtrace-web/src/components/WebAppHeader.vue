@@ -30,11 +30,9 @@ function download(event: MouseEvent) {
 <template>
   <header class="site-header" :class="`site-header--${variant}`">
     <div class="site-header__inner">
-      <RouterLink class="site-brand" to="/" aria-label="PassingTrace 产品首页">
+      <RouterLink class="site-brand" to="/" aria-label="星期八产品首页">
         <span class="site-brand__mark"><BrandMark /></span>
-        <span class="site-brand__copy"
-          ><strong>PassingTrace</strong><small>把生活收进记忆盒</small></span
-        >
+        <span class="site-brand__copy"><strong>星期八</strong><small>把生活收进记忆盒</small></span>
       </RouterLink>
 
       <nav v-if="variant === 'marketing'" class="site-nav" aria-label="产品导航">

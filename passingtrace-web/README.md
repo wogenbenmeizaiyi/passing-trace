@@ -1,6 +1,6 @@
-# PassingTrace Web
+# 星期八 Web 客户端
 
-PassingTrace 的 Vue 3 第一方 Web 客户端。它不接收用户名或密码，而是通过 PassingTrace Identity 使用 OpenID Connect Authorization Code + PKCE 完成登录。
+星期八的 Vue 3 第一方 Web 客户端。它不接收用户名或密码，而是通过内部 Identity 服务使用 OpenID Connect Authorization Code + PKCE 完成登录。
 
 默认路由 `/` 是无需登录的产品介绍页，提供 Android 安装包下载和 Web 登录入口。记录、AI 问答、附件上传、分类标签与地点等交互保留在 `/events`、`/assistant` 等应用路由中。
 

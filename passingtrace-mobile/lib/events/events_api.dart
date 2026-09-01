@@ -152,6 +152,8 @@ class EventApiClient {
     EventStatus? status,
     String? from,
     String? to,
+    String? categoryKey,
+    List<String> tagKeys = const [],
   }) async {
     final uri = _resolve('/api/v1/events', {
       'limit': limit,
@@ -160,6 +162,8 @@ class EventApiClient {
       'status': status?.value,
       'from': from,
       'to': to,
+      'categoryKey': categoryKey,
+      'tagKeys': tagKeys.isEmpty ? null : tagKeys.join(','),
     });
     final response = await _send(session, 'GET', uri);
     return _decode(response, const {

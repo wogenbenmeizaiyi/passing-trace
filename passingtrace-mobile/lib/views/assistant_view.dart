@@ -310,8 +310,7 @@ class _AssistantViewState extends State<AssistantView> {
                           ),
                           itemBuilder: (_, index) {
                             final conversation = _conversations[index];
-                            final selected =
-                                conversation.id == _conversationId;
+                            final selected = conversation.id == _conversationId;
                             return InkWell(
                               onTap: () => _openConversation(conversation),
                               child: ConstrainedBox(
@@ -440,9 +439,7 @@ class _AssistantViewState extends State<AssistantView> {
       children: [
         Positioned.fill(
           child: _initialLoading
-              ? Center(
-                  child: CircularProgressIndicator(color: colors.primary),
-                )
+              ? Center(child: CircularProgressIndicator(color: colors.primary))
               : _messages.isEmpty
               ? _buildEmptyChat()
               : ListView.builder(
@@ -520,19 +517,11 @@ class _AssistantViewState extends State<AssistantView> {
               eventTitles: message.eventTitles,
               onOpenEvent: _openEvent,
             ),
-            if (message.eventTitles.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              for (final record in message.eventTitles.entries)
-                Padding(
-                  padding: const EdgeInsets.only(top: 6),
-                  child: _EvidenceCard(
-                    title: record.value.isEmpty
-                        ? '来自你的记录'
-                        : record.value,
-                    onTap: () => _openEvent(record.key),
-                  ),
-                ),
-            ],
+            if (message.eventTitles.isNotEmpty)
+              AssistantEvidenceDisclosure(
+                records: message.eventTitles,
+                onOpenEvent: _openEvent,
+              ),
           ],
         ),
       ),
@@ -722,6 +711,107 @@ class _AssistantViewState extends State<AssistantView> {
   }
 }
 
+class AssistantEvidenceDisclosure extends StatefulWidget {
+  const AssistantEvidenceDisclosure({
+    super.key,
+    required this.records,
+    required this.onOpenEvent,
+  });
+
+  final Map<int, String> records;
+  final ValueChanged<int> onOpenEvent;
+
+  @override
+  State<AssistantEvidenceDisclosure> createState() =>
+      _AssistantEvidenceDisclosureState();
+}
+
+class _AssistantEvidenceDisclosureState
+    extends State<AssistantEvidenceDisclosure> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.traceColors;
+    final count = widget.records.length;
+    final reduceMotion =
+        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    return Container(
+      margin: const EdgeInsets.only(top: 12),
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: colors.line)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Material(
+            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: () => setState(() => _expanded = !_expanded),
+              child: Semantics(
+                button: true,
+                expanded: _expanded,
+                label: _expanded ? '收起相关记录，共 $count 条' : '展开相关记录，共 $count 条',
+                excludeSemantics: true,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 48),
+                  child: Row(
+                    children: [
+                      TraceIcon(
+                        TraceGlyph.note,
+                        size: 18,
+                        color: colors.accent,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          '相关记录',
+                          style: TextStyle(
+                            color: colors.inkSecondary,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        '$count 条',
+                        style: TextStyle(color: colors.inkMuted, fontSize: 11),
+                      ),
+                      const SizedBox(width: 6),
+                      AnimatedRotation(
+                        turns: _expanded ? 0.5 : 0,
+                        duration: reduceMotion
+                            ? Duration.zero
+                            : const Duration(milliseconds: 140),
+                        child: TraceIcon(
+                          TraceGlyph.chevronDown,
+                          size: 16,
+                          color: colors.inkMuted,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          if (_expanded)
+            for (final record in widget.records.entries)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: _EvidenceCard(
+                  title: record.value.isEmpty ? '来自你的记录' : record.value,
+                  onTap: () => widget.onOpenEvent(record.key),
+                ),
+              ),
+        ],
+      ),
+    );
+  }
+}
+
 class _EvidenceCard extends StatelessWidget {
   const _EvidenceCard({required this.title, required this.onTap});
 
@@ -741,18 +831,12 @@ class _EvidenceCard extends StatelessWidget {
           constraints: const BoxConstraints(minHeight: 54),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
-            border: Border.all(
-              color: colors.accent.withValues(alpha: 0.32),
-            ),
+            border: Border.all(color: colors.accent.withValues(alpha: 0.32)),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Row(
             children: [
-              TraceIcon(
-                TraceGlyph.note,
-                size: 20,
-                color: colors.accent,
-              ),
+              TraceIcon(TraceGlyph.note, size: 20, color: colors.accent),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(

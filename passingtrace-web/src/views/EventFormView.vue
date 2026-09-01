@@ -8,7 +8,7 @@ import { HttpError } from '@/api/http-client'
 import WebAppHeader from '@/components/WebAppHeader.vue'
 import {
   EventKind,
-  EventKindLabel,
+  EventKindActionLabel,
   EventStatus,
   type EventKind as EventKindT,
   type EventResponse,
@@ -38,7 +38,7 @@ const form = ref({
   kind: EventKind.Trace as EventKindT,
   title: '',
   rawContent: '',
-  /** 发生时间（trace）或计划时间（plan），datetime-local 形式。 */
+  /** 发生时间（trace）或预定时间（plan），datetime-local 形式。 */
   when: '',
   timezone: defaultTimezone(),
 })
@@ -312,15 +312,15 @@ function moveAttachment(index: number, direction: -1 | 1) {
 }
 
 const kindOptions = [
-  { value: EventKind.Trace, label: EventKindLabel[EventKind.Trace] },
-  { value: EventKind.Plan, label: EventKindLabel[EventKind.Plan] },
+  { value: EventKind.Trace, label: EventKindActionLabel[EventKind.Trace] },
+  { value: EventKind.Plan, label: EventKindActionLabel[EventKind.Plan] },
 ]
 
-const whenLabel = computed(() => (form.value.kind === EventKind.Plan ? '计划时间' : '发生时间'))
+const whenLabel = computed(() => (form.value.kind === EventKind.Plan ? '预定时间' : '发生时间'))
 
 const statusHint = computed(() => {
   if (mode.value === 'create' && form.value.kind === EventKind.Plan) {
-    return '新建计划时状态默认为"待执行"。'
+    return '写下计划后，状态默认为“待执行”。'
   }
   if (mode.value === 'edit' && loaded.value) {
     return `当前状态：${loaded.value.status === EventStatus.Planned ? '待执行' : loaded.value.status === EventStatus.Completed ? '已完成' : '已取消'}`
@@ -564,7 +564,7 @@ onUnmounted(() => {
     </main>
 
     <footer>
-      <span>PassingTrace © 2026</span>
+      <span>星期八 © 2026</span>
       <span>记录 · 个人时间线</span>
     </footer>
   </div>

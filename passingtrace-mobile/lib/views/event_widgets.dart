@@ -11,7 +11,8 @@ class EventKindBadge extends StatelessWidget {
   final EventKind kind;
 
   @override
-  Widget build(BuildContext context) => TraceTag(label: kind.label, category: true);
+  Widget build(BuildContext context) =>
+      TraceTag(label: kind.label, category: true);
 }
 
 class EventStatusBadge extends StatelessWidget {
@@ -35,7 +36,11 @@ class EventStatusBadge extends StatelessWidget {
       ),
       child: Text(
         status.label,
-        style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w700),
+        style: TextStyle(
+          color: color,
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }
@@ -135,10 +140,8 @@ class EventCard extends StatelessWidget {
                           category: true,
                         ),
                         ...tags.map(
-                          (tag) => TraceTag(
-                            label: tag.displayName,
-                            ai: tag.isAi,
-                          ),
+                          (tag) =>
+                              TraceTag(label: tag.displayName, ai: tag.isAi),
                         ),
                       ],
                     ),
@@ -179,7 +182,9 @@ class EventCard extends StatelessWidget {
   }
 
   static String _timeLabel(EventModel event) {
-    final value = event.kind == EventKind.plan ? event.plannedAt : event.happenedAt;
+    final value = event.kind == EventKind.plan
+        ? event.plannedAt
+        : event.happenedAt;
     final local = (value ?? event.createdAt).toLocal();
     String two(int number) => number.toString().padLeft(2, '0');
     return '${two(local.hour)}:${two(local.minute)}';
@@ -187,7 +192,6 @@ class EventCard extends StatelessWidget {
 
   static String _metaLabel(EventModel event) {
     if (event.media.isNotEmpty) return '${event.media.length} 个附件';
-    if (event.semanticStatus?.toLowerCase() == 'completed') return 'AI 已分析';
     return event.status.label;
   }
 }

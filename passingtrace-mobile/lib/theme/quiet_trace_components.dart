@@ -71,6 +71,7 @@ class TraceIconButton extends StatelessWidget {
     this.color,
     this.backgroundColor,
     this.borderColor,
+    this.expanded,
   });
 
   final TraceGlyph glyph;
@@ -79,6 +80,7 @@ class TraceIconButton extends StatelessWidget {
   final Color? color;
   final Color? backgroundColor;
   final Color? borderColor;
+  final bool? expanded;
 
   @override
   Widget build(BuildContext context) {
@@ -100,14 +102,11 @@ class TraceIconButton extends StatelessWidget {
             button: true,
             label: tooltip,
             enabled: onPressed != null,
+            expanded: expanded,
             child: Center(
               child: Opacity(
                 opacity: onPressed == null ? 0.42 : 1,
-                child: TraceIcon(
-                  glyph,
-                  color: color ?? colors.ink,
-                  size: 22,
-                ),
+                child: TraceIcon(glyph, color: color ?? colors.ink, size: 22),
               ),
             ),
           ),
@@ -411,11 +410,7 @@ class TraceRowButton extends StatelessWidget {
                   ),
                 ),
                 if (trailing != null)
-                  TraceIcon(
-                    trailing!,
-                    size: 18,
-                    color: colors.inkTertiary,
-                  ),
+                  TraceIcon(trailing!, size: 18, color: colors.inkTertiary),
               ],
             ),
           ),
@@ -445,9 +440,7 @@ class TraceTag extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
       decoration: BoxDecoration(
         color: category ? colors.primarySoft : colors.surfaceSoft,
-        border: Border.all(
-          color: category ? Colors.transparent : colors.line,
-        ),
+        border: Border.all(color: category ? Colors.transparent : colors.line),
         borderRadius: BorderRadius.circular(99),
       ),
       child: Row(

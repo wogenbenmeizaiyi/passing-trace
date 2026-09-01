@@ -298,6 +298,32 @@ public sealed class EventServiceTimeZoneTests : IDisposable
                 null, "WGS84", EventLocationSource.CurrentPosition, null)]), CancellationToken.None));
     }
 
+    [Fact]
+    public async Task ListAsync_FiltersByOccurrenceAndPlannedTime()
+    {
+        var createdAt = new DateTimeOffset(2026, 9, 1, 8, 0, 0, TimeSpan.Zero);
+        var augustTrace = Event.Create(
+            70, EventKind.Trace, "八月散步", null,
+            new DateTimeOffset(2026, 8, 18, 10, 0, 0, TimeSpan.Zero), null,
+            "Asia/Shanghai", "filter-trace", createdAt);
+        var septemberPlan = Event.Create(
+            70, EventKind.Plan, "九月出行", null, null,
+            new DateTimeOffset(2026, 9, 5, 10, 0, 0, TimeSpan.Zero),
+            "Asia/Shanghai", "filter-plan", createdAt);
+        _db.Events.AddRange(augustTrace, septemberPlan);
+        await _db.SaveChangesAsync();
+
+        var repository = new EventRepository(_db);
+        var august = await repository.ListAsync(
+            new EventListQuery(
+                70,
+                From: new DateTimeOffset(2026, 8, 1, 0, 0, 0, TimeSpan.Zero),
+                To: new DateTimeOffset(2026, 8, 31, 23, 59, 59, TimeSpan.Zero)),
+            CancellationToken.None);
+
+        Assert.Collection(august, item => Assert.Equal("八月散步", item.Title));
+    }
+
     private static TraceDbContext CreateDbContext() =>
         throw new InvalidOperationException("请使用带连接的构造器。");
 
@@ -411,6 +437,15 @@ public sealed class EventServiceTimeZoneTests : IDisposable
             modelBuilder.Entity<Event>()
                 .Property(e => e.RowVersion)
                 .ValueGeneratedNever();
+            modelBuilder.Entity<Event>()
+                .Property(e => e.CreatedAt)
+                .HasConversion<long>();
+            modelBuilder.Entity<Event>()
+                .Property(e => e.HappenedAt)
+                .HasConversion<long?>();
+            modelBuilder.Entity<Event>()
+                .Property(e => e.PlannedAt)
+                .HasConversion<long?>();
             modelBuilder.Entity<EventSearchIndex>().Ignore("Embedding");
             modelBuilder.Entity<EventSearchIndex>().Ignore("SearchVector");
             modelBuilder.Entity<UserMemory>().Ignore("Embedding");

@@ -11,11 +11,11 @@ on:
       version_name:
         description: Android version name
         required: true
-        default: 1.0.1
+        default: 1.0.2
       version_code:
         description: Android version code (must always increase)
         required: true
-        default: "4"
+        default: "5"
       minimum_supported_version_code:
         description: Versions below this code must update
         required: true
@@ -23,7 +23,7 @@ on:
       notes:
         description: Chinese release notes
         required: true
-        default: 修复注册并增加应用内更新。
+        default: 更新星期八界面，增加完整记录筛选并优化 AI 证据与分析展示。
 
 permissions:
   contents: read
@@ -33,10 +33,10 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     env:
-      RELEASE_VERSION_NAME: ${{ inputs.version_name || '1.0.1' }}
-      RELEASE_VERSION_CODE: ${{ inputs.version_code || '4' }}
+      RELEASE_VERSION_NAME: ${{ inputs.version_name || '1.0.2' }}
+      RELEASE_VERSION_CODE: ${{ inputs.version_code || '5' }}
       RELEASE_MINIMUM_SUPPORTED_VERSION_CODE: ${{ inputs.minimum_supported_version_code || '1' }}
-      RELEASE_NOTES: ${{ inputs.notes || '修复注册、更新应用图标并增加应用内更新。' }}
+      RELEASE_NOTES: ${{ inputs.notes || '更新星期八界面，增加完整记录筛选并优化 AI 证据与分析展示。' }}
       S3_ENDPOINT: ${{ vars.S3_ENDPOINT }}
       S3_BUCKET: ${{ vars.S3_BUCKET }}
       S3_REGION: ${{ vars.S3_REGION }}

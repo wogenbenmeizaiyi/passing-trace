@@ -271,8 +271,8 @@ Authorization: Bearer <access_token>
 | `cursor` | long? | 上一页最后一条的 `id` |
 | `kind` | int? | 0/1 筛选 |
 | `status` | int? | 0/1/2 筛选 |
-| `from` | string? | 创建时间下界（ISO 8601） |
-| `to` | string? | 创建时间上界（ISO 8601） |
+| `from` | string? | 记录时间下界（ISO 8601；痕迹取发生时间，计划取计划时间，未填写时回退创建时间） |
+| `to` | string? | 记录时间上界（ISO 8601；痕迹取发生时间，计划取计划时间，未填写时回退创建时间） |
 
 **响应** `200`
 

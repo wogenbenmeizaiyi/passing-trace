@@ -6,8 +6,8 @@ void main() {
     test('数值与文案', () {
       expect(EventKind.trace.value, 0);
       expect(EventKind.plan.value, 1);
-      expect(EventKind.trace.label, '痕迹');
-      expect(EventKind.plan.label, '计划');
+      expect(EventKind.trace.label, '当下记录');
+      expect(EventKind.plan.label, '未来安排');
     });
 
     test('fromValue 正常解析', () {

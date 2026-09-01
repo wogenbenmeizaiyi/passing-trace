@@ -159,6 +159,10 @@ void main() {
         cursor: 5,
         kind: EventKind.trace,
         status: EventStatus.completed,
+        from: '2026-08-01T00:00:00Z',
+        to: '2026-08-31T23:59:59Z',
+        categoryKey: 'food',
+        tagKeys: const ['coffee', 'cooking'],
       );
 
       final uri = _lastUri(captured);
@@ -167,6 +171,10 @@ void main() {
       expect(uri.queryParameters['cursor'], '5');
       expect(uri.queryParameters['kind'], '0');
       expect(uri.queryParameters['status'], '1');
+      expect(uri.queryParameters['from'], '2026-08-01T00:00:00Z');
+      expect(uri.queryParameters['to'], '2026-08-31T23:59:59Z');
+      expect(uri.queryParameters['categoryKey'], 'food');
+      expect(uri.queryParameters['tagKeys'], 'coffee,cooking');
       expect(_lastHeaders(captured)['Authorization'], 'Bearer access-1');
       // `_bearerHeaders` 会在每次请求前调一次 `ensureFreshToken`；
       // token 本就没过期时这是单次查询，不会触发 refresh 流程。

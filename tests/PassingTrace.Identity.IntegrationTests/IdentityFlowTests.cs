@@ -17,6 +17,17 @@ public sealed class IdentityFlowTests(IdentityWebApplicationFactory factory)
     : IClassFixture<IdentityWebApplicationFactory>
 {
     [Fact]
+    public async Task HomePage_UsesChineseBrandName()
+    {
+        using var client = CreateBrowserClient();
+
+        var html = await client.GetStringAsync("/");
+
+        Assert.Contains("星期八", html, StringComparison.Ordinal);
+        Assert.DoesNotContain(">PassingTrace<", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task MobileRegistration_IssuesValidJwt_AndRefreshes()
     {
         using var client = CreateBrowserClient();

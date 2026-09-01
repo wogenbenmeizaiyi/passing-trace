@@ -7,6 +7,7 @@ import '../theme/passingtrace_theme.dart';
 import '../theme/quiet_trace_components.dart';
 import '../theme/quiet_trace_icons.dart';
 import 'event_detail_view.dart';
+import 'event_filter_sheet.dart';
 import 'event_form_view.dart';
 import 'event_widgets.dart';
 
@@ -37,9 +38,8 @@ class _EventsListViewState extends State<EventsListView> {
   bool _initialLoading = true;
   bool _loadingMore = false;
   String? _error;
-  EventKind? _filterKind;
-  EventStatus? _filterStatus;
-  bool _filtersOpen = false;
+  EventTaxonomyModel? _taxonomy;
+  EventFilterSelection _filters = EventFilterSelection();
 
   @override
   void initState() {
@@ -52,6 +52,19 @@ class _EventsListViewState extends State<EventsListView> {
     if (!mounted) return;
     _api = EventApiClient(auth: widget.auth, baseUrl: baseUrl);
     await _reload();
+    if (mounted) await _loadTaxonomy();
+  }
+
+  Future<void> _loadTaxonomy() async {
+    try {
+      final taxonomy = await _api.taxonomy(widget.session);
+      if (mounted) setState(() => _taxonomy = taxonomy);
+    } on EventApiException catch (error) {
+      if (error.status == 401 && mounted) await _handleSessionExpired();
+      // 分类数据加载失败不阻塞时间、类型和状态筛选。
+    } catch (_) {
+      // 分类数据加载失败不阻塞记录列表。
+    }
   }
 
   @override
@@ -69,8 +82,12 @@ class _EventsListViewState extends State<EventsListView> {
       final page = await _api.list(
         widget.session,
         limit: 50,
-        kind: _filterKind,
-        status: _filterStatus,
+        kind: _filters.kind,
+        status: _filters.status,
+        from: _filters.fromIso8601,
+        to: _filters.toIso8601,
+        categoryKey: _filters.categoryKey,
+        tagKeys: _filters.tagKeys,
       );
       if (!mounted) return;
       setState(() {
@@ -105,8 +122,12 @@ class _EventsListViewState extends State<EventsListView> {
         widget.session,
         limit: 50,
         cursor: _nextCursor,
-        kind: _filterKind,
-        status: _filterStatus,
+        kind: _filters.kind,
+        status: _filters.status,
+        from: _filters.fromIso8601,
+        to: _filters.toIso8601,
+        categoryKey: _filters.categoryKey,
+        tagKeys: _filters.tagKeys,
       );
       if (!mounted) return;
       setState(() {
@@ -160,15 +181,25 @@ class _EventsListViewState extends State<EventsListView> {
     }
   }
 
-  void _clearFilters() {
-    setState(() {
-      _filterKind = null;
-      _filterStatus = null;
-    });
-    _reload();
+  Future<void> _clearFilters() async {
+    setState(() => _filters = EventFilterSelection());
+    await _reload();
   }
 
-  bool get _hasActiveFilters => _filterKind != null || _filterStatus != null;
+  Future<void> _showFilters() async {
+    if (_taxonomy == null) await _loadTaxonomy();
+    if (!mounted) return;
+    final selection = await showEventFilterSheet(
+      context: context,
+      selection: _filters,
+      taxonomy: _taxonomy,
+    );
+    if (selection == null || !mounted) return;
+    setState(() => _filters = selection);
+    await _reload();
+  }
+
+  bool get _hasActiveFilters => _filters.hasFilters;
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -206,28 +237,23 @@ class _EventsListViewState extends State<EventsListView> {
     }
 
     final entries = _timelineEntries();
-    return Column(
-      children: [
-        if (_filtersOpen) _buildFilterPanel(),
-        Expanded(
-          child: _items.isEmpty
-              ? _MessageView(
-                  title: '还没有记录',
-                  detail: '从今天开始，留下第一件值得回看的小事。',
-                  actionText: _hasActiveFilters ? '清除筛选' : '记一笔',
-                  onAction: _hasActiveFilters ? _clearFilters : _openCreate,
-                )
-              : RefreshIndicator(
-                  onRefresh: _reload,
-                  child: ListView.builder(
-                    padding: const EdgeInsets.fromLTRB(18, 20, 18, 28),
-                    itemCount: entries.length,
-                    itemBuilder: (context, index) => _buildEntry(entries[index]),
-                  ),
-                ),
-        ),
-      ],
-    );
+    return _items.isEmpty
+        ? _MessageView(
+            title: '还没有记录',
+            detail: _hasActiveFilters
+                ? '没有符合当前筛选条件的记录。'
+                : '从今天开始，留下第一件值得回看的小事。',
+            actionText: _hasActiveFilters ? '清除筛选' : '记一笔',
+            onAction: _hasActiveFilters ? _clearFilters : _openCreate,
+          )
+        : RefreshIndicator(
+            onRefresh: _reload,
+            child: ListView.builder(
+              padding: const EdgeInsets.fromLTRB(18, 20, 18, 28),
+              itemCount: entries.length,
+              itemBuilder: (context, index) => _buildEntry(entries[index]),
+            ),
+          );
   }
 
   List<_TimelineEntry> _timelineEntries() {
@@ -299,9 +325,13 @@ class _EventsListViewState extends State<EventsListView> {
             dimension: 48,
             child: TraceIconButton(
               glyph: TraceGlyph.filter,
-              tooltip: _filtersOpen ? '收起筛选' : '筛选记录',
-              onPressed: () => setState(() => _filtersOpen = !_filtersOpen),
-              color: _hasActiveFilters ? colors.primaryStrong : colors.inkSecondary,
+              tooltip: _hasActiveFilters
+                  ? '筛选记录，已应用 ${_filters.activeCount} 项'
+                  : '筛选记录',
+              onPressed: _showFilters,
+              color: _hasActiveFilters
+                  ? colors.primaryStrong
+                  : colors.inkSecondary,
               backgroundColor: _hasActiveFilters ? colors.primarySoft : null,
             ),
           ),
@@ -389,48 +419,6 @@ class _EventsListViewState extends State<EventsListView> {
     );
   }
 
-  Widget _buildFilterPanel() {
-    final colors = context.traceColors;
-    return Material(
-      color: colors.surface,
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.fromLTRB(18, 14, 18, 16),
-        decoration: BoxDecoration(
-          border: Border(bottom: BorderSide(color: colors.line)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _FilterGroup<EventKind>(
-              label: '记录类型',
-              value: _filterKind,
-              allLabel: '全部',
-              values: EventKind.values,
-              itemLabel: (value) => value.label,
-              onChanged: (value) {
-                setState(() => _filterKind = value);
-                _reload();
-              },
-            ),
-            const SizedBox(height: 12),
-            _FilterGroup<EventStatus>(
-              label: '记录状态',
-              value: _filterStatus,
-              allLabel: '全部',
-              values: EventStatus.values,
-              itemLabel: (value) => value.label,
-              onChanged: (value) {
-                setState(() => _filterStatus = value);
-                _reload();
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildFooter() {
     final colors = context.traceColors;
     if (_nextCursor == null) {
@@ -454,17 +442,29 @@ class _EventsListViewState extends State<EventsListView> {
   }
 
   static DateTime _eventTime(EventModel event) =>
-      (event.kind == EventKind.plan ? event.plannedAt : event.happenedAt ?? event.createdAt)
+      (event.kind == EventKind.plan
+              ? event.plannedAt
+              : event.happenedAt ?? event.createdAt)
           ?.toLocal() ??
       event.createdAt.toLocal();
 
   static String _monthLabel(int month) => const [
-    '一', '二', '三', '四', '五', '六', '七', '八', '九', '十', '十一', '十二',
+    '一',
+    '二',
+    '三',
+    '四',
+    '五',
+    '六',
+    '七',
+    '八',
+    '九',
+    '十',
+    '十一',
+    '十二',
   ][month - 1];
 
-  static String _weekday(int weekday) => const [
-    '星期一', '星期二', '星期三', '星期四', '星期五', '星期六', '星期日',
-  ][weekday - 1];
+  static String _weekday(int weekday) =>
+      const ['星期一', '星期二', '星期三', '星期四', '星期五', '星期六', '星期日'][weekday - 1];
 
   static String _relativeDayLabel(DateTime day) {
     final now = DateTime.now();
@@ -499,87 +499,6 @@ class _EventEntry extends _TimelineEntry {
 
 class _FooterEntry extends _TimelineEntry {
   const _FooterEntry();
-}
-
-class _FilterGroup<T> extends StatelessWidget {
-  const _FilterGroup({
-    required this.label,
-    required this.value,
-    required this.allLabel,
-    required this.values,
-    required this.itemLabel,
-    required this.onChanged,
-  });
-
-  final String label;
-  final T? value;
-  final String allLabel;
-  final List<T> values;
-  final String Function(T value) itemLabel;
-  final ValueChanged<T?> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.traceColors;
-    Widget item(String text, T? itemValue) {
-      final selected = value == itemValue;
-      return Semantics(
-        button: true,
-        selected: selected,
-        child: Material(
-          color: selected ? colors.primarySoft : colors.surfaceSoft,
-          shape: StadiumBorder(
-            side: BorderSide(
-              color: selected ? colors.primary : colors.line,
-            ),
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            onTap: () => onChanged(itemValue),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(minHeight: 36),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Center(
-                  child: Text(
-                    text,
-                    style: TextStyle(
-                      color: selected ? colors.primaryStrong : colors.inkSecondary,
-                      fontSize: 11,
-                      fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      );
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            color: colors.inkSecondary,
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        const SizedBox(height: 7),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            item(allLabel, null),
-            ...values.map((entry) => item(itemLabel(entry), entry)),
-          ],
-        ),
-      ],
-    );
-  }
 }
 
 class _MessageView extends StatelessWidget {

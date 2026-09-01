@@ -10,7 +10,7 @@ withDefaults(defineProps<{ decorative?: boolean }>(), { decorative: true })
     :role="decorative ? undefined : 'img'"
     focusable="false"
   >
-    <title v-if="!decorative">PassingTrace 记忆盒</title>
+    <title v-if="!decorative">星期八记忆盒</title>
     <rect x="3" y="3" width="102" height="102" rx="28" fill="currentColor" />
     <rect x="28" y="22" width="28" height="40" rx="5" fill="#fff6e8" transform="rotate(-8 42 42)" />
     <circle cx="40" cy="34" r="6" fill="#e28a62" />

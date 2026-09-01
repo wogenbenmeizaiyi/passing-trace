@@ -79,12 +79,16 @@ public sealed class EventRepository(TraceDbContext dbContext) : IEventRepository
 
         if (query.From is not null)
         {
-            events = events.Where(e => e.CreatedAt >= query.From);
+            events = events.Where(e =>
+                (e.EventKind == EventKind.Plan && (e.PlannedAt ?? e.CreatedAt) >= query.From) ||
+                (e.EventKind == EventKind.Trace && (e.HappenedAt ?? e.CreatedAt) >= query.From));
         }
 
         if (query.To is not null)
         {
-            events = events.Where(e => e.CreatedAt <= query.To);
+            events = events.Where(e =>
+                (e.EventKind == EventKind.Plan && (e.PlannedAt ?? e.CreatedAt) <= query.To) ||
+                (e.EventKind == EventKind.Trace && (e.HappenedAt ?? e.CreatedAt) <= query.To));
         }
 
         if (query.Cursor is not null)

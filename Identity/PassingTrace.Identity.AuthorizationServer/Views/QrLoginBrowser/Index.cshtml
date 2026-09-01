@@ -6,10 +6,10 @@
 
 <section class="card compact qr-login" data-transaction-id="@Model.Id" data-poll-seconds="@Model.PollIntervalSeconds">
     <p class="eyebrow">SCAN TO SIGN IN</p>
-    <h1>使用 PassingTrace 手机端扫码</h1>
+    <h1>使用星期八手机端扫码</h1>
     <p class="lede">正在登录 <strong>@Model.ClientDisplayName</strong>。请在手机上确认网站与浏览器信息。</p>
 
-    <div class="qr-code" aria-label="PassingTrace 登录二维码">@Html.Raw(Model.Svg)</div>
+    <div class="qr-code" aria-label="星期八登录二维码">@Html.Raw(Model.Svg)</div>
     <p id="qr-status" class="signed-in">等待手机确认……</p>
 
     <form id="complete-form" method="post" action="/account/qr-login/@Model.Id/complete" hidden>

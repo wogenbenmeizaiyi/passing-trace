@@ -31,7 +31,7 @@ class PassingTraceApp extends StatelessWidget {
     builder: (context, _) => AppearanceScope(
       controller: appearance,
       child: MaterialApp(
-        title: 'PassingTrace',
+        title: '星期八',
         debugShowCheckedModeBanner: false,
         theme: PassingTraceTheme.light(appearance.palette),
         darkTheme: PassingTraceTheme.dark(appearance.palette),
@@ -161,6 +161,13 @@ class _RegistrationPageState extends State<RegistrationPage> {
 
   Future<void> _submit() => _creating ? _register() : _login();
 
+  void _switchMode(bool creating) {
+    if (_busy || creating == _creating) return;
+    FocusScope.of(context).unfocus();
+    setState(() => _creating = creating);
+    _formKey.currentState?.reset();
+  }
+
   void _showError(Object error) {
     debugPrint('Mobile account action failed: $error');
     if (!mounted) return;
@@ -191,7 +198,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
                           const PassingTraceMark(size: 36),
                           const SizedBox(width: 12),
                           Text(
-                            'PassingTrace',
+                            '星期八',
                             style: TextStyle(
                               color: colors.ink,
                               fontSize: 20,
@@ -201,43 +208,25 @@ class _RegistrationPageState extends State<RegistrationPage> {
                         ],
                       ),
                     ),
-                    const SizedBox(height: 38),
-                    _AuthModeSelector(
-                      creating: _creating,
-                      enabled: !_busy,
-                      onChanged: (creating) {
-                        setState(() => _creating = creating);
-                        _formKey.currentState?.reset();
-                      },
-                    ),
-                    const SizedBox(height: 38),
+                    const SizedBox(height: 48),
                     Text(
-                      'YOUR LIFE, IN CONTEXT',
-                      style: TextStyle(
-                        color: colors.accent,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 2.1,
-                      ),
-                    ),
-                    const SizedBox(height: 18),
-                    Text(
-                      _creating ? '开始记录你的时间。' : '欢迎回到你的时间线。',
+                      _creating ? '创建账号' : '欢迎回来',
                       style: TextStyle(
                         color: colors.ink,
-                        fontSize: 34,
+                        fontSize: 32,
                         height: 1.25,
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.8,
                       ),
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 8),
                     Text(
                       _creating
-                          ? '创建账号后，这台手机也可以安全批准网页端登录。'
-                          : '登录后即可进入主页，并使用手机批准其他客户端登录。',
+                          ? '第一次来到星期八，先为自己创建一个账号。'
+                          : '继续记录你的生活，也可以用手机批准网页端登录。',
                       style: TextStyle(color: colors.inkSecondary, height: 1.6),
                     ),
-                    const SizedBox(height: 34),
+                    const SizedBox(height: 32),
                     const TraceFieldLabel('用户名'),
                     TextFormField(
                       controller: _username,
@@ -271,9 +260,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
                       decoration: _fieldDecoration(
                         '输入你的密码',
                         suffix: TextButton(
-                          onPressed: () => setState(
-                            () => _obscure = !_obscure,
-                          ),
+                          onPressed: () => setState(() => _obscure = !_obscure),
                           child: Text(_obscure ? '显示' : '隐藏'),
                         ),
                       ),
@@ -339,11 +326,26 @@ class _RegistrationPageState extends State<RegistrationPage> {
                               ],
                             ),
                     ),
-                    const SizedBox(height: 18),
+                    const SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          _creating ? '已经有账号？' : '第一次使用？',
+                          style: TextStyle(color: colors.inkSecondary),
+                        ),
+                        TextButton(
+                          key: const Key('auth-mode-switch'),
+                          onPressed: _busy
+                              ? null
+                              : () => _switchMode(!_creating),
+                          child: Text(_creating ? '返回登录' : '创建账号'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
                     Text(
-                      _creating
-                          ? '账号信息仅发送给你的 PassingTrace Identity 服务。'
-                          : '新手机登录后会自动绑定为可信设备。',
+                      _creating ? '账号信息仅发送给星期八的账号服务。' : '新手机登录后会自动绑定为可信设备。',
                       textAlign: TextAlign.center,
                       style: TextStyle(color: colors.inkTertiary, fontSize: 12),
                     ),
@@ -357,79 +359,8 @@ class _RegistrationPageState extends State<RegistrationPage> {
     );
   }
 
-  InputDecoration _fieldDecoration(
-    String hint, {
-    Widget? suffix,
-  }) => InputDecoration(
-    hintText: hint,
-    suffixIcon: suffix,
-  );
-}
-
-class _AuthModeSelector extends StatelessWidget {
-  const _AuthModeSelector({
-    required this.creating,
-    required this.enabled,
-    required this.onChanged,
-  });
-
-  final bool creating;
-  final bool enabled;
-  final ValueChanged<bool> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.traceColors;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: colors.line)),
-      ),
-      child: Row(
-        children: [
-          _item(context, label: '登录', selected: !creating, value: false),
-          _item(context, label: '创建账号', selected: creating, value: true),
-        ],
-      ),
-    );
-  }
-
-  Widget _item(
-    BuildContext context, {
-    required String label,
-    required bool selected,
-    required bool value,
-  }) {
-    final colors = context.traceColors;
-    final color = selected ? colors.primaryStrong : colors.inkSecondary;
-    return Expanded(
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: enabled ? () => onChanged(value) : null,
-          child: Container(
-            constraints: const BoxConstraints(minHeight: 48),
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              border: Border(
-                bottom: BorderSide(
-                  color: selected ? colors.primary : Colors.transparent,
-                  width: 2,
-                ),
-              ),
-            ),
-            child: Text(
-              label,
-              style: TextStyle(
-                color: color,
-                fontSize: 14,
-                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
+  InputDecoration _fieldDecoration(String hint, {Widget? suffix}) =>
+      InputDecoration(hintText: hint, suffixIcon: suffix);
 }
 
 class AccountHome extends StatefulWidget {
@@ -693,7 +624,7 @@ class _AccountHomeState extends State<AccountHome> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            '我的 PassingTrace',
+                            '我的星期八',
                             style: TextStyle(
                               color: context.traceColors.ink,
                               fontSize: 17,

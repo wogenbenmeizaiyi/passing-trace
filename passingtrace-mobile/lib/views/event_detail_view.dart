@@ -21,11 +21,18 @@ class EventDetailView extends StatefulWidget {
     required this.auth,
     required this.session,
     required this.eventId,
-  });
+    this.eventApiClient,
+    this.mediaApiClient,
+  }) : assert(
+         (eventApiClient == null) == (mediaApiClient == null),
+         '测试客户端必须成对提供。',
+       );
 
   final AuthService auth;
   final AuthSession session;
   final int eventId;
+  final EventApiClient? eventApiClient;
+  final MediaApiClient? mediaApiClient;
 
   @override
   State<EventDetailView> createState() => _EventDetailViewState();
@@ -38,6 +45,7 @@ class _EventDetailViewState extends State<EventDetailView> {
   String? _error;
   bool _loading = true;
   bool _deleting = false;
+  bool _showAiAnalysis = false;
 
   @override
   void initState() {
@@ -46,6 +54,12 @@ class _EventDetailViewState extends State<EventDetailView> {
   }
 
   Future<void> _initApi() async {
+    if (widget.eventApiClient case final api?) {
+      _api = api;
+      _mediaApi = widget.mediaApiClient!;
+      await _load();
+      return;
+    }
     final baseUrl = await widget.auth.getEventsApiBaseUrl();
     if (!mounted) return;
     setState(() {
@@ -207,13 +221,42 @@ class _EventDetailViewState extends State<EventDetailView> {
             ],
           ),
           const SizedBox(height: 14),
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 28,
-              height: 1.3,
-              fontWeight: FontWeight.w700,
-            ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 28,
+                    height: 1.3,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              if (event.semanticStatus != null) ...[
+                const SizedBox(width: 8),
+                SizedBox.square(
+                  dimension: 48,
+                  child: TraceIconButton(
+                    glyph: TraceGlyph.sparkle,
+                    tooltip: _showAiAnalysis ? '收起 AI 分析' : '查看 AI 分析',
+                    expanded: _showAiAnalysis,
+                    color: _showAiAnalysis
+                        ? context.traceColors.primaryStrong
+                        : context.traceColors.inkTertiary,
+                    backgroundColor: _showAiAnalysis
+                        ? context.traceColors.primarySoft
+                        : Colors.transparent,
+                    borderColor: _showAiAnalysis
+                        ? context.traceColors.primary.withValues(alpha: 0.34)
+                        : null,
+                    onPressed: () =>
+                        setState(() => _showAiAnalysis = !_showAiAnalysis),
+                  ),
+                ),
+              ],
+            ],
           ),
           if (event.effectiveClassification.primaryCategory != null ||
               event.effectiveClassification.tags.isNotEmpty) ...[
@@ -224,16 +267,48 @@ class _EventDetailViewState extends State<EventDetailView> {
               children: [
                 if (event.effectiveClassification.primaryCategory
                     case final category?)
-                  TraceTag(
-                    label: category.displayName,
-                    category: true,
-                  ),
+                  TraceTag(label: category.displayName, category: true),
                 for (final tag in event.effectiveClassification.tags.take(10))
-                  TraceTag(
-                    label: tag.displayName,
-                    ai: tag.isAi,
-                  ),
+                  TraceTag(label: tag.displayName, ai: tag.isAi),
               ],
+            ),
+          ],
+          if (_showAiAnalysis && event.semanticStatus != null) ...[
+            const SizedBox(height: 16),
+            Semantics(
+              container: true,
+              label: 'AI 分析详情',
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: context.traceColors.primarySoft,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: context.traceColors.primary.withValues(alpha: 0.24),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        TraceIcon(
+                          TraceGlyph.sparkle,
+                          size: 18,
+                          color: context.traceColors.primaryStrong,
+                        ),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'AI 分析',
+                          style: TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(event.semanticSummary ?? '状态：${event.semanticStatus}'),
+                  ],
+                ),
+              ),
             ),
           ],
           if (event.title?.isNotEmpty == true &&
@@ -267,40 +342,9 @@ class _EventDetailViewState extends State<EventDetailView> {
                   : null,
             ),
           ],
-          if (event.semanticStatus != null) ...[
-            const SizedBox(height: 24),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: context.traceColors.primarySoft,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      TraceIcon(
-                        TraceGlyph.sparkle,
-                        size: 18,
-                        color: context.traceColors.primaryStrong,
-                      ),
-                      const SizedBox(width: 8),
-                      const Text(
-                        'AI 分析',
-                        style: TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(event.semanticSummary ?? '状态：${event.semanticStatus}'),
-                ],
-              ),
-            ),
-          ],
           const SizedBox(height: 28),
           _DetailRow(
-            label: event.kind == EventKind.plan ? '计划时间' : '发生时间',
+            label: event.kind == EventKind.plan ? '预定时间' : '发生时间',
             value: time,
           ),
           if (event.completedAt != null)
@@ -354,8 +398,9 @@ class _EventDetailViewState extends State<EventDetailView> {
       final lat = (target['latitude'] as num).toDouble();
       final lon = (target['longitude'] as num).toDouble();
       final name = target['name'] as String;
+      final sourceApplication = Uri.encodeComponent('星期八');
       final app = Uri.parse(
-        'amapuri://route/plan/?sourceApplication=PassingTrace&dlat=$lat&dlon=$lon&dname=${Uri.encodeComponent(name)}&dev=0&t=0',
+        'amapuri://route/plan/?sourceApplication=$sourceApplication&dlat=$lat&dlon=$lon&dname=${Uri.encodeComponent(name)}&dev=0&t=0',
       );
       if (await canLaunchUrl(app)) {
         await launchUrl(app, mode: LaunchMode.externalApplication);
@@ -365,7 +410,7 @@ class _EventDetailViewState extends State<EventDetailView> {
         'to': '$lon,$lat,$name',
         'mode': 'car',
         'policy': '1',
-        'src': 'PassingTrace',
+        'src': '星期八',
       });
       if (!await launchUrl(web, mode: LaunchMode.externalApplication)) {
         throw StateError('无法打开地图应用。');

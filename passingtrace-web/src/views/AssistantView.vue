@@ -1,9 +1,8 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue'
-import { RouterLink } from 'vue-router'
-
 import { aiApi, type ConversationSummary, type EvidenceBundle, type UserMemory } from '@/api/ai'
 import BrandMark from '@/components/BrandMark.vue'
+import EvidenceDisclosure from '@/components/EvidenceDisclosure.vue'
 import WebAppHeader from '@/components/WebAppHeader.vue'
 import { useAuthStore } from '@/stores/auth'
 
@@ -23,7 +22,7 @@ const busy = ref(false)
 const loading = ref(false)
 const error = ref<string | null>(null)
 const showMemories = ref(false)
-const suggestions = ['帮我总结这个月的生活', '我最近去过哪些地方？', '最近有哪些计划还没有完成？']
+const suggestions = ['帮我总结这个月的生活', '我最近去过哪些地方？', '最近有哪些安排还没有完成？']
 
 async function load() {
   loading.value = true
@@ -192,19 +191,12 @@ watch(
           >
             <span v-if="message.role === 'Assistant'" class="message-mark"><BrandMark /></span>
             <div class="message-body">
-              <strong>{{ message.role === 'User' ? '你' : 'PassingTrace' }}</strong>
+              <strong>{{ message.role === 'User' ? '你' : '星期八' }}</strong>
               <p>{{ message.content || '正在检索你的记录…' }}</p>
-              <div v-if="message.evidence?.records?.length" class="evidence">
-                <span>回答依据</span>
-                <RouterLink
-                  v-for="record in message.evidence.records"
-                  :key="record.eventId"
-                  :to="`/events/${record.eventId}`"
-                >
-                  <strong>{{ record.title || '未命名记录' }}</strong
-                  ><small>打开记录</small>
-                </RouterLink>
-              </div>
+              <EvidenceDisclosure
+                v-if="message.evidence?.records?.length"
+                :records="message.evidence.records"
+              />
             </div>
           </article>
         </div>
@@ -217,7 +209,7 @@ watch(
             v-model="question"
             rows="1"
             maxlength="8000"
-            placeholder="询问你的经历、计划、花费或趋势…"
+            placeholder="询问你的经历、安排、花费或趋势…"
             @input="resizeComposer"
             @keydown.enter.exact.prevent="send()"
           />
@@ -497,42 +489,6 @@ watch(
   font-size: 14px;
   line-height: 1.75;
   white-space: pre-wrap;
-}
-.evidence {
-  margin-top: 16px;
-  padding-top: 13px;
-  display: grid;
-  gap: 8px;
-  border-top: 1px solid var(--line);
-}
-.evidence > span {
-  color: var(--ink-tertiary);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-}
-.evidence a {
-  min-height: 48px;
-  padding: 10px 12px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  color: var(--primary-strong);
-  background: var(--surface);
-}
-.evidence a strong {
-  overflow: hidden;
-  font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.evidence a small {
-  color: var(--ink-tertiary);
-  font-size: 9px;
-  white-space: nowrap;
 }
 .composer {
   min-height: 64px;

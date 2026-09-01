@@ -56,7 +56,7 @@ async function downloadAndroid(event?: MouseEvent) {
           <p class="section-kicker">你的私人生活档案</p>
           <h1 id="hero-title">把散落的生活，<br /><span>收进会理解你的记忆盒。</span></h1>
           <p class="hero-lede">
-            记录文字、照片、视频、文件和地点。PassingTrace 会替你整理分类、理解线索，
+            记录文字、照片、视频、文件和地点。星期八会替你整理分类、理解线索，
             在你想回望时，用真实记录回答问题。
           </p>
           <div class="hero-actions">
@@ -111,7 +111,7 @@ async function downloadAndroid(event?: MouseEvent) {
           </p>
         </div>
 
-        <div class="hero-product" aria-label="PassingTrace 应用界面预览">
+        <div class="hero-product" aria-label="星期八应用界面预览">
           <div class="hero-orbit hero-orbit--one" aria-hidden="true"></div>
           <div class="hero-orbit hero-orbit--two" aria-hidden="true"></div>
           <article class="preview-window">
@@ -163,7 +163,7 @@ async function downloadAndroid(event?: MouseEvent) {
         <div class="section-heading">
           <p class="section-kicker">不只是记事</p>
           <h2 id="feature-title">留下信息，也留下它发生时的上下文。</h2>
-          <p>你只管记录，整理、关联和回望交给 PassingTrace。</p>
+          <p>你只管记录，整理、关联和回望交给星期八。</p>
         </div>
         <div class="feature-grid">
           <article>
@@ -273,12 +273,10 @@ async function downloadAndroid(event?: MouseEvent) {
     <footer class="landing-footer">
       <RouterLink class="site-brand" to="/">
         <span class="site-brand__mark"><BrandMark /></span>
-        <span class="site-brand__copy"
-          ><strong>PassingTrace</strong><small>私人生活档案</small></span
-        >
+        <span class="site-brand__copy"><strong>星期八</strong><small>私人生活档案</small></span>
       </RouterLink>
       <p>记录 · 理解 · 回望</p>
-      <p>© 2026 PassingTrace</p>
+      <p>© 2026 星期八</p>
     </footer>
   </div>
 </template>

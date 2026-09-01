@@ -1,4 +1,4 @@
-# PassingTrace Mobile
+# 星期八手机端
 
 Android-only 的主客户端（手机 App），不发布到应用商店。它负责首次注册、移动 OIDC 登录、安全保存设备凭据、扫描批准 Web 登录，并承载记录、查看与 AI 洞察等核心体验。
 

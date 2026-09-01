@@ -1,6 +1,7 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:passingtrace_mobile/theme/passingtrace_theme.dart';
 import 'package:passingtrace_mobile/views/assistant_view.dart';
 
 void main() {
@@ -59,6 +60,37 @@ void main() {
     final link = _findTappableSpan(richText.textSpan!)!;
     (link.recognizer! as TapGestureRecognizer).onTap!.call();
     expect(openedEventId, 13);
+  });
+
+  testWidgets('回答依据默认收起，展开后才显示记录卡片', (tester) async {
+    int? openedEventId;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: PassingTraceTheme.light(PassingTracePalette.pine),
+        home: Scaffold(
+          body: AssistantEvidenceDisclosure(
+            records: const {13: '整理项目下一阶段计划', 8: '和朋友吃火锅'},
+            onOpenEvent: (id) => openedEventId = id,
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('相关记录'), findsOneWidget);
+    expect(find.text('2 条'), findsOneWidget);
+    expect(find.text('整理项目下一阶段计划'), findsNothing);
+
+    await tester.tap(find.bySemanticsLabel('展开相关记录，共 2 条'));
+    await tester.pump();
+
+    expect(find.text('整理项目下一阶段计划'), findsOneWidget);
+    expect(find.text('和朋友吃火锅'), findsOneWidget);
+    await tester.tap(find.text('和朋友吃火锅'));
+    expect(openedEventId, 8);
+
+    await tester.tap(find.bySemanticsLabel('收起相关记录，共 2 条'));
+    await tester.pump();
+    expect(find.text('整理项目下一阶段计划'), findsNothing);
   });
 }
 

@@ -139,7 +139,7 @@ function timeLabel(item: EventResponse) {
 }
 
 function summary(item: EventResponse) {
-  return item.rawContent || item.semanticSummary || '这条记录没有填写正文。'
+  return item.rawContent || '这条记录没有填写正文。'
 }
 
 onMounted(() => {
@@ -163,7 +163,7 @@ onUnmounted(() => activeController?.abort())
         <div>
           <p class="eyebrow">YOUR TIMELINE</p>
           <h1>{{ monthLabel }}</h1>
-          <p>按时间收好每一条痕迹和计划。</p>
+          <p>按时间收好生活记录和未来安排。</p>
         </div>
         <RouterLink v-if="auth.isAuthenticated" class="button button-primary" to="/events/new">
           <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -277,7 +277,7 @@ onUnmounted(() => activeController?.abort())
       </div>
     </main>
 
-    <footer><span>PassingTrace © 2026</span><span>记录 · 理解 · 回望</span></footer>
+    <footer><span>星期八 © 2026</span><span>记录 · 理解 · 回望</span></footer>
   </div>
 </template>
 

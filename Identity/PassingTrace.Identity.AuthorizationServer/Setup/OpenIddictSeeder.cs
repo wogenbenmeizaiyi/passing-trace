@@ -29,13 +29,13 @@ public sealed class OpenIddictSeeder(
         await EnsureScopeAsync(
             scopeManager,
             IdentityOpenIddictConstants.ApiScope,
-            "PassingTrace API",
+            "星期八 API",
             IdentityOpenIddictConstants.ApiResource,
             cancellationToken);
         await EnsureScopeAsync(
             scopeManager,
             IdentityOpenIddictConstants.LoginApprovalScope,
-            "PassingTrace mobile login approval",
+            "星期八手机登录授权",
             IdentityOpenIddictConstants.IdentityResource,
             cancellationToken);
 

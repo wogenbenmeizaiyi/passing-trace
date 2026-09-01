@@ -88,8 +88,14 @@ export interface PlaceCandidate extends Omit<EventLocationResponse, 'id' | 'sour
 
 /** UI 展示用的中文文案。 */
 export const EventKindLabel: Record<EventKind, string> = {
-  [EventKind.Trace]: '痕迹',
-  [EventKind.Plan]: '计划',
+  [EventKind.Trace]: '当下记录',
+  [EventKind.Plan]: '未来安排',
+}
+
+/** 新建表单使用动作式文案，避免把内部数据类型直接暴露给用户。 */
+export const EventKindActionLabel: Record<EventKind, string> = {
+  [EventKind.Trace]: '记录当下',
+  [EventKind.Plan]: '写下计划',
 }
 
 export const EventStatusLabel: Record<EventStatus, string> = {

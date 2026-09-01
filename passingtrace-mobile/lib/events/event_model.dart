@@ -4,10 +4,10 @@
 // `kind` 创建后不可变，`version` 是乐观并发令牌，`sourceRevision` 是
 // Source 修订版本。
 
-/// 痕迹 / 计划。后端在 `kind` 字段中以下列数值出现。
+/// 当下记录 / 未来安排。后端在 `kind` 字段中以下列数值出现。
 enum EventKind {
-  trace(0, '痕迹'),
-  plan(1, '计划');
+  trace(0, '当下记录'),
+  plan(1, '未来安排');
 
   const EventKind(this.value, this.label);
   final int value;

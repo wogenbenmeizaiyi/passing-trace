@@ -193,7 +193,7 @@ class _EventFormViewState extends State<EventFormView> {
       initialDate: initial,
       firstDate: DateTime(1900),
       lastDate: DateTime(2100, 12, 31),
-      helpText: _kind == EventKind.plan ? '选择计划日期' : '选择发生日期',
+      helpText: _kind == EventKind.plan ? '选择预定日期' : '选择发生日期',
       cancelText: '取消',
       confirmText: '下一步',
     );
@@ -202,7 +202,7 @@ class _EventFormViewState extends State<EventFormView> {
     final time = await showTimePicker(
       context: context,
       initialTime: TimeOfDay.fromDateTime(initial),
-      helpText: _kind == EventKind.plan ? '选择计划时间' : '选择发生时间',
+      helpText: _kind == EventKind.plan ? '选择预定时间' : '选择发生时间',
       cancelText: '取消',
       confirmText: '确定',
     );
@@ -399,7 +399,7 @@ class _EventFormViewState extends State<EventFormView> {
       builder: (context) => AlertDialog(
         title: const Text('选择地点'),
         content: const Text(
-          'PassingTrace 将获取一次前台位置并打开高德地图。你可以拖动地图选点，再从附近地点中选择。不会后台定位或保存轨迹。',
+          '星期八将获取一次前台位置并打开高德地图。你可以拖动地图选点，再从附近地点中选择。不会后台定位或保存轨迹。',
         ),
         actions: [
           TextButton(
@@ -566,9 +566,7 @@ class _EventFormViewState extends State<EventFormView> {
             minLines: 7,
             maxLines: 14,
             textAlignVertical: TextAlignVertical.top,
-            decoration: _fieldDecoration(
-              '把当下想到的、看到的、吃到的写下来…',
-            ),
+            decoration: _fieldDecoration('把当下想到的、看到的、吃到的写下来…'),
             validator: (_) {
               if (_title.text.trim().isEmpty &&
                   _content.text.trim().isEmpty &&
@@ -580,15 +578,11 @@ class _EventFormViewState extends State<EventFormView> {
             textInputAction: TextInputAction.newline,
           ),
           const SizedBox(height: 20),
-          TraceFieldLabel(
-            _kind == EventKind.plan ? '计划时间（可选）' : '发生时间（可选）',
-          ),
+          TraceFieldLabel(_kind == EventKind.plan ? '预定时间（可选）' : '发生时间（可选）'),
           TraceRowButton(
             glyph: TraceGlyph.calendar,
             title: _when.text.isEmpty ? '选择日期和时间' : _when.text,
-            subtitle: _when.text.isEmpty
-                ? '可以精确到某一天的某个时刻'
-                : '点击可重新选择',
+            subtitle: _when.text.isEmpty ? '可以精确到某一天的某个时刻' : '点击可重新选择',
             onTap: _submitting ? null : _pickWhen,
           ),
           if (_when.text.isNotEmpty)
@@ -989,10 +983,8 @@ class _EventFormViewState extends State<EventFormView> {
     ),
   );
 
-  InputDecoration _fieldDecoration(String hint) => InputDecoration(
-    hintText: hint,
-    counterText: '',
-  );
+  InputDecoration _fieldDecoration(String hint) =>
+      InputDecoration(hintText: hint, counterText: '');
 }
 
 class _SelectableTag extends StatelessWidget {
@@ -1079,11 +1071,7 @@ class _EventKindSelector extends StatelessWidget {
     );
   }
 
-  Widget _item(
-    BuildContext context,
-    EventKind kind,
-    String label,
-  ) {
+  Widget _item(BuildContext context, EventKind kind, String label) {
     final selected = value == kind;
     final color = selected
         ? Theme.of(context).colorScheme.primary

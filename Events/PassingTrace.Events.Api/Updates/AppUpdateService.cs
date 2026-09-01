@@ -84,7 +84,7 @@ public sealed class AppUpdateService(
             Math.Clamp(_options.DownloadUrlLifetimeMinutes, 5, 60));
         var downloadUrl = await storage.CreateDownloadUrlAsync(
             manifest.ObjectKey,
-            $"PassingTrace-{manifest.VersionName}-{manifest.VersionCode}.apk",
+            $"星期八-{manifest.VersionName}-{manifest.VersionCode}.apk",
             "application/vnd.android.package-archive",
             inline: false,
             expiresAt,

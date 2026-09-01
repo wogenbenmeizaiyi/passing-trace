@@ -44,11 +44,11 @@ android {
     productFlavors {
         create("internal") {
             dimension = "environment"
-            manifestPlaceholders["appLabel"] = "PassingTrace 内测"
+            manifestPlaceholders["appLabel"] = "星期八·内测"
         }
         create("production") {
             dimension = "environment"
-            manifestPlaceholders["appLabel"] = "PassingTrace"
+            manifestPlaceholders["appLabel"] = "星期八"
         }
     }
 
