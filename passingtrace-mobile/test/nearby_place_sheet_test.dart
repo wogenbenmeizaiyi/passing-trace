@@ -35,7 +35,13 @@ void main() {
     await tester.pump();
 
     expect(queries, ['早阳肉包']);
-    expect(find.widgetWithText(ListTile, '早阳肉包'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('nearby-place-result-0')),
+        matching: find.text('早阳肉包'),
+      ),
+      findsOneWidget,
+    );
     expect(find.text('使用地图中心位置'), findsOneWidget);
   });
 

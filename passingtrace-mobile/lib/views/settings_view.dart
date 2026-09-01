@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../theme/appearance_controller.dart';
 import '../theme/appearance_sheet.dart';
 import '../theme/passingtrace_theme.dart';
+import '../theme/quiet_trace_components.dart';
+import '../theme/quiet_trace_icons.dart';
 
 class SettingsView extends StatelessWidget {
   const SettingsView({super.key, required this.onSignOut});
@@ -14,49 +16,49 @@ class SettingsView extends StatelessWidget {
     final appearance = AppearanceScope.of(context);
     final colors = context.traceColors;
     return Scaffold(
-      appBar: AppBar(title: const Text('设置')),
+      appBar: TraceAppBar(
+        title: '设置',
+        leading: TraceIconButton(
+          glyph: TraceGlyph.chevronLeft,
+          tooltip: '返回',
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+      ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 24, 20, 40),
         children: [
           const _SectionLabel('外观'),
           const SizedBox(height: 8),
-          Card(
-            clipBehavior: Clip.antiAlias,
-            child: ListTile(
-              minTileHeight: 72,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-              leading: _PalettePreview(palette: appearance.palette),
-              title: const Text(
-                '主题与外观',
-                style: TextStyle(fontWeight: FontWeight.w700),
-              ),
-              subtitle: Text(
+          _SettingsRow(
+            leading: _PalettePreview(palette: appearance.palette),
+            title: '主题与外观',
+            subtitle:
                 '${appearance.palette.label} · ${_modeLabel(appearance.mode)}',
-              ),
-              trailing: const Icon(Icons.chevron_right, size: 20),
-              onTap: () => showAppearanceSheet(context),
-            ),
+            onTap: () => showAppearanceSheet(context),
           ),
           const SizedBox(height: 28),
           const _SectionLabel('账号与设备'),
           const SizedBox(height: 8),
-          Card(
-            clipBehavior: Clip.antiAlias,
-            child: ListTile(
-              minTileHeight: 72,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-              leading: Icon(Icons.logout, color: colors.danger),
-              title: Text(
-                '退出此设备',
-                style: TextStyle(
+          _SettingsRow(
+            leading: Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: colors.danger.withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(13),
+              ),
+              child: Center(
+                child: TraceIcon(
+                  TraceGlyph.logout,
+                  size: 21,
                   color: colors.danger,
-                  fontWeight: FontWeight.w700,
                 ),
               ),
-              subtitle: const Text('移除这台设备上的登录凭据'),
-              trailing: const Icon(Icons.chevron_right, size: 20),
-              onTap: () => _openSignOut(context),
             ),
+            title: '退出此设备',
+            subtitle: '移除这台设备上的登录凭据',
+            danger: true,
+            onTap: () => _openSignOut(context),
           ),
           const SizedBox(height: 16),
           Padding(
@@ -84,6 +86,79 @@ class SettingsView extends StatelessWidget {
     ThemeMode.light => '浅色',
     ThemeMode.dark => '深色',
   };
+}
+
+class _SettingsRow extends StatelessWidget {
+  const _SettingsRow({
+    required this.leading,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+    this.danger = false,
+  });
+
+  final Widget leading;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+  final bool danger;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.traceColors;
+    final titleColor = danger ? colors.danger : colors.ink;
+    return Material(
+      color: colors.surface,
+      shape: RoundedRectangleBorder(
+        side: BorderSide(color: colors.line),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 72),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+            child: Row(
+              children: [
+                leading,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: TextStyle(
+                          color: titleColor,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        subtitle,
+                        style: TextStyle(
+                          color: colors.inkTertiary,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                TraceIcon(
+                  TraceGlyph.chevronRight,
+                  size: 18,
+                  color: danger ? colors.danger : colors.inkMuted,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _SectionLabel extends StatelessWidget {

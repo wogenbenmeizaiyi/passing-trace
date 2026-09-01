@@ -1,14 +1,11 @@
-// 时间线列表页：
-//   - 游标分页（"加载更多"）。
-//   - 类型 / 状态筛选。
-//   - 顶部"新建"按钮。
-
 import 'package:flutter/material.dart';
 
 import '../auth_service.dart';
 import '../events/event_model.dart';
 import '../events/events_api.dart';
 import '../theme/passingtrace_theme.dart';
+import '../theme/quiet_trace_components.dart';
+import '../theme/quiet_trace_icons.dart';
 import 'event_detail_view.dart';
 import 'event_form_view.dart';
 import 'event_widgets.dart';
@@ -53,9 +50,7 @@ class _EventsListViewState extends State<EventsListView> {
   Future<void> _initApi() async {
     final baseUrl = await widget.auth.getEventsApiBaseUrl();
     if (!mounted) return;
-    setState(() {
-      _api = EventApiClient(auth: widget.auth, baseUrl: baseUrl);
-    });
+    _api = EventApiClient(auth: widget.auth, baseUrl: baseUrl);
     await _reload();
   }
 
@@ -84,16 +79,16 @@ class _EventsListViewState extends State<EventsListView> {
           ..addAll(page.items);
         _nextCursor = page.nextCursor;
       });
-    } on EventApiException catch (e) {
+    } on EventApiException catch (error) {
       if (!mounted) return;
-      if (e.status == 401) {
+      if (error.status == 401) {
         await _handleSessionExpired();
         return;
       }
-      setState(() => _error = e.message);
-    } catch (e) {
+      setState(() => _error = error.message);
+    } catch (error) {
       if (!mounted) return;
-      setState(() => _error = '加载失败：$e');
+      setState(() => _error = '加载失败：$error');
     } finally {
       if (mounted) setState(() => _initialLoading = false);
     }
@@ -118,16 +113,16 @@ class _EventsListViewState extends State<EventsListView> {
         _items.addAll(page.items);
         _nextCursor = page.nextCursor;
       });
-    } on EventApiException catch (e) {
+    } on EventApiException catch (error) {
       if (!mounted) return;
-      if (e.status == 401) {
+      if (error.status == 401) {
         await _handleSessionExpired();
         return;
       }
-      setState(() => _error = e.message);
-    } catch (e) {
+      setState(() => _error = error.message);
+    } catch (error) {
       if (!mounted) return;
-      setState(() => _error = '加载更多失败：$e');
+      setState(() => _error = '加载更多失败：$error');
     } finally {
       if (mounted) setState(() => _loadingMore = false);
     }
@@ -160,15 +155,9 @@ class _EventsListViewState extends State<EventsListView> {
     final handler = widget.onSessionExpired;
     if (handler != null) {
       await handler();
-      return;
+    } else if (mounted) {
+      Navigator.of(context).pop(true);
     }
-    if (mounted) Navigator.of(context).pop(true);
-  }
-
-  void _toggleFilter() {
-    setState(() {
-      _filtersOpen = !_filtersOpen;
-    });
   }
 
   void _clearFilters() {
@@ -182,33 +171,26 @@ class _EventsListViewState extends State<EventsListView> {
   bool get _hasActiveFilters => _filterKind != null || _filterStatus != null;
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      drawer: widget.drawer,
-      bottomNavigationBar: widget.bottomNavigationBar,
-      appBar: AppBar(
-        title: const Text('我的记录'),
-        actions: [
-          IconButton(
-            tooltip: _filtersOpen ? '收起筛选' : '筛选',
-            onPressed: _toggleFilter,
-            icon: Icon(
-              _filtersOpen ? Icons.filter_alt : Icons.filter_alt_outlined,
-              color: _hasActiveFilters
-                  ? Theme.of(context).colorScheme.primary
-                  : null,
-            ),
-          ),
-        ],
+  Widget build(BuildContext context) => Scaffold(
+    drawer: widget.drawer,
+    bottomNavigationBar: widget.bottomNavigationBar,
+    appBar: TraceAppBar(
+      title: '我的记录',
+      leading: Builder(
+        builder: (context) => TraceIconButton(
+          glyph: TraceGlyph.menu,
+          tooltip: '打开菜单',
+          onPressed: () => Scaffold.of(context).openDrawer(),
+        ),
       ),
-      body: _buildBody(),
-      floatingActionButton: FloatingActionButton.extended(
+      trailing: TraceIconButton(
+        glyph: TraceGlyph.add,
+        tooltip: '新建记录',
         onPressed: _openCreate,
-        icon: const Icon(Icons.edit_outlined),
-        label: const Text('记一笔'),
       ),
-    );
-  }
+    ),
+    body: _buildBody(),
+  );
 
   Widget _buildBody() {
     if (_initialLoading) {
@@ -222,32 +204,25 @@ class _EventsListViewState extends State<EventsListView> {
         onAction: _reload,
       );
     }
+
+    final entries = _timelineEntries();
     return Column(
       children: [
-        if (_filtersOpen) _buildFilterBar(),
+        if (_filtersOpen) _buildFilterPanel(),
         Expanded(
           child: _items.isEmpty
               ? _MessageView(
                   title: '还没有记录',
-                  detail: '点右下角"记一笔"写下第一条。',
-                  actionText: '重新筛选',
-                  onAction: _hasActiveFilters ? _clearFilters : null,
+                  detail: '从今天开始，留下第一件值得回看的小事。',
+                  actionText: _hasActiveFilters ? '清除筛选' : '记一笔',
+                  onAction: _hasActiveFilters ? _clearFilters : _openCreate,
                 )
               : RefreshIndicator(
                   onRefresh: _reload,
                   child: ListView.builder(
-                    padding: const EdgeInsets.fromLTRB(20, 14, 20, 96),
-                    itemCount: _items.length + 1,
-                    itemBuilder: (context, index) {
-                      if (index == _items.length) {
-                        return _buildFooter();
-                      }
-                      final event = _items[index];
-                      return EventCard(
-                        event: event,
-                        onTap: () => _openDetail(event),
-                      );
-                    },
+                    padding: const EdgeInsets.fromLTRB(18, 20, 18, 28),
+                    itemCount: entries.length,
+                    itemBuilder: (context, index) => _buildEntry(entries[index]),
                   ),
                 ),
         ),
@@ -255,157 +230,354 @@ class _EventsListViewState extends State<EventsListView> {
     );
   }
 
-  Widget _buildFilterBar() {
+  List<_TimelineEntry> _timelineEntries() {
+    final sorted = [..._items]
+      ..sort((a, b) => _eventTime(b).compareTo(_eventTime(a)));
+    final groups = <DateTime, List<EventModel>>{};
+    for (final event in sorted) {
+      final time = _eventTime(event);
+      final day = DateTime(time.year, time.month, time.day);
+      groups.putIfAbsent(day, () => []).add(event);
+    }
+
+    final entries = <_TimelineEntry>[
+      _IntroEntry(hasFilters: _hasActiveFilters),
+    ];
+    for (final entry in groups.entries) {
+      entries.add(_DayEntry(entry.key, entry.value.length));
+      for (var index = 0; index < entry.value.length; index++) {
+        entries.add(
+          _EventEntry(
+            entry.value[index],
+            isLastInDay: index == entry.value.length - 1,
+          ),
+        );
+      }
+    }
+    entries.add(const _FooterEntry());
+    return entries;
+  }
+
+  Widget _buildEntry(_TimelineEntry entry) => switch (entry) {
+    _IntroEntry() => _buildIntro(entry),
+    _DayEntry() => _buildDayHeader(entry),
+    _EventEntry() => _buildTimelineEvent(entry),
+    _FooterEntry() => _buildFooter(),
+  };
+
+  Widget _buildIntro(_IntroEntry entry) {
     final colors = context.traceColors;
-    return Container(
-      color: colors.surface,
-      padding: const EdgeInsets.fromLTRB(20, 8, 12, 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    final now = DateTime.now();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 26),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          Text(
-            '类型',
-            style: TextStyle(
-              fontSize: 11,
-              color: colors.inkSecondary,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 1.2,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${_monthLabel(now.month)}月的生活',
+                  style: TextStyle(
+                    color: colors.ink,
+                    fontSize: 26,
+                    height: 1.25,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -1,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  entry.hasFilters ? '正在显示筛选后的经历' : '你的经历按发生时间自然排列',
+                  style: TextStyle(color: colors.inkSecondary, fontSize: 13),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 6),
-          Wrap(
-            spacing: 8,
-            children: [
-              _filterChip(
-                label: '全部',
-                selected: _filterKind == null,
-                onSelected: () {
-                  setState(() => _filterKind = null);
-                  _reload();
-                },
-              ),
-              for (final kind in EventKind.values)
-                _filterChip(
-                  label: kind.label,
-                  selected: _filterKind == kind,
-                  onSelected: () {
-                    setState(() => _filterKind = kind);
-                    _reload();
-                  },
-                ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            '状态',
-            style: TextStyle(
-              fontSize: 11,
-              color: colors.inkSecondary,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 1.2,
+          SizedBox.square(
+            dimension: 48,
+            child: TraceIconButton(
+              glyph: TraceGlyph.filter,
+              tooltip: _filtersOpen ? '收起筛选' : '筛选记录',
+              onPressed: () => setState(() => _filtersOpen = !_filtersOpen),
+              color: _hasActiveFilters ? colors.primaryStrong : colors.inkSecondary,
+              backgroundColor: _hasActiveFilters ? colors.primarySoft : null,
             ),
-          ),
-          const SizedBox(height: 6),
-          Wrap(
-            spacing: 8,
-            children: [
-              _filterChip(
-                label: '全部',
-                selected: _filterStatus == null,
-                onSelected: () {
-                  setState(() => _filterStatus = null);
-                  _reload();
-                },
-              ),
-              for (final status in EventStatus.values)
-                _filterChip(
-                  label: status.label,
-                  selected: _filterStatus == status,
-                  onSelected: () {
-                    setState(() => _filterStatus = status);
-                    _reload();
-                  },
-                ),
-            ],
           ),
         ],
       ),
     );
   }
 
-  Widget _filterChip({
-    required String label,
-    required bool selected,
-    required VoidCallback onSelected,
-  }) {
+  Widget _buildDayHeader(_DayEntry entry) {
     final colors = context.traceColors;
-    return ChoiceChip(
-      label: Text(label),
-      selected: selected,
-      showCheckmark: false,
-      onSelected: (_) => onSelected(),
-      selectedColor: colors.primarySoft,
-      labelStyle: TextStyle(
-        color: selected ? colors.primaryStrong : colors.ink,
-        fontSize: 12,
-        fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+    final label = _relativeDayLabel(entry.day);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12, top: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.baseline,
+        textBaseline: TextBaseline.alphabetic,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              color: colors.ink,
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              '${entry.day.month} 月 ${entry.day.day} 日 · ${_weekday(entry.day.weekday)} · ${entry.count} 条',
+              style: TextStyle(color: colors.inkTertiary, fontSize: 12),
+            ),
+          ),
+        ],
       ),
-      side: BorderSide(color: selected ? colors.primary : colors.lineStrong),
+    );
+  }
+
+  Widget _buildTimelineEvent(_EventEntry entry) {
+    final colors = context.traceColors;
+    return Padding(
+      padding: EdgeInsets.only(bottom: entry.isLastInDay ? 28 : 12),
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SizedBox(
+              width: 14,
+              child: Stack(
+                children: [
+                  Positioned(
+                    left: 5,
+                    top: 0,
+                    bottom: entry.isLastInDay ? 24 : 0,
+                    child: Container(width: 1, color: colors.lineStrong),
+                  ),
+                  Positioned(
+                    left: 1,
+                    top: 21,
+                    child: Container(
+                      width: 9,
+                      height: 9,
+                      decoration: BoxDecoration(
+                        color: colors.primary,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: colors.surfaceSoft, width: 2),
+                        boxShadow: [
+                          BoxShadow(color: colors.primary, spreadRadius: 1),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: EventCard(
+                event: entry.event,
+                onTap: () => _openDetail(entry.event),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFilterPanel() {
+    final colors = context.traceColors;
+    return Material(
+      color: colors.surface,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(18, 14, 18, 16),
+        decoration: BoxDecoration(
+          border: Border(bottom: BorderSide(color: colors.line)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _FilterGroup<EventKind>(
+              label: '记录类型',
+              value: _filterKind,
+              allLabel: '全部',
+              values: EventKind.values,
+              itemLabel: (value) => value.label,
+              onChanged: (value) {
+                setState(() => _filterKind = value);
+                _reload();
+              },
+            ),
+            const SizedBox(height: 12),
+            _FilterGroup<EventStatus>(
+              label: '记录状态',
+              value: _filterStatus,
+              allLabel: '全部',
+              values: EventStatus.values,
+              itemLabel: (value) => value.label,
+              onChanged: (value) {
+                setState(() => _filterStatus = value);
+                _reload();
+              },
+            ),
+          ],
+        ),
+      ),
     );
   }
 
   Widget _buildFooter() {
+    final colors = context.traceColors;
     if (_nextCursor == null) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 24),
-        child: Center(
-          child: Text(
-            '已经到底了。',
-            style: TextStyle(
-              fontSize: 12,
-              color: context.traceColors.inkTertiary,
-            ),
-          ),
-        ),
-      );
-    }
-    if (_error != null) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 16),
         child: Center(
-          child: Column(
-            children: [
-              Text(
-                _error!,
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.error,
-                  fontSize: 12,
-                ),
-              ),
-              const SizedBox(height: 6),
-              OutlinedButton(
-                onPressed: _loadingMore ? null : _loadMore,
-                style: OutlinedButton.styleFrom(
-                  shape: const RoundedRectangleBorder(),
-                ),
-                child: const Text('重试'),
-              ),
-            ],
+          child: Text(
+            '已经看到最早的一条记录',
+            style: TextStyle(color: colors.inkTertiary, fontSize: 12),
           ),
         ),
       );
     }
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 18),
-      child: Center(
-        child: OutlinedButton(
-          onPressed: _loadingMore ? null : _loadMore,
-          style: OutlinedButton.styleFrom(
-            shape: const RoundedRectangleBorder(),
-          ),
-          child: Text(_loadingMore ? '加载中…' : '加载更多'),
-        ),
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: OutlinedButton(
+        onPressed: _loadingMore ? null : _loadMore,
+        child: Text(_loadingMore ? '加载中…' : _error ?? '加载更多'),
       ),
+    );
+  }
+
+  static DateTime _eventTime(EventModel event) =>
+      (event.kind == EventKind.plan ? event.plannedAt : event.happenedAt ?? event.createdAt)
+          ?.toLocal() ??
+      event.createdAt.toLocal();
+
+  static String _monthLabel(int month) => const [
+    '一', '二', '三', '四', '五', '六', '七', '八', '九', '十', '十一', '十二',
+  ][month - 1];
+
+  static String _weekday(int weekday) => const [
+    '星期一', '星期二', '星期三', '星期四', '星期五', '星期六', '星期日',
+  ][weekday - 1];
+
+  static String _relativeDayLabel(DateTime day) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final difference = today.difference(day).inDays;
+    if (difference == 0) return '今天';
+    if (difference == 1) return '昨天';
+    return '${day.month} 月 ${day.day} 日';
+  }
+}
+
+sealed class _TimelineEntry {
+  const _TimelineEntry();
+}
+
+class _IntroEntry extends _TimelineEntry {
+  const _IntroEntry({required this.hasFilters});
+  final bool hasFilters;
+}
+
+class _DayEntry extends _TimelineEntry {
+  const _DayEntry(this.day, this.count);
+  final DateTime day;
+  final int count;
+}
+
+class _EventEntry extends _TimelineEntry {
+  const _EventEntry(this.event, {required this.isLastInDay});
+  final EventModel event;
+  final bool isLastInDay;
+}
+
+class _FooterEntry extends _TimelineEntry {
+  const _FooterEntry();
+}
+
+class _FilterGroup<T> extends StatelessWidget {
+  const _FilterGroup({
+    required this.label,
+    required this.value,
+    required this.allLabel,
+    required this.values,
+    required this.itemLabel,
+    required this.onChanged,
+  });
+
+  final String label;
+  final T? value;
+  final String allLabel;
+  final List<T> values;
+  final String Function(T value) itemLabel;
+  final ValueChanged<T?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.traceColors;
+    Widget item(String text, T? itemValue) {
+      final selected = value == itemValue;
+      return Semantics(
+        button: true,
+        selected: selected,
+        child: Material(
+          color: selected ? colors.primarySoft : colors.surfaceSoft,
+          shape: StadiumBorder(
+            side: BorderSide(
+              color: selected ? colors.primary : colors.line,
+            ),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: () => onChanged(itemValue),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 36),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Center(
+                  child: Text(
+                    text,
+                    style: TextStyle(
+                      color: selected ? colors.primaryStrong : colors.inkSecondary,
+                      fontSize: 11,
+                      fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            color: colors.inkSecondary,
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 7),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            item(allLabel, null),
+            ...values.map((entry) => item(itemLabel(entry), entry)),
+          ],
+        ),
+      ],
     );
   }
 }
@@ -424,42 +596,51 @@ class _MessageView extends StatelessWidget {
   final VoidCallback? onAction;
 
   @override
-  Widget build(BuildContext context) => Center(
-    child: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 32),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            title,
-            style: TextStyle(
-              color: context.traceColors.ink,
-              fontSize: 22,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            detail,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: context.traceColors.inkSecondary,
-              fontSize: 13,
-            ),
-          ),
-          if (onAction != null && actionText != null) ...[
-            const SizedBox(height: 16),
-            FilledButton(
-              onPressed: onAction,
-              style: FilledButton.styleFrom(
-                shape: const RoundedRectangleBorder(),
-                minimumSize: const Size(140, 44),
+  Widget build(BuildContext context) {
+    final colors = context.traceColors;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(
+                color: colors.primarySoft,
+                borderRadius: BorderRadius.circular(14),
               ),
-              child: Text(actionText!),
+              child: Center(
+                child: TraceIcon(
+                  TraceGlyph.journal,
+                  size: 25,
+                  color: colors.primaryStrong,
+                ),
+              ),
             ),
+            const SizedBox(height: 16),
+            Text(
+              title,
+              style: TextStyle(
+                color: colors.ink,
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              detail,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: colors.inkSecondary, height: 1.6),
+            ),
+            if (onAction != null && actionText != null) ...[
+              const SizedBox(height: 18),
+              FilledButton(onPressed: onAction, child: Text(actionText!)),
+            ],
           ],
-        ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 }

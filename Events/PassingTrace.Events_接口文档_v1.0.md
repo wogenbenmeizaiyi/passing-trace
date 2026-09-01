@@ -429,6 +429,13 @@ App 启动
 - `GET /api/v1/events/{eventId}/locations/{locationId}/navigation-target`：仅返回当前用户当前修订的可信导航目标。
 - Event 列表支持 `categoryKey` 与逗号分隔的 `tagKeys`。
 
+### 6.8 Android 发布与 Web 下载
+
+- `GET /api/v1/app-updates/android/latest?currentVersionCode=<code>`：检查更新。移动端传当前 `versionCode`；产品网页传 `0` 表示尚未安装 App。仅当服务端版本更高时返回短效 `downloadUrl`。
+- `GET /api/v1/app-updates/android/latest/download`：产品首页下载入口，无需登录。后端读取私有 S3 中的 `releases/android/latest.json`，为清单指向的 APK 生成短效预签名 URL，并返回 `302` 重定向。
+- APK 与发布清单位于私有桶的 `releases/android/` 前缀。客户端不持有 S3 凭据，也不把对象 Key 当作公开地址。
+- 发布顺序必须是先上传 APK、确认成功后再覆盖 `latest.json`，避免下载按钮指向尚未完成的对象。
+
 ---
 
 ## 7. 前端接入要点
@@ -443,7 +450,7 @@ App 启动
 
 ---
 
-## 8. 待补齐（非本次范围）
+## 8. 当前约束
 
-- AppHost 尚未向 `passingtrace-web` 注入 Events API 地址，前端实现需新增环境变量（如 `VITE_EVENTS_API_BASE_URL`）并在 AppHost 中注入。
-- 接口枚举当前为数字；如需更友好的字符串枚举（`"trace"` 等），需在 API 侧启用 `JsonStringEnumConverter`，属后续可选调整。
+- AppHost 已通过 `VITE_EVENTS_API_BASE_URL` 向 Web 注入 Events API 地址；生产环境由同域 `/api/*` 反向代理。
+- 接口枚举当前为数字；如需更友好的字符串枚举（`"trace"` 等），需在 API 侧启用 `JsonStringEnumConverter`。

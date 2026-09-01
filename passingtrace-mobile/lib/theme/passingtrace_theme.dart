@@ -59,6 +59,7 @@ class PassingTraceThemeColors extends ThemeExtension<PassingTraceThemeColors> {
   final Color ink;
   final Color inkSecondary;
   final Color inkTertiary;
+  Color get inkMuted => inkTertiary;
   final Color line;
   final Color lineStrong;
   final Color primary;

@@ -4,13 +4,17 @@ import 'package:flutter/material.dart';
 
 import 'appearance_controller.dart';
 import 'passingtrace_theme.dart';
+import 'quiet_trace_icons.dart';
 
 Future<void> showAppearanceSheet(BuildContext context) {
   return showModalBottomSheet<void>(
     context: context,
     useSafeArea: true,
     isScrollControlled: true,
-    showDragHandle: true,
+    backgroundColor: context.traceColors.surface,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+    ),
     builder: (_) => const AppearanceSheet(),
   );
 }
@@ -30,6 +34,17 @@ class AppearanceSheet extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Center(
+              child: Container(
+                width: 36,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 18),
+                decoration: BoxDecoration(
+                  color: colors.lineStrong,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            Center(
               child: Text(
                 '主题与外观',
                 style: Theme.of(context).textTheme.titleLarge,
@@ -42,7 +57,7 @@ class AppearanceSheet extends StatelessWidget {
               children: [
                 Expanded(
                   child: _ModeOption(
-                    icon: Icons.devices_outlined,
+                    glyph: TraceGlyph.monitor,
                     label: '跟随系统',
                     selected: controller.mode == ThemeMode.system,
                     onTap: () =>
@@ -52,7 +67,7 @@ class AppearanceSheet extends StatelessWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: _ModeOption(
-                    icon: Icons.light_mode_outlined,
+                    glyph: TraceGlyph.sun,
                     label: '浅色',
                     selected: controller.mode == ThemeMode.light,
                     onTap: () => unawaited(controller.setMode(ThemeMode.light)),
@@ -61,7 +76,7 @@ class AppearanceSheet extends StatelessWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: _ModeOption(
-                    icon: Icons.dark_mode_outlined,
+                    glyph: TraceGlyph.moon,
                     label: '深色',
                     selected: controller.mode == ThemeMode.dark,
                     onTap: () => unawaited(controller.setMode(ThemeMode.dark)),
@@ -103,13 +118,13 @@ class AppearanceSheet extends StatelessWidget {
 
 class _ModeOption extends StatelessWidget {
   const _ModeOption({
-    required this.icon,
+    required this.glyph,
     required this.label,
     required this.selected,
     required this.onTap,
   });
 
-  final IconData icon;
+  final TraceGlyph glyph;
   final String label;
   final bool selected;
   final VoidCallback onTap;
@@ -136,7 +151,11 @@ class _ModeOption extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: 20),
+              TraceIcon(
+                glyph,
+                size: 20,
+                color: selected ? colors.primaryStrong : colors.inkSecondary,
+              ),
               const SizedBox(height: 3),
               Text(
                 label,
@@ -237,7 +256,13 @@ class _PaletteOption extends StatelessWidget {
                       color: colors.primary,
                       shape: BoxShape.circle,
                     ),
-                    child: Icon(Icons.check, size: 14, color: colors.onPrimary),
+                    child: Center(
+                      child: TraceIcon(
+                        TraceGlyph.check,
+                        size: 14,
+                        color: colors.onPrimary,
+                      ),
+                    ),
                   ),
                 ),
             ],

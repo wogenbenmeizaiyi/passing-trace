@@ -16,6 +16,8 @@ import '../events/events_api.dart';
 import '../events/media_api.dart';
 import '../events/location_service.dart';
 import '../theme/passingtrace_theme.dart';
+import '../theme/quiet_trace_components.dart';
+import '../theme/quiet_trace_icons.dart';
 import 'nearby_place_sheet.dart';
 
 class EventFormView extends StatefulWidget {
@@ -58,6 +60,7 @@ class _EventFormViewState extends State<EventFormView> {
   final Set<String> _suppressedAiTags = {};
   EventLocationModel? _location;
   bool _locating = false;
+  bool _classificationExpanded = false;
   final _customTag = TextEditingController();
 
   bool get _isEdit => widget.eventId != null;
@@ -469,7 +472,10 @@ class _EventFormViewState extends State<EventFormView> {
   }) => showModalBottomSheet<PlaceCandidateModel>(
     context: context,
     isScrollControlled: true,
-    showDragHandle: true,
+    backgroundColor: context.traceColors.surface,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+    ),
     builder: (context) => NearbyPlaceSheet(
       title: title,
       initialPlaces: places,
@@ -505,15 +511,23 @@ class _EventFormViewState extends State<EventFormView> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.traceColors;
     return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          _isEdit ? '编辑记录' : '记一笔',
-          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 19),
+      appBar: TraceAppBar(
+        title: _isEdit ? '编辑记录' : '记一笔',
+        leading: TraceIconButton(
+          glyph: TraceGlyph.chevronLeft,
+          tooltip: '返回',
+          onPressed: _submitting ? null : () => Navigator.of(context).pop(),
         ),
       ),
+      bottomNavigationBar: TracePrimaryActionBar(
+        label: _isEdit ? '保存修改' : '创建记录',
+        loading: _submitting,
+        onPressed: _submitting ? null : _submit,
+      ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? Center(child: CircularProgressIndicator(color: colors.primary))
           : _buildForm(),
     );
   }
@@ -522,18 +536,19 @@ class _EventFormViewState extends State<EventFormView> {
     return Form(
       key: _formKey,
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
+        padding: const EdgeInsets.fromLTRB(18, 16, 18, 32),
         children: [
           _EventKindSelector(
             value: _kind,
             enabled: !_isEdit,
             onChanged: (value) => setState(() => _kind = value),
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 22),
+          const TraceFieldLabel('标题（可选）'),
           TextFormField(
             controller: _title,
             maxLength: 200,
-            decoration: _decoration('标题', '一句话标题（可与正文同时为空则非法）'),
+            decoration: _fieldDecoration('用一句话概括这条记录'),
             validator: (_) {
               if (_title.text.trim().isEmpty &&
                   _content.text.trim().isEmpty &&
@@ -544,16 +559,16 @@ class _EventFormViewState extends State<EventFormView> {
             },
             textInputAction: TextInputAction.next,
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 18),
+          const TraceFieldLabel('正文（可选）'),
           TextFormField(
             controller: _content,
-            minLines: 5,
-            maxLines: 12,
+            minLines: 7,
+            maxLines: 14,
             textAlignVertical: TextAlignVertical.top,
-            decoration: _decoration(
-              '正文',
+            decoration: _fieldDecoration(
               '把当下想到的、看到的、吃到的写下来…',
-            ).copyWith(alignLabelWithHint: true),
+            ),
             validator: (_) {
               if (_title.text.trim().isEmpty &&
                   _content.text.trim().isEmpty &&
@@ -564,170 +579,61 @@ class _EventFormViewState extends State<EventFormView> {
             },
             textInputAction: TextInputAction.newline,
           ),
-          const SizedBox(height: 18),
-          TextFormField(
-            controller: _when,
-            readOnly: true,
+          const SizedBox(height: 20),
+          TraceFieldLabel(
+            _kind == EventKind.plan ? '计划时间（可选）' : '发生时间（可选）',
+          ),
+          TraceRowButton(
+            glyph: TraceGlyph.calendar,
+            title: _when.text.isEmpty ? '选择日期和时间' : _when.text,
+            subtitle: _when.text.isEmpty
+                ? '可以精确到某一天的某个时刻'
+                : '点击可重新选择',
             onTap: _submitting ? null : _pickWhen,
-            decoration:
-                _decoration(
-                  _kind == EventKind.plan ? '计划时间' : '发生时间',
-                  '点击选择日期和时间',
-                ).copyWith(
-                  suffixIcon: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (_when.text.isNotEmpty)
-                        IconButton(
-                          tooltip: '清除时间',
-                          onPressed: _submitting
-                              ? null
-                              : () => setState(_when.clear),
-                          icon: const Icon(Icons.close),
-                        ),
-                      const Padding(
-                        padding: EdgeInsets.only(right: 12),
-                        child: Icon(Icons.calendar_month_outlined),
-                      ),
-                    ],
-                  ),
-                ),
-            validator: (value) {
-              if (value == null || value.trim().isEmpty) return null;
-              return _parseWhen() == null ? '时间格式不正确。' : null;
-            },
           ),
-          const SizedBox(height: 12),
-          _buildLocationSection(),
-          const SizedBox(height: 8),
-          ExpansionTile(
-            tilePadding: EdgeInsets.zero,
-            title: const Text(
-              '分类与标签（可选）',
-              style: TextStyle(fontWeight: FontWeight.w600),
-            ),
-            subtitle: Text(
-              _primaryCategoryKey == null && _manualTags.isEmpty
-                  ? '不填写则由 AI 自动整理'
-                  : '${_categoryLabel()} · ${_manualTags.length} 个标签',
-            ),
-            children: [
-              if (_taxonomy != null) ...[
-                const Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    '主分类',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: _taxonomy!.categories
-                      .map(
-                        (item) => ChoiceChip(
-                          label: Text(item.label),
-                          selected: _primaryCategoryKey == item.key,
-                          onSelected: (selected) => setState(
-                            () => _primaryCategoryKey = selected
-                                ? item.key
-                                : null,
-                          ),
-                        ),
-                      )
-                      .toList(),
-                ),
-                const SizedBox(height: 14),
-                const Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    '行为标签',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: _taxonomy!.behaviorTags.map((item) {
-                    final selected = _manualTags.any(
-                      (x) => x.taxonomyKey == item.key,
-                    );
-                    return FilterChip(
-                      label: Text(item.label),
-                      selected: selected,
-                      onSelected: (value) => setState(() {
-                        if (value && _manualTags.length < 10) {
-                          _manualTags.add(
-                            ManualTagModel(taxonomyKey: item.key),
-                          );
-                        }
-                        if (!value) {
-                          _manualTags.removeWhere(
-                            (x) => x.taxonomyKey == item.key,
-                          );
-                        }
-                      }),
-                    );
-                  }).toList(),
-                ),
-              ],
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _customTag,
-                      maxLength: 24,
-                      decoration: const InputDecoration(
-                        labelText: '自定义标签',
-                        counterText: '',
-                        isDense: true,
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: '添加标签',
-                    onPressed: _addCustomTag,
-                    icon: const Icon(Icons.add_circle_outline),
-                  ),
-                ],
+          if (_when.text.isNotEmpty)
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                onPressed: _submitting ? null : () => setState(_when.clear),
+                child: const Text('清除时间'),
               ),
-              if (_manualTags.any((x) => x.name != null))
-                Wrap(
-                  spacing: 6,
-                  children: _manualTags
-                      .where((x) => x.name != null)
-                      .map(
-                        (x) => InputChip(
-                          label: Text(x.name!),
-                          onDeleted: () =>
-                              setState(() => _manualTags.remove(x)),
-                        ),
-                      )
-                      .toList(),
-                ),
-              const SizedBox(height: 8),
-            ],
-          ),
-          const SizedBox(height: 18),
+            ),
+          const SizedBox(height: 14),
+          _buildLocationSection(),
+          const SizedBox(height: 22),
           Row(
             children: [
-              const Expanded(
+              Expanded(
                 child: Text(
-                  '附件',
-                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                  '附件  ${_media.length}/10',
+                  style: TextStyle(
+                    color: context.traceColors.inkSecondary,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                  ),
                 ),
               ),
-              Text('${_media.length}/10'),
-              const SizedBox(width: 8),
-              OutlinedButton.icon(
+              TextButton(
                 onPressed: _submitting || _media.length >= 10
                     ? null
                     : _pickMedia,
-                icon: const Icon(Icons.attach_file, size: 18),
-                label: const Text('选择'),
+                style: TextButton.styleFrom(
+                  minimumSize: const Size(48, 48),
+                  foregroundColor: context.traceColors.primary,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TraceIcon(
+                      TraceGlyph.paperclip,
+                      size: 18,
+                      color: context.traceColors.primary,
+                    ),
+                    const SizedBox(width: 6),
+                    const Text('选择附件'),
+                  ],
+                ),
               ),
             ],
           ),
@@ -736,6 +642,8 @@ class _EventFormViewState extends State<EventFormView> {
             for (var index = 0; index < _media.length; index++)
               _buildMediaRow(_media[index], index),
           ],
+          const SizedBox(height: 18),
+          _buildClassificationSection(),
           if (_error != null) ...[
             const SizedBox(height: 14),
             Text(
@@ -746,99 +654,283 @@ class _EventFormViewState extends State<EventFormView> {
               ),
             ),
           ],
-          const SizedBox(height: 24),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: _submitting
-                      ? null
-                      : () => Navigator.of(context).pop(false),
-                  style: OutlinedButton.styleFrom(
-                    minimumSize: const Size.fromHeight(50),
-                    shape: const RoundedRectangleBorder(),
-                  ),
-                  child: const Text('取消'),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: FilledButton(
-                  onPressed: _submitting ? null : _submit,
-                  style: FilledButton.styleFrom(
-                    minimumSize: const Size.fromHeight(50),
-                  ),
-                  child: _submitting
-                      ? SizedBox.square(
-                          dimension: 18,
-                          child: CircularProgressIndicator(
-                            color: Theme.of(context).colorScheme.onPrimary,
-                            strokeWidth: 2,
-                          ),
-                        )
-                      : Text(_isEdit ? '保存修改' : '创建记录'),
-                ),
-              ),
-            ],
-          ),
+          const SizedBox(height: 8),
         ],
       ),
     );
   }
 
-  Widget _buildLocationSection() => Column(
-    children: [
-      Row(
+  Widget _buildClassificationSection() {
+    final colors = context.traceColors;
+    final summary = _primaryCategoryKey == null && _manualTags.isEmpty
+        ? '不填写则由 AI 自动整理'
+        : '${_categoryLabel()} · ${_manualTags.length} 个标签';
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        border: Border.symmetric(horizontal: BorderSide(color: colors.line)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Expanded(
-            child: Text(
-              '地点（可选）',
-              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () => setState(
+                () => _classificationExpanded = !_classificationExpanded,
+              ),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 64),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '分类与标签（可选）',
+                            style: TextStyle(
+                              color: colors.ink,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            summary,
+                            style: TextStyle(
+                              color: colors.inkTertiary,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    TraceIcon(
+                      _classificationExpanded
+                          ? TraceGlyph.chevronUp
+                          : TraceGlyph.chevronDown,
+                      size: 18,
+                      color: colors.inkMuted,
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
-          TextButton.icon(
-            onPressed: _locating ? null : _pickLocation,
-            icon: _locating
-                ? const SizedBox.square(
-                    dimension: 14,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.map_outlined, size: 17),
-            label: Text(_location == null ? '选择地点' : '重新选择'),
-          ),
+          if (_classificationExpanded)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (_taxonomy != null) ...[
+                    const TraceFieldLabel('主分类'),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: _taxonomy!.categories.map((item) {
+                        final selected = _primaryCategoryKey == item.key;
+                        return _SelectableTag(
+                          label: item.label,
+                          selected: selected,
+                          onTap: () => setState(
+                            () => _primaryCategoryKey = selected
+                                ? null
+                                : item.key,
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 18),
+                    const TraceFieldLabel('行为标签'),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: _taxonomy!.behaviorTags.map((item) {
+                        final selected = _manualTags.any(
+                          (tag) => tag.taxonomyKey == item.key,
+                        );
+                        return _SelectableTag(
+                          label: item.label,
+                          selected: selected,
+                          onTap: () => setState(() {
+                            if (selected) {
+                              _manualTags.removeWhere(
+                                (tag) => tag.taxonomyKey == item.key,
+                              );
+                            } else if (_manualTags.length < 10) {
+                              _manualTags.add(
+                                ManualTagModel(taxonomyKey: item.key),
+                              );
+                            }
+                          }),
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                  const SizedBox(height: 14),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _customTag,
+                          maxLength: 24,
+                          decoration: _fieldDecoration('输入自定义标签'),
+                          onSubmitted: (_) => _addCustomTag(),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      TraceIconButton(
+                        glyph: TraceGlyph.add,
+                        tooltip: '添加标签',
+                        onPressed: _addCustomTag,
+                        backgroundColor: colors.primarySoft,
+                        color: colors.primaryStrong,
+                      ),
+                    ],
+                  ),
+                  if (_manualTags.any((tag) => tag.name != null)) ...[
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: _manualTags
+                          .where((tag) => tag.name != null)
+                          .map(
+                            (tag) => _SelectableTag(
+                              label: tag.name!,
+                              selected: true,
+                              removable: true,
+                              onTap: () =>
+                                  setState(() => _manualTags.remove(tag)),
+                            ),
+                          )
+                          .toList(),
+                    ),
+                  ],
+                ],
+              ),
+            ),
         ],
       ),
-      if (_location != null)
-        Card(
-          elevation: 0,
-          child: ListTile(
-            dense: true,
-            leading: const Icon(Icons.place_outlined),
-            title: Text(_location!.name),
-            subtitle: Text(_location!.address ?? '仅保存地点名称'),
-            trailing: IconButton(
-              tooltip: '清除地点',
-              onPressed: () => setState(() => _location = null),
-              icon: const Icon(Icons.close),
+    );
+  }
+
+  Widget _buildLocationSection() {
+    final colors = context.traceColors;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const TraceFieldLabel('地点（可选）'),
+        if (_location == null)
+          TraceRowButton(
+            glyph: TraceGlyph.mapPin,
+            title: _locating ? '正在获取位置…' : '选择地点',
+            subtitle: '拖动定位点，再从附近地点中选择',
+            onTap: _locating ? null : _pickLocation,
+          )
+        else
+          Material(
+            color: colors.surface,
+            shape: RoundedRectangleBorder(
+              side: BorderSide(color: colors.line),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: Row(
+              children: [
+                Expanded(
+                  child: InkWell(
+                    onTap: _locating ? null : _pickLocation,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(minHeight: 64),
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(10, 8, 6, 8),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 36,
+                              height: 36,
+                              decoration: BoxDecoration(
+                                color: colors.primarySoft,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Center(
+                                child: TraceIcon(
+                                  TraceGlyph.mapPin,
+                                  size: 18,
+                                  color: colors.primaryStrong,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    _location!.name,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      color: colors.ink,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    _location!.address ?? '仅保存地点名称',
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      color: colors.inkTertiary,
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                TraceIconButton(
+                  glyph: TraceGlyph.close,
+                  tooltip: '清除地点',
+                  color: colors.inkMuted,
+                  onPressed: () => setState(() => _location = null),
+                ),
+              ],
             ),
           ),
-        ),
-    ],
-  );
+      ],
+    );
+  }
 
-  Widget _buildMediaRow(_FormMediaItem item, int index) => Card(
-    elevation: 0,
-    color: context.traceColors.surfaceSoft,
+  Widget _buildMediaRow(_FormMediaItem item, int index) => Container(
+    margin: const EdgeInsets.only(bottom: 8),
+    decoration: BoxDecoration(
+      color: context.traceColors.surface,
+      border: Border.all(color: context.traceColors.line),
+      borderRadius: BorderRadius.circular(12),
+    ),
     child: Padding(
       padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
       child: Row(
         children: [
-          Icon(
+          TraceIcon(
             item.kind == MediaKind.image
-                ? Icons.image_outlined
+                ? TraceGlyph.image
                 : item.kind == MediaKind.video
-                ? Icons.movie_outlined
-                : Icons.description_outlined,
+                ? TraceGlyph.video
+                : TraceGlyph.file,
+            color: context.traceColors.primaryStrong,
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -870,38 +962,95 @@ class _EventFormViewState extends State<EventFormView> {
             ),
           ),
           if (item.error != null)
-            IconButton(
+            TraceIconButton(
+              glyph: TraceGlyph.refresh,
               tooltip: '重试',
               onPressed: () => _upload(item),
-              icon: const Icon(Icons.refresh),
             ),
-          IconButton(
+          TraceIconButton(
+            glyph: TraceGlyph.chevronUp,
             tooltip: '上移',
             onPressed: index == 0 ? null : () => _moveMedia(index, -1),
-            icon: const Icon(Icons.keyboard_arrow_up),
           ),
-          IconButton(
+          TraceIconButton(
+            glyph: TraceGlyph.chevronDown,
             tooltip: '下移',
             onPressed: index == _media.length - 1
                 ? null
                 : () => _moveMedia(index, 1),
-            icon: const Icon(Icons.keyboard_arrow_down),
           ),
-          IconButton(
+          TraceIconButton(
+            glyph: TraceGlyph.close,
             tooltip: '移除',
             onPressed: item.uploading ? null : () => _removeMedia(index),
-            icon: const Icon(Icons.close),
           ),
         ],
       ),
     ),
   );
 
-  InputDecoration _decoration(String label, String? hint) => InputDecoration(
-    labelText: label,
+  InputDecoration _fieldDecoration(String hint) => InputDecoration(
     hintText: hint,
-    counterText: label == '标题' ? null : '',
+    counterText: '',
   );
+}
+
+class _SelectableTag extends StatelessWidget {
+  const _SelectableTag({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+    this.removable = false,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+  final bool removable;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.traceColors;
+    return Material(
+      color: selected ? colors.primarySoft : colors.surface,
+      borderRadius: BorderRadius.circular(99),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(99),
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 36),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+          decoration: BoxDecoration(
+            border: Border.all(
+              color: selected ? colors.primary : colors.lineStrong,
+            ),
+            borderRadius: BorderRadius.circular(99),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  color: selected ? colors.primaryStrong : colors.inkSecondary,
+                  fontSize: 12,
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                ),
+              ),
+              if (removable) ...[
+                const SizedBox(width: 5),
+                TraceIcon(
+                  TraceGlyph.close,
+                  size: 13,
+                  color: colors.primaryStrong,
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _EventKindSelector extends StatelessWidget {
@@ -923,8 +1072,8 @@ class _EventKindSelector extends StatelessWidget {
       ),
       child: Row(
         children: [
-          _item(context, EventKind.trace, '痕迹', Icons.history),
-          _item(context, EventKind.plan, '计划', Icons.flag_outlined),
+          _item(context, EventKind.trace, '记录当下'),
+          _item(context, EventKind.plan, '写下计划'),
         ],
       ),
     );
@@ -934,7 +1083,6 @@ class _EventKindSelector extends StatelessWidget {
     BuildContext context,
     EventKind kind,
     String label,
-    IconData icon,
   ) {
     final selected = value == kind;
     final color = selected
@@ -959,8 +1107,6 @@ class _EventKindSelector extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: 18, color: color),
-              const SizedBox(width: 7),
               Text(
                 label,
                 style: TextStyle(

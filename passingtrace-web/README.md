@@ -2,6 +2,10 @@
 
 PassingTrace 的 Vue 3 第一方 Web 客户端。它不接收用户名或密码，而是通过 PassingTrace Identity 使用 OpenID Connect Authorization Code + PKCE 完成登录。
 
+默认路由 `/` 是无需登录的产品介绍页，提供 Android 安装包下载和 Web 登录入口。记录、AI 问答、附件上传、分类标签与地点等交互保留在 `/events`、`/assistant` 等应用路由中。
+
+Android 下载按钮访问匿名接口 `GET /api/v1/app-updates/android/latest/download`。Events API 从私有 S3 的 `releases/android/latest.json` 读取当前发布清单，生成短效预签名 URL 后重定向到 APK；前端不保存 S3 Key、Access Key 或长期下载地址。
+
 ## 本地运行
 
 推荐从仓库根目录启动 Aspire，Identity、PostgreSQL 与本项目会一起运行：

@@ -1,4 +1,6 @@
+using System.Net;
 using System.Text.Json;
+using Amazon.S3;
 using Microsoft.Extensions.Options;
 using PassingTrace.Events.Api.Media;
 
@@ -17,25 +19,12 @@ public sealed class AppUpdateService(
         int currentVersionCode,
         CancellationToken cancellationToken)
     {
-        if (currentVersionCode < 1)
+        if (currentVersionCode < 0)
         {
             throw new ArgumentOutOfRangeException(nameof(currentVersionCode));
         }
 
-        await using var source = await storage.OpenReadAsync(
-            _options.AndroidManifestKey,
-            cancellationToken);
-        await using var manifestBuffer = new MemoryStream();
-        await source.CopyToAsync(manifestBuffer, cancellationToken);
-        if (manifestBuffer.Length is 0 or > MaxManifestBytes)
-        {
-            throw new InvalidDataException("安卓更新清单无效。");
-        }
-
-        var manifest = JsonSerializer.Deserialize<AndroidReleaseManifest>(
-            manifestBuffer.ToArray(),
-            JsonOptions) ?? throw new InvalidDataException("安卓更新清单无效。");
-        Validate(manifest);
+        var manifest = await ReadManifestAsync(cancellationToken);
 
         var updateAvailable = manifest.VersionCode > currentVersionCode;
         if (!updateAvailable)
@@ -43,6 +32,54 @@ public sealed class AppUpdateService(
             return ToResponse(manifest, currentVersionCode, null, null);
         }
 
+        var (downloadUrl, expiresAt) = await CreateDownloadAsync(manifest, cancellationToken);
+        return ToResponse(manifest, currentVersionCode, downloadUrl, expiresAt);
+    }
+
+    public async Task<Uri> GetLatestAndroidDownloadAsync(CancellationToken cancellationToken)
+    {
+        var manifest = await ReadManifestAsync(cancellationToken);
+        var (downloadUrl, _) = await CreateDownloadAsync(manifest, cancellationToken);
+        return downloadUrl;
+    }
+
+    private async Task<AndroidReleaseManifest> ReadManifestAsync(CancellationToken cancellationToken)
+    {
+        Stream source;
+        try
+        {
+            source = await storage.OpenReadAsync(
+                _options.AndroidManifestKey,
+                cancellationToken);
+        }
+        catch (AmazonS3Exception exception) when (
+            exception.StatusCode == HttpStatusCode.NotFound ||
+            string.Equals(exception.ErrorCode, "NoSuchKey", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new KeyNotFoundException("当前暂无可下载的 Android 安装包。", exception);
+        }
+
+        await using (source)
+        {
+            await using var manifestBuffer = new MemoryStream();
+            await source.CopyToAsync(manifestBuffer, cancellationToken);
+            if (manifestBuffer.Length is 0 or > MaxManifestBytes)
+            {
+                throw new InvalidDataException("安卓更新清单无效。");
+            }
+
+            var manifest = JsonSerializer.Deserialize<AndroidReleaseManifest>(
+                manifestBuffer.ToArray(),
+                JsonOptions) ?? throw new InvalidDataException("安卓更新清单无效。");
+            Validate(manifest);
+            return manifest;
+        }
+    }
+
+    private async Task<(Uri Url, DateTimeOffset ExpiresAt)> CreateDownloadAsync(
+        AndroidReleaseManifest manifest,
+        CancellationToken cancellationToken)
+    {
         var expiresAt = timeProvider.GetUtcNow().AddMinutes(
             Math.Clamp(_options.DownloadUrlLifetimeMinutes, 5, 60));
         var downloadUrl = await storage.CreateDownloadUrlAsync(
@@ -52,7 +89,7 @@ public sealed class AppUpdateService(
             inline: false,
             expiresAt,
             cancellationToken);
-        return ToResponse(manifest, currentVersionCode, downloadUrl, expiresAt);
+        return (downloadUrl, expiresAt);
     }
 
     private static AndroidUpdateResponse ToResponse(

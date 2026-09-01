@@ -202,27 +202,13 @@ class _RegistrationPageState extends State<RegistrationPage> {
                       ),
                     ),
                     const SizedBox(height: 38),
-                    SegmentedButton<bool>(
-                      segments: const [
-                        ButtonSegment(
-                          value: false,
-                          label: Text('登录'),
-                          icon: Icon(Icons.login),
-                        ),
-                        ButtonSegment(
-                          value: true,
-                          label: Text('创建账号'),
-                          icon: Icon(Icons.person_add_alt_1),
-                        ),
-                      ],
-                      selected: {_creating},
-                      onSelectionChanged: _busy
-                          ? null
-                          : (selection) {
-                              setState(() => _creating = selection.first);
-                              _formKey.currentState?.reset();
-                            },
-                      showSelectedIcon: false,
+                    _AuthModeSelector(
+                      creating: _creating,
+                      enabled: !_busy,
+                      onChanged: (creating) {
+                        setState(() => _creating = creating);
+                        _formKey.currentState?.reset();
+                      },
                     ),
                     const SizedBox(height: 38),
                     Text(
@@ -252,12 +238,10 @@ class _RegistrationPageState extends State<RegistrationPage> {
                       style: TextStyle(color: colors.inkSecondary, height: 1.6),
                     ),
                     const SizedBox(height: 34),
+                    const TraceFieldLabel('用户名'),
                     TextFormField(
                       controller: _username,
-                      decoration: _fieldDecoration(
-                        label: '用户名',
-                        icon: Icons.person_outline,
-                      ),
+                      decoration: _fieldDecoration('输入你的用户名'),
                       autocorrect: false,
                       autofillHints: [
                         _creating
@@ -271,6 +255,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
                           : '请输入 3～32 位字母、数字、_ 或 -',
                     ),
                     const SizedBox(height: 14),
+                    const TraceFieldLabel('密码'),
                     TextFormField(
                       controller: _password,
                       obscureText: _obscure,
@@ -284,13 +269,12 @@ class _RegistrationPageState extends State<RegistrationPage> {
                           : TextInputAction.done,
                       onFieldSubmitted: _creating ? null : (_) => _submit(),
                       decoration: _fieldDecoration(
-                        label: '密码',
-                        icon: Icons.lock_outline,
-                        suffix: IconButton(
-                          onPressed: () => setState(() => _obscure = !_obscure),
-                          icon: Icon(
-                            _obscure ? Icons.visibility : Icons.visibility_off,
+                        '输入你的密码',
+                        suffix: TextButton(
+                          onPressed: () => setState(
+                            () => _obscure = !_obscure,
                           ),
+                          child: Text(_obscure ? '显示' : '隐藏'),
                         ),
                       ),
                       validator: (value) {
@@ -303,18 +287,17 @@ class _RegistrationPageState extends State<RegistrationPage> {
                     ),
                     if (_creating) ...[
                       const SizedBox(height: 14),
+                      const TraceFieldLabel('确认密码'),
                       TextFormField(
                         controller: _confirmPassword,
                         obscureText: true,
                         textInputAction: TextInputAction.next,
-                        decoration: _fieldDecoration(
-                          label: '确认密码',
-                          icon: Icons.lock_reset_outlined,
-                        ),
+                        decoration: _fieldDecoration('再次输入密码'),
                         validator: (value) =>
                             value != _password.text ? '两次密码不一致' : null,
                       ),
                       const SizedBox(height: 14),
+                      const TraceFieldLabel('初始注册码'),
                       TextFormField(
                         controller: _bootstrapCode,
                         obscureText: true,
@@ -322,10 +305,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
                         enableSuggestions: false,
                         textInputAction: TextInputAction.done,
                         onFieldSubmitted: (_) => _submit(),
-                        decoration: _fieldDecoration(
-                          label: '初始注册码',
-                          icon: Icons.vpn_key_outlined,
-                        ),
+                        decoration: _fieldDecoration('输入部署者提供的注册码'),
                         validator: (value) =>
                             value == null || value.trim().isEmpty
                             ? '请输入部署者提供的初始注册码'
@@ -337,7 +317,6 @@ class _RegistrationPageState extends State<RegistrationPage> {
                       onPressed: _busy ? null : _submit,
                       style: FilledButton.styleFrom(
                         minimumSize: const Size.fromHeight(54),
-                        shape: const RoundedRectangleBorder(),
                       ),
                       child: _busy
                           ? SizedBox.square(
@@ -352,7 +331,11 @@ class _RegistrationPageState extends State<RegistrationPage> {
                               children: [
                                 Text(_creating ? '创建账号' : '登录'),
                                 const SizedBox(width: 10),
-                                const Icon(Icons.arrow_forward, size: 18),
+                                TraceIcon(
+                                  TraceGlyph.chevronRight,
+                                  size: 18,
+                                  color: colors.onPrimary,
+                                ),
                               ],
                             ),
                     ),
@@ -374,15 +357,79 @@ class _RegistrationPageState extends State<RegistrationPage> {
     );
   }
 
-  InputDecoration _fieldDecoration({
-    required String label,
-    required IconData icon,
+  InputDecoration _fieldDecoration(
+    String hint, {
     Widget? suffix,
   }) => InputDecoration(
-    labelText: label,
-    prefixIcon: Icon(icon),
+    hintText: hint,
     suffixIcon: suffix,
   );
+}
+
+class _AuthModeSelector extends StatelessWidget {
+  const _AuthModeSelector({
+    required this.creating,
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  final bool creating;
+  final bool enabled;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.traceColors;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: colors.line)),
+      ),
+      child: Row(
+        children: [
+          _item(context, label: '登录', selected: !creating, value: false),
+          _item(context, label: '创建账号', selected: creating, value: true),
+        ],
+      ),
+    );
+  }
+
+  Widget _item(
+    BuildContext context, {
+    required String label,
+    required bool selected,
+    required bool value,
+  }) {
+    final colors = context.traceColors;
+    final color = selected ? colors.primaryStrong : colors.inkSecondary;
+    return Expanded(
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: enabled ? () => onChanged(value) : null,
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 48),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              border: Border(
+                bottom: BorderSide(
+                  color: selected ? colors.primary : Colors.transparent,
+                  width: 2,
+                ),
+              ),
+            ),
+            child: Text(
+              label,
+              style: TextStyle(
+                color: color,
+                fontSize: 14,
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class AccountHome extends StatefulWidget {
@@ -756,30 +803,52 @@ class _QrScannerPageState extends State<QrScannerPage> {
   @override
   Widget build(BuildContext context) => Scaffold(
     backgroundColor: Colors.black,
-    extendBodyBehindAppBar: true,
-    appBar: AppBar(
-      backgroundColor: Colors.transparent,
-      foregroundColor: Colors.white,
-      title: const Text('扫一扫'),
-      actions: [
-        Padding(
-          padding: const EdgeInsets.only(right: 8),
-          child: IconButton.filledTonal(
-            tooltip: '打开手电筒',
-            onPressed: _controller.toggleTorch,
-            style: IconButton.styleFrom(
-              backgroundColor: Colors.black.withValues(alpha: 0.38),
-              foregroundColor: Colors.white,
-            ),
-            icon: const Icon(Icons.flashlight_on_outlined),
-          ),
-        ),
-      ],
-    ),
     body: Stack(
       fit: StackFit.expand,
       children: [
         MobileScanner(controller: _controller, onDetect: _detected),
+        Positioned(
+          left: 10,
+          right: 10,
+          top: 0,
+          child: SafeArea(
+            bottom: false,
+            child: SizedBox(
+              height: 64,
+              child: Row(
+                children: [
+                  TraceIconButton(
+                    glyph: TraceGlyph.chevronLeft,
+                    tooltip: '返回',
+                    color: Colors.white,
+                    backgroundColor: Colors.black.withValues(alpha: 0.36),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                  const Expanded(
+                    child: Text(
+                      '扫一扫',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: _controller.toggleTorch,
+                    style: TextButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      backgroundColor: Colors.black.withValues(alpha: 0.36),
+                      minimumSize: const Size(48, 48),
+                    ),
+                    child: const Text('照明'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
         Center(
           child: SizedBox(
             width: 260,

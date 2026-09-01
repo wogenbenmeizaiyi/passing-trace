@@ -34,6 +34,7 @@ Caddy 需要公网放行 TCP `80`、TCP `443` 和可选的 UDP `443`。PostgreSQ
 雨云 Access Key / Secret Key 只放在 GitHub production Environment Secrets 中，不进入 App 或仓库。如果密钥曾出现在截图、日志或聊天中，必须立即重新生成。
 
 APK 可以与附件放在同一个私有桶的 `releases/android/` 前缀下，由后端更新接口生成短效下载 URL；不需要开启公共访问，也不需要让 APK 经过云服务器。
+Web 产品首页的下载按钮访问 `/api/v1/app-updates/android/latest/download`，Events API 会读取 `releases/android/latest.json` 并重定向到短效预签名地址。发布工作流必须最后更新该清单。
 
 ## 首次部署
 

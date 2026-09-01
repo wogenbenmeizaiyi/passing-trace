@@ -21,11 +21,11 @@ export const useAuthStore = defineStore('auth', () => {
     user.value = await oidc.getUser()
   }
 
-  async function login() {
+  async function login(destination = '/') {
     busy.value = true
     error.value = null
     try {
-      await oidc.signinRedirect({ state: { destination: '/' } })
+      await oidc.signinRedirect({ state: { destination } })
     } catch (reason) {
       error.value = describe(reason, '无法跳转到登录服务。')
       busy.value = false

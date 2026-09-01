@@ -5,6 +5,8 @@ import '../auth_service.dart';
 import '../events/ai_api.dart';
 import '../events/events_api.dart';
 import '../theme/passingtrace_theme.dart';
+import '../theme/quiet_trace_components.dart';
+import '../theme/quiet_trace_icons.dart';
 import 'event_detail_view.dart';
 
 class AssistantView extends StatefulWidget {
@@ -234,58 +236,158 @@ class _AssistantViewState extends State<AssistantView> {
   Future<void> _showConversations() async {
     await showModalBottomSheet<void>(
       context: context,
-      showDragHandle: true,
-      builder: (sheetContext) => SafeArea(
-        child: SizedBox(
-          height: MediaQuery.sizeOf(context).height * 0.62,
-          child: Column(
-            children: [
-              ListTile(
-                title: const Text(
-                  '聊天记录',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
-                ),
-                trailing: FilledButton.icon(
-                  onPressed: () {
-                    Navigator.of(sheetContext).pop();
-                    _newConversation();
-                  },
-                  icon: const Icon(Icons.add),
-                  label: const Text('新对话'),
-                ),
-              ),
-              const Divider(height: 1),
-              Expanded(
-                child: _conversations.isEmpty
-                    ? const Center(child: Text('还没有聊天记录'))
-                    : ListView.builder(
-                        itemCount: _conversations.length,
-                        itemBuilder: (_, index) {
-                          final conversation = _conversations[index];
-                          return ListTile(
-                            selected: conversation.id == _conversationId,
-                            leading: const Icon(Icons.chat_bubble_outline),
-                            title: Text(conversation.title),
-                            subtitle: Text(
-                              _formatConversationTime(conversation.updatedAt),
-                            ),
-                            onTap: () => _openConversation(conversation),
-                            trailing: IconButton(
-                              tooltip: '删除对话',
-                              onPressed: () async {
-                                Navigator.of(sheetContext).pop();
-                                await _deleteConversation(conversation);
-                              },
-                              icon: const Icon(Icons.delete_outline),
-                            ),
-                          );
-                        },
-                      ),
-              ),
-            ],
-          ),
-        ),
+      backgroundColor: context.traceColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
+      builder: (sheetContext) {
+        final colors = sheetContext.traceColors;
+        return SafeArea(
+          child: SizedBox(
+            height: MediaQuery.sizeOf(context).height * 0.68,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    margin: const EdgeInsets.only(top: 10, bottom: 18),
+                    decoration: BoxDecoration(
+                      color: colors.lineStrong,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '聊天记录',
+                          style: TextStyle(
+                            color: colors.ink,
+                            fontSize: 20,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: _busy
+                            ? null
+                            : () {
+                                Navigator.of(sheetContext).pop();
+                                _newConversation();
+                              },
+                        style: TextButton.styleFrom(
+                          minimumSize: const Size(48, 48),
+                          foregroundColor: colors.primary,
+                        ),
+                        child: const Text('新对话'),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Divider(height: 1, color: colors.line),
+                Expanded(
+                  child: _conversations.isEmpty
+                      ? Center(
+                          child: Text(
+                            '还没有聊天记录',
+                            style: TextStyle(color: colors.inkSecondary),
+                          ),
+                        )
+                      : ListView.separated(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          itemCount: _conversations.length,
+                          separatorBuilder: (_, _) => Divider(
+                            height: 1,
+                            indent: 20,
+                            endIndent: 20,
+                            color: colors.line,
+                          ),
+                          itemBuilder: (_, index) {
+                            final conversation = _conversations[index];
+                            final selected =
+                                conversation.id == _conversationId;
+                            return InkWell(
+                              onTap: () => _openConversation(conversation),
+                              child: ConstrainedBox(
+                                constraints: const BoxConstraints(
+                                  minHeight: 64,
+                                ),
+                                child: Padding(
+                                  padding: const EdgeInsets.only(
+                                    left: 20,
+                                    right: 8,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      TraceIcon(
+                                        TraceGlyph.sparkle,
+                                        size: 20,
+                                        color: selected
+                                            ? colors.primary
+                                            : colors.inkSecondary,
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              conversation.title,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: TextStyle(
+                                                color: colors.ink,
+                                                fontWeight: selected
+                                                    ? FontWeight.w700
+                                                    : FontWeight.w500,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 3),
+                                            Text(
+                                              _formatConversationTime(
+                                                conversation.updatedAt,
+                                              ),
+                                              style: TextStyle(
+                                                color: colors.inkMuted,
+                                                fontSize: 12,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      TraceIconButton(
+                                        glyph: TraceGlyph.delete,
+                                        tooltip: '删除对话',
+                                        color: colors.inkMuted,
+                                        onPressed: () async {
+                                          Navigator.of(sheetContext).pop();
+                                          await _deleteConversation(
+                                            conversation,
+                                          );
+                                        },
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -314,226 +416,376 @@ class _AssistantViewState extends State<AssistantView> {
   Widget build(BuildContext context) => Scaffold(
     drawer: widget.drawer,
     bottomNavigationBar: widget.bottomNavigationBar,
-    appBar: AppBar(
-      title: const Text('问问记录'),
-      actions: [
-        IconButton(
-          tooltip: '聊天记录',
-          onPressed: _showConversations,
-          icon: const Icon(Icons.history),
+    appBar: TraceAppBar(
+      title: '问问记录',
+      leading: Builder(
+        builder: (menuContext) => TraceIconButton(
+          glyph: TraceGlyph.menu,
+          tooltip: '打开菜单',
+          onPressed: () => Scaffold.of(menuContext).openDrawer(),
         ),
-        IconButton(
-          tooltip: '新对话',
-          onPressed: _busy ? null : _newConversation,
-          icon: const Icon(Icons.add_comment_outlined),
-        ),
-      ],
+      ),
+      trailing: TraceIconButton(
+        glyph: TraceGlyph.history,
+        tooltip: '聊天记录',
+        onPressed: _showConversations,
+      ),
     ),
     body: _buildChat(),
   );
 
   Widget _buildChat() {
     final colors = context.traceColors;
-    return Column(
+    return Stack(
       children: [
-        Expanded(
+        Positioned.fill(
           child: _initialLoading
-              ? const Center(child: CircularProgressIndicator())
+              ? Center(
+                  child: CircularProgressIndicator(color: colors.primary),
+                )
               : _messages.isEmpty
               ? _buildEmptyChat()
               : ListView.builder(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.fromLTRB(16, 20, 16, 112),
                   itemCount: _messages.length,
-                  itemBuilder: (_, index) {
-                    final message = _messages[index];
-                    final mine = message.role == 'user';
-                    return Align(
-                      alignment: mine
-                          ? Alignment.centerRight
-                          : Alignment.centerLeft,
-                      child: Container(
-                        constraints: const BoxConstraints(maxWidth: 330),
-                        margin: const EdgeInsets.only(bottom: 12),
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: mine ? colors.primary : colors.surface,
-                          borderRadius: BorderRadius.only(
-                            topLeft: Radius.circular(mine ? 18 : 5),
-                            topRight: const Radius.circular(18),
-                            bottomLeft: const Radius.circular(18),
-                            bottomRight: Radius.circular(mine ? 5 : 18),
-                          ),
-                          border: mine ? null : Border.all(color: colors.line),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            AssistantMessageContent(
-                              text: message.text,
-                              isUser: mine,
-                              eventTitles: message.eventTitles,
-                              onOpenEvent: (id) => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => EventDetailView(
-                                    auth: widget.auth,
-                                    session: widget.session,
-                                    eventId: id,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            if (message.eventTitles.isNotEmpty) ...[
-                              const SizedBox(height: 8),
-                              Wrap(
-                                spacing: 6,
-                                runSpacing: 6,
-                                children: message.eventTitles.entries
-                                    .map(
-                                      (record) => ActionChip(
-                                        label: Text(
-                                          record.value.isEmpty
-                                              ? '记录 #${record.key}'
-                                              : record.value,
-                                        ),
-                                        backgroundColor: colors.accentSoft,
-                                        side: BorderSide(color: colors.accent),
-                                        onPressed: () => Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (_) => EventDetailView(
-                                              auth: widget.auth,
-                                              session: widget.session,
-                                              eventId: record.key,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    )
-                                    .toList(),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    );
-                  },
+                  itemBuilder: (_, index) => _buildMessage(_messages[index]),
                 ),
         ),
         if (_error != null)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Text(
-              _error!,
-              style: TextStyle(color: Theme.of(context).colorScheme.error),
+          Positioned(
+            left: 16,
+            right: 16,
+            bottom: 88,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.errorContainer,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                _error!,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onErrorContainer,
+                  fontSize: 12,
+                ),
+              ),
             ),
           ),
-        SafeArea(
-          top: false,
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _input,
-                    minLines: 1,
-                    maxLines: 4,
-                    decoration: const InputDecoration(
-                      hintText: '询问自己的记录…',
-                      filled: true,
-                    ),
-                    onSubmitted: (_) => _send(),
+        Positioned(left: 10, right: 10, bottom: 10, child: _buildComposer()),
+      ],
+    );
+  }
+
+  Widget _buildMessage(_ChatBubble message) {
+    final colors = context.traceColors;
+    final mine = message.role == 'user';
+    return Align(
+      alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
+      child: Container(
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.sizeOf(context).width * 0.88,
+        ),
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: EdgeInsets.symmetric(
+          horizontal: mine ? 14 : 15,
+          vertical: mine ? 11 : 15,
+        ),
+        decoration: BoxDecoration(
+          color: mine ? colors.primary : colors.surface,
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(mine ? 18 : 5),
+            topRight: const Radius.circular(18),
+            bottomLeft: const Radius.circular(18),
+            bottomRight: Radius.circular(mine ? 5 : 18),
+          ),
+          border: mine ? null : Border.all(color: colors.line),
+          boxShadow: mine
+              ? null
+              : [
+                  BoxShadow(
+                    color: colors.ink.withValues(alpha: 0.05),
+                    blurRadius: 14,
+                    offset: const Offset(0, 5),
+                  ),
+                ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            AssistantMessageContent(
+              text: message.text,
+              isUser: mine,
+              eventTitles: message.eventTitles,
+              onOpenEvent: _openEvent,
+            ),
+            if (message.eventTitles.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              for (final record in message.eventTitles.entries)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: _EvidenceCard(
+                    title: record.value.isEmpty
+                        ? '来自你的记录'
+                        : record.value,
+                    onTap: () => _openEvent(record.key),
                   ),
                 ),
-                const SizedBox(width: 8),
-                IconButton.filled(
-                  onPressed: _busy || _conversationId == null ? null : _send,
-                  icon: _busy
-                      ? const SizedBox.square(
-                          dimension: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.send),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _openEvent(int id) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => EventDetailView(
+          auth: widget.auth,
+          session: widget.session,
+          eventId: id,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildComposer() {
+    final colors = context.traceColors;
+    final enabled = !_busy && _conversationId != null;
+    return SafeArea(
+      top: false,
+      child: Material(
+        color: colors.surface,
+        elevation: 0,
+        borderRadius: BorderRadius.circular(18),
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 60),
+          padding: const EdgeInsets.fromLTRB(14, 6, 6, 6),
+          decoration: BoxDecoration(
+            border: Border.all(color: colors.lineStrong),
+            borderRadius: BorderRadius.circular(18),
+            boxShadow: [
+              BoxShadow(
+                color: colors.ink.withValues(alpha: 0.10),
+                blurRadius: 22,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _input,
+                  minLines: 1,
+                  maxLines: 4,
+                  textInputAction: TextInputAction.newline,
+                  decoration: InputDecoration(
+                    hintText: '询问自己的记录…',
+                    hintStyle: TextStyle(color: colors.inkMuted),
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    filled: false,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 13),
+                  ),
                 ),
-              ],
-            ),
+              ),
+              const SizedBox(width: 8),
+              Semantics(
+                button: true,
+                label: '发送',
+                child: Material(
+                  color: enabled ? colors.primary : colors.lineStrong,
+                  borderRadius: BorderRadius.circular(14),
+                  child: InkWell(
+                    onTap: enabled ? _send : null,
+                    borderRadius: BorderRadius.circular(14),
+                    child: SizedBox.square(
+                      dimension: 48,
+                      child: Center(
+                        child: _busy
+                            ? SizedBox.square(
+                                dimension: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: colors.onPrimary,
+                                ),
+                              )
+                            : TraceIcon(
+                                TraceGlyph.send,
+                                size: 21,
+                                color: colors.onPrimary,
+                              ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
-      ],
+      ),
     );
   }
 
   Widget _buildEmptyChat() {
     final colors = context.traceColors;
     return ListView(
-      padding: const EdgeInsets.fromLTRB(24, 56, 24, 24),
+      padding: const EdgeInsets.fromLTRB(24, 32, 24, 116),
       children: [
-        Center(
+        Align(
+          alignment: Alignment.centerLeft,
           child: Container(
-            width: 64,
-            height: 64,
+            width: 42,
+            height: 42,
             decoration: BoxDecoration(
               color: colors.primarySoft,
-              borderRadius: BorderRadius.circular(18),
+              borderRadius: BorderRadius.circular(14),
             ),
-            child: Icon(
-              Icons.auto_awesome,
-              color: colors.primaryStrong,
-              size: 30,
+            child: Center(
+              child: TraceIcon(
+                TraceGlyph.sparkle,
+                color: colors.primaryStrong,
+                size: 22,
+              ),
             ),
           ),
         ),
-        const SizedBox(height: 20),
+        const SizedBox(height: 18),
         Text(
           '问问你的记录',
-          textAlign: TextAlign.center,
           style: TextStyle(
             color: colors.ink,
-            fontSize: 25,
+            fontSize: 22,
             fontWeight: FontWeight.w700,
           ),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 8),
         Text(
           '我会结合你的文字、图片分析和长期记忆来回答，并给出记录证据。',
-          textAlign: TextAlign.center,
-          style: TextStyle(height: 1.6, color: colors.inkSecondary),
+          style: TextStyle(
+            height: 1.6,
+            color: colors.inkSecondary,
+            fontSize: 13,
+          ),
         ),
-        const SizedBox(height: 30),
+        const SizedBox(height: 26),
         for (final suggestion in const [
           '我最近去过哪些地方？',
           '帮我总结这个月的生活。',
           '我记录过哪些值得回顾的事？',
         ])
           Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: OutlinedButton(
-              onPressed: () {
-                _input.text = suggestion;
-                _send();
-              },
-              style: OutlinedButton.styleFrom(
-                alignment: Alignment.centerLeft,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 18,
-                  vertical: 15,
+            padding: const EdgeInsets.only(bottom: 9),
+            child: Material(
+              color: colors.surface,
+              borderRadius: BorderRadius.circular(12),
+              child: InkWell(
+                onTap: () {
+                  _input.text = suggestion;
+                  _send();
+                },
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  constraints: const BoxConstraints(minHeight: 48),
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: colors.line),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          suggestion,
+                          style: TextStyle(color: colors.ink, fontSize: 13),
+                        ),
+                      ),
+                      TraceIcon(
+                        TraceGlyph.chevronRight,
+                        size: 16,
+                        color: colors.inkMuted,
+                      ),
+                    ],
+                  ),
                 ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.chat_bubble_outline, size: 18),
-                  const SizedBox(width: 12),
-                  Expanded(child: Text(suggestion)),
-                  const Icon(Icons.arrow_forward_ios, size: 13),
-                ],
               ),
             ),
           ),
       ],
+    );
+  }
+}
+
+class _EvidenceCard extends StatelessWidget {
+  const _EvidenceCard({required this.title, required this.onTap});
+
+  final String title;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.traceColors;
+    return Material(
+      color: colors.accentSoft,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 54),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            border: Border.all(
+              color: colors.accent.withValues(alpha: 0.32),
+            ),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              TraceIcon(
+                TraceGlyph.note,
+                size: 20,
+                color: colors.accent,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: colors.ink,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '来自你的记录',
+                      style: TextStyle(color: colors.inkMuted, fontSize: 11),
+                    ),
+                  ],
+                ),
+              ),
+              TraceIcon(
+                TraceGlyph.chevronRight,
+                size: 16,
+                color: colors.accent,
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -613,67 +865,142 @@ class _MemoriesViewState extends State<MemoriesView> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    drawer: widget.drawer,
-    appBar: AppBar(title: const Text('我的记忆')),
-    body: _loading
-        ? const Center(child: CircularProgressIndicator())
-        : RefreshIndicator(
-            onRefresh: _refresh,
-            child: _memories.isEmpty
-                ? ListView(
-                    children: [
-                      const SizedBox(height: 190),
-                      Icon(
-                        Icons.psychology_outlined,
-                        size: 42,
-                        color: context.traceColors.primary,
-                      ),
-                      const SizedBox(height: 14),
-                      const Center(child: Text('还没有有证据的长期记忆。')),
-                      if (_error != null) ...[
-                        const SizedBox(height: 10),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 24),
-                          child: Text(
+  Widget build(BuildContext context) {
+    final colors = context.traceColors;
+    return Scaffold(
+      drawer: widget.drawer,
+      appBar: TraceAppBar(
+        title: '我的记忆',
+        leading: Builder(
+          builder: (menuContext) => TraceIconButton(
+            glyph: TraceGlyph.menu,
+            tooltip: '打开菜单',
+            onPressed: () => Scaffold.of(menuContext).openDrawer(),
+          ),
+        ),
+      ),
+      body: _loading
+          ? Center(child: CircularProgressIndicator(color: colors.primary))
+          : RefreshIndicator(
+              onRefresh: _refresh,
+              child: _memories.isEmpty
+                  ? ListView(
+                      padding: const EdgeInsets.fromLTRB(24, 108, 24, 40),
+                      children: [
+                        Align(
+                          child: Container(
+                            width: 48,
+                            height: 48,
+                            decoration: BoxDecoration(
+                              color: colors.primarySoft,
+                              borderRadius: BorderRadius.circular(15),
+                            ),
+                            child: Center(
+                              child: TraceIcon(
+                                TraceGlyph.memory,
+                                size: 24,
+                                color: colors.primaryStrong,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          '还没有长期记忆',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: colors.ink,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'AI 会在有明确记录证据时，逐渐建立对你有用的长期记忆。',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: colors.inkSecondary,
+                            height: 1.6,
+                            fontSize: 13,
+                          ),
+                        ),
+                        if (_error != null) ...[
+                          const SizedBox(height: 12),
+                          Text(
                             _error!,
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               color: Theme.of(context).colorScheme.error,
+                              fontSize: 12,
                             ),
                           ),
-                        ),
+                        ],
                       ],
-                    ],
-                  )
-                : ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: _memories.length,
-                    itemBuilder: (_, index) {
-                      final memory = _memories[index];
-                      return Card(
-                        child: ListTile(
-                          title: Text(memory.content),
-                          subtitle: Text(
-                            '${memory.type} · ${memory.status} · ${memory.evidenceEventIds.length} 条证据',
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.fromLTRB(18, 20, 18, 36),
+                      itemCount: _memories.length,
+                      itemBuilder: (_, index) {
+                        final memory = _memories[index];
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 10),
+                          padding: const EdgeInsets.fromLTRB(15, 14, 7, 10),
+                          decoration: BoxDecoration(
+                            color: colors.surface,
+                            border: Border.all(color: colors.line),
+                            borderRadius: BorderRadius.circular(16),
                           ),
-                          trailing: PopupMenuButton<String>(
-                            onSelected: (action) =>
-                                _updateMemory(memory, action == 'confirm'),
-                            itemBuilder: (_) => const [
-                              PopupMenuItem(
-                                value: 'confirm',
-                                child: Text('确认'),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.only(right: 8),
+                                child: Text(
+                                  memory.content,
+                                  style: TextStyle(
+                                    color: colors.ink,
+                                    fontSize: 14,
+                                    height: 1.55,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
                               ),
-                              PopupMenuItem(value: 'forget', child: Text('忘记')),
+                              const SizedBox(height: 9),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      '${memory.type} · ${memory.status} · ${memory.evidenceEventIds.length} 条证据',
+                                      style: TextStyle(
+                                        color: colors.inkMuted,
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                  ),
+                                  TraceIconButton(
+                                    glyph: TraceGlyph.check,
+                                    tooltip: '确认这条记忆',
+                                    color: colors.primary,
+                                    onPressed: () =>
+                                        _updateMemory(memory, true),
+                                  ),
+                                  TraceIconButton(
+                                    glyph: TraceGlyph.delete,
+                                    tooltip: '忘记这条记忆',
+                                    color: colors.danger,
+                                    onPressed: () =>
+                                        _updateMemory(memory, false),
+                                  ),
+                                ],
+                              ),
                             ],
                           ),
-                        ),
-                      );
-                    },
-                  ),
-          ),
-  );
+                        );
+                      },
+                    ),
+            ),
+    );
+  }
 }
 
 class _ChatBubble {
@@ -724,26 +1051,26 @@ class AssistantMessageContent extends StatelessWidget {
         if (eventId != null) onOpenEvent?.call(eventId);
       },
       styleSheet: MarkdownStyleSheet(
-        p: TextStyle(color: colors.ink, fontSize: 15, height: 1.55),
+        p: TextStyle(color: colors.ink, fontSize: 13, height: 1.7),
         h1: TextStyle(
           color: colors.ink,
-          fontSize: 22,
+          fontSize: 20,
           fontWeight: FontWeight.w700,
           height: 1.4,
         ),
         h2: TextStyle(
           color: colors.ink,
-          fontSize: 19,
+          fontSize: 18,
           fontWeight: FontWeight.w700,
           height: 1.4,
         ),
         h3: TextStyle(
           color: colors.ink,
-          fontSize: 17,
+          fontSize: 16,
           fontWeight: FontWeight.w700,
           height: 1.4,
         ),
-        listBullet: TextStyle(color: colors.accent, fontSize: 15, height: 1.55),
+        listBullet: TextStyle(color: colors.accent, fontSize: 13, height: 1.7),
         a: TextStyle(
           color: colors.accent,
           backgroundColor: colors.accentSoft,

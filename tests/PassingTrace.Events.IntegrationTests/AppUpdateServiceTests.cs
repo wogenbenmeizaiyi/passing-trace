@@ -1,5 +1,7 @@
+using System.Net;
 using System.Text;
 using System.Text.Json;
+using Amazon.S3;
 using Microsoft.Extensions.Options;
 using PassingTrace.Events.Api.Media;
 using PassingTrace.Events.Api.Updates;
@@ -52,6 +54,59 @@ public sealed class AppUpdateServiceTests
         Assert.Null(storage.DownloadedObjectKey);
     }
 
+    [Fact]
+    public async Task BrowserWithoutInstalledVersion_ReturnsLatestDownload()
+    {
+        var manifest = new AndroidReleaseManifest(
+            "1.0.0", 3, DateTimeOffset.UtcNow,
+            "releases/android/PassingTrace-1.0.0-3.apk",
+            new string('d', 64), 2048, null);
+        var storage = new ManifestStorage(manifest);
+        var service = new AppUpdateService(
+            storage,
+            Options.Create(new AppUpdateOptions()),
+            TimeProvider.System);
+
+        var response = await service.GetAndroidUpdateAsync(0, CancellationToken.None);
+
+        Assert.True(response.UpdateAvailable);
+        Assert.NotNull(response.DownloadUrl);
+        Assert.Equal(manifest.ObjectKey, storage.DownloadedObjectKey);
+    }
+
+    [Fact]
+    public async Task LatestDownload_AlwaysCreatesShortLivedSignedUrl()
+    {
+        var manifest = new AndroidReleaseManifest(
+            "1.0.0", 3, DateTimeOffset.UtcNow,
+            "releases/android/PassingTrace-1.0.0-3.apk",
+            new string('c', 64), 2048, null);
+        var storage = new ManifestStorage(manifest);
+        var service = new AppUpdateService(
+            storage,
+            Options.Create(new AppUpdateOptions()),
+            TimeProvider.System);
+
+        var url = await service.GetLatestAndroidDownloadAsync(CancellationToken.None);
+
+        Assert.Equal(new Uri("https://passingtrace.cn-nb1.rains3.com/signed.apk"), url);
+        Assert.Equal(manifest.ObjectKey, storage.DownloadedObjectKey);
+    }
+
+    [Fact]
+    public async Task MissingReleaseManifest_ReturnsFriendlyNotFound()
+    {
+        var service = new AppUpdateService(
+            new MissingManifestStorage(),
+            Options.Create(new AppUpdateOptions()),
+            TimeProvider.System);
+
+        var exception = await Assert.ThrowsAsync<KeyNotFoundException>(
+            () => service.GetLatestAndroidDownloadAsync(CancellationToken.None));
+
+        Assert.Equal("当前暂无可下载的 Android 安装包。", exception.Message);
+    }
+
     private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
     {
         public override DateTimeOffset GetUtcNow() => now;
@@ -82,6 +137,23 @@ public sealed class AppUpdateServiceTests
         public Task AbortMultipartUploadAsync(string objectKey, string uploadId, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<StoredObjectInfo> GetInfoAsync(string objectKey, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task PutAsync(string objectKey, Stream content, string contentType, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task DeleteAsync(string objectKey, CancellationToken cancellationToken) => throw new NotSupportedException();
+    }
+
+    private sealed class MissingManifestStorage : IObjectStorage
+    {
+        public Task<Stream> OpenReadAsync(string objectKey, CancellationToken cancellationToken) =>
+            throw new AmazonS3Exception("missing") { StatusCode = HttpStatusCode.NotFound };
+
+        public Task EnsureBucketAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<string> CreateMultipartUploadAsync(string objectKey, string contentType, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<Uri> CreateUploadUrlAsync(string objectKey, string contentType, DateTimeOffset expiresAt, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<Uri> CreatePartUploadUrlAsync(string objectKey, string uploadId, int partNumber, DateTimeOffset expiresAt, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task CompleteMultipartUploadAsync(string objectKey, string uploadId, IReadOnlyList<CompletedPart> parts, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task AbortMultipartUploadAsync(string objectKey, string uploadId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<StoredObjectInfo> GetInfoAsync(string objectKey, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task PutAsync(string objectKey, Stream content, string contentType, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<Uri> CreateDownloadUrlAsync(string objectKey, string fileName, string contentType, bool inline, DateTimeOffset expiresAt, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task DeleteAsync(string objectKey, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 }

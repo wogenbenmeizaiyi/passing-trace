@@ -10,6 +10,8 @@ import '../events/event_model.dart';
 import '../events/events_api.dart';
 import '../events/media_api.dart';
 import '../theme/passingtrace_theme.dart';
+import '../theme/quiet_trace_components.dart';
+import '../theme/quiet_trace_icons.dart';
 import 'event_form_view.dart';
 import 'event_widgets.dart';
 
@@ -154,32 +156,31 @@ class _EventDetailViewState extends State<EventDetailView> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          '记录详情',
-          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 19),
+      appBar: TraceAppBar(
+        title: '记录详情',
+        leading: TraceIconButton(
+          glyph: TraceGlyph.chevronLeft,
+          tooltip: '返回',
+          onPressed: () => Navigator.of(context).pop(),
         ),
-        actions: [
-          if (_event != null)
-            IconButton(
-              tooltip: '编辑',
-              onPressed: _edit,
-              icon: const Icon(Icons.edit_outlined),
-            ),
-          if (_event != null)
-            IconButton(
-              tooltip: '删除',
-              onPressed: _deleting ? null : _delete,
-              icon: const Icon(Icons.delete_outline),
-            ),
-        ],
+        trailing: _event == null
+            ? null
+            : TraceIconButton(
+                glyph: TraceGlyph.edit,
+                tooltip: '编辑',
+                onPressed: _edit,
+              ),
       ),
       body: _buildBody(),
     );
   }
 
   Widget _buildBody() {
-    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_loading) {
+      return Center(
+        child: CircularProgressIndicator(color: context.traceColors.primary),
+      );
+    }
     if (_error != null && _event == null) {
       return _ErrorView(message: _error!, onRetry: _load);
     }
@@ -223,14 +224,14 @@ class _EventDetailViewState extends State<EventDetailView> {
               children: [
                 if (event.effectiveClassification.primaryCategory
                     case final category?)
-                  Chip(
-                    label: Text(category.displayName),
-                    visualDensity: VisualDensity.compact,
+                  TraceTag(
+                    label: category.displayName,
+                    category: true,
                   ),
                 for (final tag in event.effectiveClassification.tags.take(10))
-                  Chip(
-                    label: Text('${tag.isAi ? '✦ ' : ''}${tag.displayName}'),
-                    visualDensity: VisualDensity.compact,
+                  TraceTag(
+                    label: tag.displayName,
+                    ai: tag.isAi,
                   ),
               ],
             ),
@@ -254,19 +255,16 @@ class _EventDetailViewState extends State<EventDetailView> {
           ],
           if (event.locations.isNotEmpty) ...[
             const SizedBox(height: 20),
-            Card(
-              elevation: 0,
-              child: ListTile(
-                leading: const Icon(Icons.place_outlined),
-                title: Text(event.locations.first.name),
-                subtitle: Text(event.locations.first.address ?? '已保存的地点'),
-                trailing: event.locations.first.canNavigate
-                    ? const Icon(Icons.directions_outlined)
-                    : null,
-                onTap: event.locations.first.canNavigate
-                    ? () => _navigate(event, event.locations.first)
-                    : null,
-              ),
+            TraceRowButton(
+              glyph: TraceGlyph.mapPin,
+              title: event.locations.first.name,
+              subtitle: event.locations.first.address ?? '已保存的地点',
+              trailing: event.locations.first.canNavigate
+                  ? TraceGlyph.directions
+                  : null,
+              onTap: event.locations.first.canNavigate
+                  ? () => _navigate(event, event.locations.first)
+                  : null,
             ),
           ],
           if (event.semanticStatus != null) ...[
@@ -280,11 +278,15 @@ class _EventDetailViewState extends State<EventDetailView> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Row(
+                  Row(
                     children: [
-                      Icon(Icons.auto_awesome, size: 18),
-                      SizedBox(width: 8),
-                      Text(
+                      TraceIcon(
+                        TraceGlyph.sparkle,
+                        size: 18,
+                        color: context.traceColors.primaryStrong,
+                      ),
+                      const SizedBox(width: 8),
+                      const Text(
                         'AI 分析',
                         style: TextStyle(fontWeight: FontWeight.w700),
                       ),
@@ -319,6 +321,24 @@ class _EventDetailViewState extends State<EventDetailView> {
           _DetailRow(label: '可见性', value: '仅自己可见'),
           _DetailRow(label: '创建', value: formatLocal(event.createdAt)),
           _DetailRow(label: '最后更新', value: formatLocal(event.updatedAt)),
+          const SizedBox(height: 28),
+          OutlinedButton(
+            onPressed: _deleting ? null : _delete,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: context.traceColors.danger,
+              side: BorderSide(color: context.traceColors.danger),
+              minimumSize: const Size.fromHeight(50),
+            ),
+            child: _deleting
+                ? SizedBox.square(
+                    dimension: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: context.traceColors.danger,
+                    ),
+                  )
+                : const Text('删除这条记录'),
+          ),
         ],
       ),
     );
@@ -358,22 +378,70 @@ class _EventDetailViewState extends State<EventDetailView> {
     }
   }
 
-  Widget _buildMedia(MediaAssetModel media) => Card(
-    elevation: 0,
-    child: ListTile(
-      leading: Icon(
-        media.kind == MediaKind.image
-            ? Icons.image_outlined
-            : media.kind == MediaKind.video
-            ? Icons.play_circle_outline
-            : Icons.description_outlined,
+  Widget _buildMedia(MediaAssetModel media) {
+    final colors = context.traceColors;
+    final glyph = media.kind == MediaKind.image
+        ? TraceGlyph.image
+        : media.kind == MediaKind.video
+        ? TraceGlyph.video
+        : TraceGlyph.file;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Material(
+        color: colors.surface,
+        shape: RoundedRectangleBorder(
+          side: BorderSide(color: colors.line),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => _openMedia(media),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 58),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Row(
+                children: [
+                  TraceIcon(glyph, size: 21, color: colors.primaryStrong),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          media.fileName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: colors.ink,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          _formatBytes(media.size),
+                          style: TextStyle(
+                            color: colors.inkMuted,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  TraceIcon(
+                    TraceGlyph.externalLink,
+                    size: 17,
+                    color: colors.inkMuted,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
-      title: Text(media.fileName, maxLines: 1, overflow: TextOverflow.ellipsis),
-      subtitle: Text(_formatBytes(media.size)),
-      trailing: const Icon(Icons.open_in_new, size: 18),
-      onTap: () => _openMedia(media),
-    ),
-  );
+    );
+  }
 
   Future<void> _openMedia(MediaAssetModel media) async {
     try {
@@ -391,7 +459,10 @@ class _EventDetailViewState extends State<EventDetailView> {
                   child: IconButton(
                     color: Colors.white,
                     onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.close),
+                    icon: const TraceIcon(
+                      TraceGlyph.close,
+                      color: Colors.white,
+                    ),
                   ),
                 ),
               ],
@@ -478,8 +549,11 @@ class _VideoDialogState extends State<_VideoDialog> {
                       ? _controller.pause()
                       : _controller.play();
                 }),
-                icon: Icon(
-                  _controller.value.isPlaying ? Icons.pause : Icons.play_arrow,
+                icon: TraceIcon(
+                  _controller.value.isPlaying
+                      ? TraceGlyph.pause
+                      : TraceGlyph.play,
+                  color: Colors.white,
                 ),
               ),
             ),

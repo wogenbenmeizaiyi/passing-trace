@@ -6,6 +6,7 @@ import { eventsApi } from '@/api/events'
 import { mediaApi } from '@/api/media'
 import { aiApi, type SemanticResult } from '@/api/ai'
 import { HttpError } from '@/api/http-client'
+import WebAppHeader from '@/components/WebAppHeader.vue'
 import {
   EventKind,
   EventKindLabel,
@@ -153,32 +154,7 @@ onUnmounted(() => {
 
 <template>
   <div class="app-shell">
-    <header class="topbar">
-      <RouterLink class="brand" to="/" aria-label="PassingTrace 首页"
-        ><span class="brand-mark">P</span><span>PassingTrace</span></RouterLink
-      >
-      <nav class="nav-links" aria-label="主导航">
-        <RouterLink to="/events">记录</RouterLink>
-        <RouterLink to="/assistant">AI 助手</RouterLink>
-      </nav>
-      <div class="account-actions">
-        <template v-if="auth.isAuthenticated"
-          ><span class="signed-user"><i></i>{{ auth.username }}</span
-          ><button class="text-button" :disabled="auth.busy" @click="auth.logout">
-            退出
-          </button></template
-        >
-        <template v-else
-          ><button
-            class="button button-dark compact-button"
-            :disabled="auth.busy"
-            @click="auth.login"
-          >
-            登录
-          </button></template
-        >
-      </div>
-    </header>
+    <WebAppHeader />
 
     <main class="detail-page">
       <p class="back-link">
@@ -186,7 +162,7 @@ onUnmounted(() => {
       </p>
 
       <p v-if="!auth.isAuthenticated" class="empty-state">
-        请先 <button class="inline-link inline-login" @click="auth.login">登录</button> 后查看。
+        请先 <button class="inline-link inline-login" @click="auth.login()">登录</button> 后查看。
       </p>
       <p v-else-if="loading" class="empty-state">正在加载…</p>
       <p v-else-if="error" class="error-banner" role="alert">
@@ -237,23 +213,15 @@ onUnmounted(() => {
         <dl class="source">
           <div v-if="item.kind === EventKind.Trace">
             <dt>发生时间</dt>
-            <dd>
-              {{ fmt(item.happenedAt) }} <small>({{ item.timezone }})</small>
-            </dd>
+            <dd>{{ fmt(item.happenedAt) }}</dd>
           </div>
           <div v-if="item.kind === EventKind.Plan">
             <dt>计划时间</dt>
-            <dd>
-              {{ fmt(item.plannedAt) }} <small>({{ item.timezone }})</small>
-            </dd>
+            <dd>{{ fmt(item.plannedAt) }}</dd>
           </div>
           <div v-if="item.completedAt">
             <dt>完成时间</dt>
             <dd>{{ fmt(item.completedAt) }}</dd>
-          </div>
-          <div>
-            <dt>时区</dt>
-            <dd>{{ item.timezone }}</dd>
           </div>
           <div v-if="item.status === EventStatus.Planned">
             <dt>状态</dt>
@@ -356,12 +324,12 @@ onUnmounted(() => {
 .detail-page {
   max-width: 880px;
   margin: 0 auto;
-  padding: 48px 42px 96px;
+  padding: 56px 42px 104px;
 }
 .back-link {
   margin: 0 0 24px;
   font-size: 12px;
-  color: rgba(36, 35, 31, 0.55);
+  color: var(--ink-tertiary);
 }
 .back-link a:hover {
   color: var(--red);
@@ -378,12 +346,11 @@ onUnmounted(() => {
   align-items: center;
   gap: 10px;
   font-size: 11px;
-  color: rgba(36, 35, 31, 0.55);
+  color: var(--ink-tertiary);
 }
 .detail-id {
-  font-family: Georgia, serif;
   font-size: 13px;
-  color: rgba(36, 35, 31, 0.45);
+  color: var(--ink-tertiary);
 }
 .detail-actions {
   display: flex;
@@ -391,11 +358,16 @@ onUnmounted(() => {
 }
 .detail-title {
   margin: 0 0 28px;
-  font-family: 'Noto Serif SC', serif;
   font-size: clamp(28px, 4vw, 42px);
-  font-weight: 500;
-  line-height: 1.3;
-  letter-spacing: -0.02em;
+  font-weight: 750;
+  line-height: 1.2;
+  letter-spacing: -0.045em;
+}
+.label-row {
+  margin: -14px 0 28px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
 }
 .source {
   display: grid;
@@ -403,8 +375,10 @@ onUnmounted(() => {
   gap: 16px 32px;
   margin: 0 0 36px;
   padding: 18px 20px;
-  background: rgba(245, 240, 230, 0.55);
   border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-1);
 }
 .source div {
   display: flex;
@@ -415,18 +389,17 @@ onUnmounted(() => {
 .source dt {
   font-size: 10px;
   letter-spacing: 0.14em;
-  color: rgba(36, 35, 31, 0.5);
+  color: var(--ink-tertiary);
   text-transform: uppercase;
 }
 .source dd {
   margin: 0;
-  font-family: 'Noto Serif SC', serif;
+  font-weight: 700;
   font-size: 15px;
 }
 .source dd small {
   margin-left: 6px;
-  font-family: 'DM Sans', sans-serif;
-  color: rgba(36, 35, 31, 0.45);
+  color: var(--ink-tertiary);
   font-size: 11px;
 }
 .section-label {
@@ -434,22 +407,26 @@ onUnmounted(() => {
   font-size: 10px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: rgba(36, 35, 31, 0.5);
+  color: var(--ink-tertiary);
 }
 .raw-content {
   margin-bottom: 36px;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-1);
 }
 .raw-content-body {
   margin: 0;
-  font-family: 'Noto Serif SC', serif;
   font-size: 16px;
-  line-height: 1.9;
+  line-height: 1.8;
   white-space: pre-wrap;
-  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 .raw-content-empty {
   margin: 0;
-  color: rgba(36, 35, 31, 0.4);
+  color: var(--ink-tertiary);
   font-size: 13px;
 }
 .media-section {
@@ -461,9 +438,12 @@ onUnmounted(() => {
   gap: 12px;
 }
 .media-grid figure {
+  overflow: hidden;
   margin: 0;
   border: 1px solid var(--line);
-  background: rgba(245, 240, 230, 0.42);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-1);
 }
 .media-grid img,
 .media-grid video {
@@ -480,11 +460,11 @@ onUnmounted(() => {
   padding: 18px;
 }
 .media-grid figure.file a {
-  color: var(--red);
+  color: var(--primary-strong);
 }
 .media-grid figcaption {
   padding: 8px 10px;
-  color: rgba(36, 35, 31, 0.55);
+  color: var(--ink-tertiary);
   font-size: 11px;
 }
 .semantic-card {
@@ -493,8 +473,9 @@ onUnmounted(() => {
   gap: 18px;
   margin-bottom: 36px;
   padding: 20px;
-  border-left: 3px solid var(--sage);
-  background: rgba(117, 129, 104, 0.08);
+  border: 1px solid color-mix(in srgb, var(--primary) 25%, var(--line));
+  border-radius: var(--radius-lg);
+  background: var(--primary-soft);
 }
 .semantic-card p {
   margin: 5px 0;
@@ -502,10 +483,10 @@ onUnmounted(() => {
 }
 .semantic-card small {
   display: block;
-  color: rgba(36, 35, 31, 0.48);
+  color: var(--ink-secondary);
 }
 .semantic-card .semantic-error {
-  color: #b33225;
+  color: var(--danger);
 }
 .source-meta {
   border-top: 1px solid var(--line);
@@ -519,12 +500,12 @@ onUnmounted(() => {
   font-size: 12px;
 }
 .source-meta dt {
-  color: rgba(36, 35, 31, 0.5);
+  color: var(--ink-tertiary);
 }
 .source-meta dd {
   margin: 0;
-  font-family: Georgia, serif;
-  color: rgba(36, 35, 31, 0.78);
+  color: var(--ink-secondary);
+  font-variant-numeric: tabular-nums;
 }
 .badge {
   display: inline-block;
@@ -535,16 +516,18 @@ onUnmounted(() => {
   border-radius: 999px;
 }
 .badge.kind {
-  color: var(--red);
+  border-color: transparent;
+  color: var(--primary-strong);
+  background: var(--primary-soft);
 }
 .badge.status[data-status='0'] {
   color: var(--sage);
 }
 .badge.status[data-status='1'] {
-  color: #2e6a4a;
+  color: var(--success);
 }
 .badge.status[data-status='2'] {
-  color: rgba(36, 35, 31, 0.4);
+  color: var(--ink-tertiary);
 }
 .button.ghost {
   background: transparent;
@@ -552,13 +535,13 @@ onUnmounted(() => {
   border: 1px solid var(--line);
 }
 .button.danger-confirm {
-  color: #fff;
-  background: #b33225;
+  color: var(--on-primary);
+  background: var(--danger);
 }
 .empty-state {
   text-align: center;
   padding: 48px 0;
-  color: rgba(36, 35, 31, 0.55);
+  color: var(--ink-secondary);
   font-size: 14px;
 }
 .inline-login {

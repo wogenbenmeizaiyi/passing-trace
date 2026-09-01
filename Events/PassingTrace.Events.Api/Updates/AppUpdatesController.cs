@@ -14,12 +14,20 @@ public sealed class AppUpdatesController(AppUpdateService service) : ControllerB
         [FromQuery] int currentVersionCode,
         CancellationToken cancellationToken)
     {
-        if (currentVersionCode < 1)
+        if (currentVersionCode < 0)
         {
-            ModelState.AddModelError(nameof(currentVersionCode), "currentVersionCode 必须大于 0。");
+            ModelState.AddModelError(nameof(currentVersionCode), "currentVersionCode 不能小于 0。");
             return ValidationProblem(ModelState);
         }
 
         return Ok(await service.GetAndroidUpdateAsync(currentVersionCode, cancellationToken));
+    }
+
+    [HttpGet("android/latest/download")]
+    [ProducesResponseType(StatusCodes.Status302Found)]
+    public async Task<IActionResult> DownloadAndroidLatestAsync(CancellationToken cancellationToken)
+    {
+        var downloadUrl = await service.GetLatestAndroidDownloadAsync(cancellationToken);
+        return Redirect(downloadUrl.AbsoluteUri);
     }
 }

@@ -38,6 +38,8 @@ enum TraceGlyph {
   delete,
   directions,
   externalLink,
+  play,
+  pause,
 }
 
 class TraceIcon extends StatelessWidget {
@@ -374,6 +376,11 @@ class _TraceIconPainter extends CustomPainter {
       case TraceGlyph.externalLink:
         draw(path()..moveTo(13, 4)..lineTo(20, 4)..lineTo(20, 11)..moveTo(20, 4)..lineTo(11, 13));
         draw(path()..moveTo(18, 14)..lineTo(18, 20)..lineTo(4, 20)..lineTo(4, 6)..lineTo(10, 6));
+      case TraceGlyph.play:
+        draw(path()..moveTo(8, 5)..lineTo(19, 12)..lineTo(8, 19)..close());
+      case TraceGlyph.pause:
+        line(9, 6, 9, 18);
+        line(15, 6, 15, 18);
     }
     canvas.restore();
   }

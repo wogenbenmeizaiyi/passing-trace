@@ -5,6 +5,7 @@ import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { eventsApi } from '@/api/events'
 import { mediaApi } from '@/api/media'
 import { HttpError } from '@/api/http-client'
+import WebAppHeader from '@/components/WebAppHeader.vue'
 import {
   EventKind,
   EventKindLabel,
@@ -344,32 +345,7 @@ onUnmounted(() => {
 
 <template>
   <div class="app-shell">
-    <header class="topbar">
-      <RouterLink class="brand" to="/" aria-label="PassingTrace 首页"
-        ><span class="brand-mark">P</span><span>PassingTrace</span></RouterLink
-      >
-      <nav class="nav-links" aria-label="主导航">
-        <RouterLink to="/events">记录</RouterLink>
-        <RouterLink to="/assistant">AI 助手</RouterLink>
-      </nav>
-      <div class="account-actions">
-        <template v-if="auth.isAuthenticated"
-          ><span class="signed-user"><i></i>{{ auth.username }}</span
-          ><button class="text-button" :disabled="auth.busy" @click="auth.logout">
-            退出
-          </button></template
-        >
-        <template v-else
-          ><button
-            class="button button-dark compact-button"
-            :disabled="auth.busy"
-            @click="auth.login"
-          >
-            登录
-          </button></template
-        >
-      </div>
-    </header>
+    <WebAppHeader />
 
     <main class="form-page">
       <p class="back-link">
@@ -379,7 +355,7 @@ onUnmounted(() => {
       </p>
 
       <p v-if="!auth.isAuthenticated" class="empty-state">
-        请先 <button class="inline-link inline-login" @click="auth.login">登录</button> 后再{{
+        请先 <button class="inline-link inline-login" @click="auth.login()">登录</button> 后再{{
           mode === 'create' ? '新建' : '编辑'
         }}。
       </p>
@@ -396,11 +372,11 @@ onUnmounted(() => {
         <form v-else class="event-form" @submit.prevent="submit">
           <fieldset class="form-field">
             <legend>类型</legend>
-            <div class="radio-row">
+            <div class="kind-tabs">
               <label
                 v-for="opt in kindOptions"
                 :key="opt.value"
-                class="radio-pill"
+                class="kind-tab"
                 :class="{ active: form.kind === opt.value, disabled: mode === 'edit' }"
               >
                 <input
@@ -501,7 +477,11 @@ onUnmounted(() => {
               </button>
             </div>
             <p v-if="location" class="field-hint">
-              📍 {{ location.name }} · {{ location.address }}
+              <svg class="location-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 21s7-6.6 7-12a7 7 0 1 0-14 0c0 5.4 7 12 7 12Z" />
+                <circle cx="12" cy="9" r="2.2" />
+              </svg>
+              {{ location.name }} · {{ location.address }}
               <button type="button" class="text-button" @click="location = null">清除</button>
             </p>
           </fieldset>
@@ -560,21 +540,6 @@ onUnmounted(() => {
             <p v-if="fieldErrors.when" class="field-error">{{ fieldErrors.when }}</p>
           </label>
 
-          <label class="form-field">
-            <span class="field-label">时区 (IANA)</span>
-            <input
-              v-model="form.timezone"
-              type="text"
-              placeholder="Asia/Tokyo"
-              autocomplete="off"
-              spellcheck="false"
-            />
-            <p class="field-hint">
-              例如 <code>Asia/Tokyo</code> / <code>Asia/Shanghai</code> / <code>UTC</code>。
-            </p>
-            <p v-if="fieldErrors.timezone" class="field-error">{{ fieldErrors.timezone }}</p>
-          </label>
-
           <p v-if="error" class="error-banner" role="alert">{{ error }}</p>
 
           <div class="form-actions">
@@ -630,14 +595,14 @@ onUnmounted(() => {
   flex: 1;
 }
 .form-page {
-  max-width: 720px;
+  max-width: 780px;
   margin: 0 auto;
-  padding: 48px 42px 96px;
+  padding: 56px 42px 104px;
 }
 .back-link {
   margin: 0 0 20px;
   font-size: 12px;
-  color: rgba(36, 35, 31, 0.55);
+  color: var(--ink-tertiary);
 }
 .back-link a:hover {
   color: var(--red);
@@ -647,42 +612,46 @@ onUnmounted(() => {
 }
 .form-header h1 {
   margin: 4px 0 0;
-  font-family: 'Noto Serif SC', serif;
   font-size: clamp(26px, 3vw, 36px);
-  font-weight: 500;
-  letter-spacing: -0.02em;
+  font-weight: 750;
+  letter-spacing: -0.045em;
 }
 .status-hint {
   margin: 10px 0 0;
-  color: rgba(36, 35, 31, 0.55);
+  color: var(--ink-secondary);
   font-size: 12px;
 }
 .event-form {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 16px;
 }
 .form-field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  border: 0;
-  padding: 0;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 18px;
   margin: 0;
+  background: var(--surface);
+  box-shadow: var(--shadow-1);
 }
 .form-field > .field-label,
 .form-field > legend {
   font-size: 11px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: rgba(36, 35, 31, 0.55);
+  color: var(--ink-tertiary);
   padding: 0;
 }
 .form-field input,
-.form-field textarea {
+.form-field textarea,
+.form-field select {
   border: 1px solid var(--line);
-  background: var(--paper);
-  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: var(--surface-soft);
+  padding: 12px 13px;
   font: inherit;
   font-size: 14px;
   color: var(--ink);
@@ -691,10 +660,12 @@ onUnmounted(() => {
     background 0.18s;
 }
 .form-field input:focus,
-.form-field textarea:focus {
+.form-field textarea:focus,
+.form-field select:focus {
   outline: none;
-  border-color: var(--red);
-  background: #fdf9f1;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--focus-color);
+  background: var(--surface);
 }
 .form-field textarea {
   resize: vertical;
@@ -703,18 +674,33 @@ onUnmounted(() => {
 }
 .field-hint {
   margin: 0;
-  color: rgba(36, 35, 31, 0.45);
-  font-size: 11px;
+  color: var(--ink-tertiary);
+  font-size: 12px;
+}
+.field-hint:has(.location-icon) {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.location-icon {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: var(--primary);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 .field-hint code {
-  font-family: 'DM Sans', monospace;
-  background: rgba(36, 35, 31, 0.05);
+  font-family: ui-monospace, monospace;
+  background: var(--surface-soft);
   padding: 1px 5px;
   border-radius: 3px;
 }
 .field-error {
   margin: 0;
-  color: #b33225;
+  color: var(--danger);
   font-size: 12px;
 }
 .media-picker {
@@ -722,7 +708,9 @@ onUnmounted(() => {
   align-items: center;
   gap: 12px;
   padding: 14px;
-  border: 1px dashed rgba(36, 35, 31, 0.28);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-soft);
   cursor: pointer;
 }
 .media-picker input {
@@ -731,11 +719,11 @@ onUnmounted(() => {
   pointer-events: none;
 }
 .media-picker span {
-  color: var(--red);
+  color: var(--primary-strong);
   font-weight: 700;
 }
 .media-picker small {
-  color: rgba(36, 35, 31, 0.48);
+  color: var(--ink-tertiary);
 }
 .attachment-list {
   display: grid;
@@ -751,14 +739,17 @@ onUnmounted(() => {
   gap: 8px;
   padding: 10px;
   border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-soft);
 }
 .attachment-icon {
   display: grid;
   place-items: center;
   width: 30px;
   height: 30px;
-  background: var(--ink);
-  color: white;
+  border-radius: var(--radius-sm);
+  background: var(--primary-soft);
+  color: var(--primary-strong);
   font-size: 11px;
 }
 .attachment-name {
@@ -775,7 +766,7 @@ onUnmounted(() => {
 }
 .attachment-error {
   max-width: 180px;
-  color: #b33225;
+  color: var(--danger);
   font-size: 11px;
 }
 .attachment-list progress {
@@ -787,11 +778,48 @@ onUnmounted(() => {
   height: 3px;
 }
 .text-button.danger {
-  color: #b33225;
+  color: var(--danger);
 }
-.radio-row {
+.kind-tabs {
   display: flex;
-  gap: 10px;
+  gap: 24px;
+  border-bottom: 1px solid var(--line);
+}
+.kind-tab {
+  min-height: 44px;
+  padding: 0 4px;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  color: var(--ink-tertiary);
+  cursor: pointer;
+}
+.kind-tab::after {
+  content: '';
+  height: 2px;
+  position: absolute;
+  right: 100%;
+  bottom: -1px;
+  left: 0;
+  border-radius: 2px;
+  background: var(--primary);
+  transition: right var(--motion-fast);
+}
+.kind-tab input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.kind-tab.active {
+  color: var(--primary-strong);
+  font-weight: 700;
+}
+.kind-tab.active::after {
+  right: 0;
+}
+.kind-tab.disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
 }
 .radio-pill {
   display: inline-flex;
@@ -811,17 +839,27 @@ onUnmounted(() => {
 }
 .radio-pill.active {
   border-color: var(--red);
-  color: var(--red);
+  color: var(--primary-strong);
+  background: var(--primary-soft);
 }
 .radio-pill.disabled {
   cursor: not-allowed;
   opacity: 0.55;
 }
 .form-actions {
+  padding: 12px;
+  position: sticky;
+  z-index: 5;
+  bottom: 16px;
   display: flex;
   justify-content: flex-end;
   gap: 10px;
   margin-top: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  box-shadow: var(--shadow-2);
+  backdrop-filter: blur(12px);
 }
 .button.ghost {
   background: transparent;
@@ -831,7 +869,7 @@ onUnmounted(() => {
 .empty-state {
   text-align: center;
   padding: 48px 0;
-  color: rgba(36, 35, 31, 0.55);
+  color: var(--ink-secondary);
   font-size: 14px;
 }
 .inline-login {
