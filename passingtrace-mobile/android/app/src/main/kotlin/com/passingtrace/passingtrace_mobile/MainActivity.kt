@@ -3,24 +3,36 @@ package com.passingtrace.passingtrace_mobile
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.app.DownloadManager
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.location.LocationListener
 import android.location.LocationManager
+import android.net.Uri
 import android.os.Build
+import android.os.Environment
 import android.os.Handler
 import android.os.Looper
+import android.provider.Settings
+import android.widget.Toast
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import com.amap.api.location.AMapLocationClient
 import com.amap.api.location.AMapLocationClientOption
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import java.io.File
+import java.io.FileInputStream
+import java.security.MessageDigest
 
 class MainActivity : FlutterActivity() {
     private val channelName = "passingtrace/amap_location"
+    private val updateChannelName = "passingtrace/app_update"
     private val permissionRequest = 7312
     private val mapPickerRequest = 7313
     private var permissionResult: MethodChannel.Result? = null
@@ -29,7 +41,20 @@ class MainActivity : FlutterActivity() {
     private var systemLocationManager: LocationManager? = null
     private var systemLocationListener: LocationListener? = null
     private var systemLocationTimeout: Runnable? = null
+    private var updateReceiverRegistered = false
+    private var updateDownloadId: Long? = null
+    private var updateApkFile: File? = null
+    private var updateExpectedSha256: String? = null
+    private var updateExpectedSize = 0L
+    private var pendingInstallApk: File? = null
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val updateDownloadReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action != DownloadManager.ACTION_DOWNLOAD_COMPLETE) return
+            val completedId = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1L)
+            if (completedId == updateDownloadId) handleUpdateDownloadCompleted(completedId)
+        }
+    }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -46,6 +71,189 @@ class MainActivity : FlutterActivity() {
                 "dispose" -> { destroyLocation(); result.success(null) }
                 else -> result.notImplemented()
             }
+        }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, updateChannelName).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "downloadAndInstall" -> startUpdateDownload(
+                    call.argument<String>("url"),
+                    call.argument<String>("versionName"),
+                    call.argument<Number>("versionCode")?.toLong(),
+                    call.argument<String>("sha256"),
+                    call.argument<Number>("size")?.toLong(),
+                    result
+                )
+                else -> result.notImplemented()
+            }
+        }
+        if (!updateReceiverRegistered) {
+            ContextCompat.registerReceiver(
+                this,
+                updateDownloadReceiver,
+                IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE),
+                ContextCompat.RECEIVER_EXPORTED
+            )
+            updateReceiverRegistered = true
+        }
+    }
+
+    private fun startUpdateDownload(
+        rawUrl: String?,
+        versionName: String?,
+        versionCode: Long?,
+        sha256: String?,
+        expectedSize: Long?,
+        result: MethodChannel.Result
+    ) {
+        if (updateDownloadId != null) {
+            result.error("UPDATE_BUSY", "更新已在下载中。", null)
+            return
+        }
+        val url = rawUrl?.let(Uri::parse)
+        if (url?.scheme != "https" || versionCode == null || versionCode <= 0 ||
+            sha256 == null || !sha256.matches(Regex("^[0-9a-fA-F]{64}$")) ||
+            expectedSize == null || expectedSize <= 0
+        ) {
+            result.error("INVALID_UPDATE", "更新信息不完整。", null)
+            return
+        }
+
+        try {
+            val downloads = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
+                ?: throw IllegalStateException("无法使用下载目录。")
+            val updateDirectory = File(downloads, "updates").apply { mkdirs() }
+            val destination = File(updateDirectory, "PassingTrace-$versionCode.apk")
+            if (destination.exists() && !destination.delete()) {
+                throw IllegalStateException("无法替换旧的更新文件。")
+            }
+
+            val manager = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+            val request = DownloadManager.Request(url)
+                .setTitle("星期八 ${versionName ?: versionCode} 更新")
+                .setDescription("正在下载安装包")
+                .setMimeType(APK_MIME_TYPE)
+                .setAllowedOverMetered(true)
+                .setAllowedOverRoaming(false)
+                .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                .setDestinationInExternalFilesDir(
+                    this,
+                    Environment.DIRECTORY_DOWNLOADS,
+                    "updates/${destination.name}"
+                )
+            updateApkFile = destination
+            updateExpectedSha256 = sha256.lowercase()
+            updateExpectedSize = expectedSize
+            updateDownloadId = manager.enqueue(request)
+            result.success(null)
+        } catch (error: Exception) {
+            clearUpdateDownload()
+            result.error("UPDATE_DOWNLOAD", error.message ?: "无法启动更新下载。", null)
+        }
+    }
+
+    private fun handleUpdateDownloadCompleted(downloadId: Long) {
+        val manager = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+        val status = manager.query(DownloadManager.Query().setFilterById(downloadId)).use { cursor ->
+            if (!cursor.moveToFirst()) DownloadManager.STATUS_FAILED
+            else cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
+        }
+        updateDownloadId = null
+        if (status != DownloadManager.STATUS_SUCCESSFUL) {
+            showUpdateMessage("更新下载失败，请稍后重试。")
+            clearUpdateDownload()
+            return
+        }
+
+        val apk = updateApkFile
+        val expectedHash = updateExpectedSha256
+        val expectedSize = updateExpectedSize
+        if (apk == null || expectedHash == null) {
+            showUpdateMessage("更新文件状态异常，请重新下载。")
+            clearUpdateDownload()
+            return
+        }
+
+        Thread {
+            val error = validateDownloadedApk(apk, expectedSize, expectedHash)
+            mainHandler.post {
+                if (error != null) {
+                    apk.delete()
+                    showUpdateMessage(error)
+                } else {
+                    requestPackageInstall(apk)
+                }
+                updateApkFile = null
+                updateExpectedSha256 = null
+                updateExpectedSize = 0L
+            }
+        }.start()
+    }
+
+    private fun validateDownloadedApk(file: File, expectedSize: Long, expectedHash: String): String? {
+        if (!file.isFile || file.length() != expectedSize) return "更新文件大小校验失败。"
+        return try {
+            val digest = MessageDigest.getInstance("SHA-256")
+            FileInputStream(file).use { input ->
+                val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                while (true) {
+                    val count = input.read(buffer)
+                    if (count < 0) break
+                    digest.update(buffer, 0, count)
+                }
+            }
+            val actualHash = digest.digest().joinToString("") { "%02x".format(it) }
+            if (actualHash == expectedHash) null else "更新文件完整性校验失败。"
+        } catch (_: Exception) {
+            "无法校验更新文件。"
+        }
+    }
+
+    private fun requestPackageInstall(apk: File) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !packageManager.canRequestPackageInstalls()) {
+            pendingInstallApk = apk
+            showUpdateMessage("请允许星期八安装未知应用，返回后会继续安装。")
+            startActivity(
+                Intent(
+                    Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                    Uri.parse("package:$packageName")
+                )
+            )
+            return
+        }
+        launchPackageInstaller(apk)
+    }
+
+    private fun launchPackageInstaller(apk: File) {
+        val contentUri = FileProvider.getUriForFile(
+            this,
+            "$packageName.update-file-provider",
+            apk
+        )
+        startActivity(
+            Intent(Intent.ACTION_INSTALL_PACKAGE).apply {
+                data = contentUri
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                putExtra(Intent.EXTRA_NOT_UNKNOWN_SOURCE, true)
+            }
+        )
+    }
+
+    private fun clearUpdateDownload() {
+        updateDownloadId = null
+        updateApkFile = null
+        updateExpectedSha256 = null
+        updateExpectedSize = 0L
+    }
+
+    private fun showUpdateMessage(message: String) {
+        Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        val apk = pendingInstallApk ?: return
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || packageManager.canRequestPackageInstalls()) {
+            pendingInstallApk = null
+            launchPackageInstaller(apk)
         }
     }
 
@@ -215,6 +423,14 @@ class MainActivity : FlutterActivity() {
         destroyLocation()
         mapPickerResult?.success(null)
         mapPickerResult = null
+        if (updateReceiverRegistered) {
+            unregisterReceiver(updateDownloadReceiver)
+            updateReceiverRegistered = false
+        }
         super.onDestroy()
+    }
+
+    companion object {
+        private const val APK_MIME_TYPE = "application/vnd.android.package-archive"
     }
 }

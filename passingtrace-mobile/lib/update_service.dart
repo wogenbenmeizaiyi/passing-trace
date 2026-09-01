@@ -1,10 +1,12 @@
 import 'dart:convert';
 
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import 'build_environment.dart';
+
+typedef UpdateInstaller = Future<void> Function(Map<String, Object?> request);
 
 class AppUpdateInfo {
   const AppUpdateInfo({
@@ -48,10 +50,18 @@ class AppUpdateService {
   AppUpdateService({
     http.Client? httpClient,
     this.environment = BuildEnvironment.current,
-  }) : _http = httpClient ?? http.Client();
+    UpdateInstaller? installer,
+  }) : _http = httpClient ?? http.Client(),
+       _installer = installer ?? _installWithAndroid;
+
+  static const _updateChannel = MethodChannel('passingtrace/app_update');
 
   final http.Client _http;
   final BuildEnvironment environment;
+  final UpdateInstaller _installer;
+
+  static Future<void> _installWithAndroid(Map<String, Object?> request) =>
+      _updateChannel.invokeMethod<void>('downloadAndInstall', request);
 
   Future<AppUpdateInfo?> check({int? currentVersionCode}) async {
     if (!environment.isProduction) return null;
@@ -74,9 +84,15 @@ class AppUpdateService {
 
   Future<void> download(AppUpdateInfo update) async {
     final url = update.downloadUrl;
-    if (url == null ||
-        !await launchUrl(url, mode: LaunchMode.externalApplication)) {
-      throw Exception('无法打开更新下载地址');
+    if (url == null || url.scheme != 'https') {
+      throw Exception('更新下载地址无效');
     }
+    await _installer({
+      'url': url.toString(),
+      'versionName': update.versionName,
+      'versionCode': update.versionCode,
+      'sha256': update.sha256,
+      'size': update.size,
+    });
   }
 }

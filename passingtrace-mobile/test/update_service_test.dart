@@ -55,4 +55,30 @@ void main() {
 
     expect(await service.check(currentVersionCode: 1), isNull);
   });
+
+  test('正式版在 App 内下载并校验安装包', () async {
+    Map<String, Object?>? request;
+    final service = AppUpdateService(
+      installer: (value) async => request = value,
+      environment: production,
+    );
+    final update = AppUpdateInfo(
+      updateAvailable: true,
+      required: false,
+      versionName: '1.0.4',
+      versionCode: 7,
+      publishedAt: DateTime.utc(2026, 9, 1),
+      sha256: List.filled(64, 'a').join(),
+      size: 1024,
+      notes: '更新',
+      downloadUrl: Uri.parse('https://example.com/PassingTrace.apk'),
+    );
+
+    await service.download(update);
+
+    expect(request?['url'], update.downloadUrl.toString());
+    expect(request?['versionCode'], 7);
+    expect(request?['sha256'], update.sha256);
+    expect(request?['size'], 1024);
+  });
 }

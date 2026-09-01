@@ -428,7 +428,14 @@ class _AccountHomeState extends State<AccountHome> {
           ],
         ),
       );
-      if (accepted == true) await service.download(update);
+      if (accepted == true) {
+        await service.download(update);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('已在 App 内开始下载，完成后会打开系统安装界面')),
+          );
+        }
+      }
     } catch (error) {
       // 更新检查不影响用户进入主界面。
       debugPrint('App update check failed: $error');
