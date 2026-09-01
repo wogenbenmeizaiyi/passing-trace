@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import 'passingtrace_theme.dart';
@@ -19,9 +21,9 @@ class PassingTraceMark extends StatelessWidget {
         ),
         child: CustomPaint(
           painter: _PassingTraceMarkPainter(
-            routeColor: colors.onPrimary,
-            startColor: colors.accent,
-            backgroundColor: colors.primary,
+            paperColor: colors.onPrimary,
+            accentColor: colors.accent,
+            softColor: colors.primarySoft,
           ),
         ),
       ),
@@ -31,77 +33,122 @@ class PassingTraceMark extends StatelessWidget {
 
 class _PassingTraceMarkPainter extends CustomPainter {
   const _PassingTraceMarkPainter({
-    required this.routeColor,
-    required this.startColor,
-    required this.backgroundColor,
+    required this.paperColor,
+    required this.accentColor,
+    required this.softColor,
   });
 
-  final Color routeColor;
-  final Color startColor;
-  final Color backgroundColor;
+  final Color paperColor;
+  final Color accentColor;
+  final Color softColor;
 
   @override
   void paint(Canvas canvas, Size size) {
-    Offset point(double x, double y) => Offset(size.width * x, size.height * y);
-    final route = Path()
-      ..moveTo(size.width * 0.296, size.height * 0.324)
-      ..cubicTo(
-        size.width * 0.389,
-        size.height * 0.25,
-        size.width * 0.519,
-        size.height * 0.259,
-        size.width * 0.593,
-        size.height * 0.333,
-      )
-      ..cubicTo(
-        size.width * 0.667,
-        size.height * 0.407,
-        size.width * 0.63,
-        size.height * 0.5,
-        size.width * 0.519,
-        size.height * 0.519,
-      )
-      ..cubicTo(
-        size.width * 0.398,
-        size.height * 0.537,
-        size.width * 0.352,
-        size.height * 0.602,
-        size.width * 0.417,
-        size.height * 0.676,
-      )
-      ..cubicTo(
-        size.width * 0.481,
-        size.height * 0.741,
-        size.width * 0.602,
-        size.height * 0.731,
-        size.width * 0.704,
-        size.height * 0.639,
-      );
+    final sx = size.width / 108;
+    final sy = size.height / 108;
+    Rect rect(double x, double y, double width, double height) =>
+        Rect.fromLTWH(x * sx, y * sy, width * sx, height * sy);
 
-    canvas.drawPath(
-      route,
-      Paint()
-        ..color = routeColor
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = size.width * 0.065
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round,
+    void drawCard({
+      required double centerX,
+      required double centerY,
+      required double angle,
+      required VoidCallback paint,
+    }) {
+      canvas
+        ..save()
+        ..translate(centerX * sx, centerY * sy)
+        ..rotate(angle * math.pi / 180)
+        ..translate(-centerX * sx, -centerY * sy);
+      paint();
+      canvas.restore();
+    }
+
+    drawCard(
+      centerX: 42,
+      centerY: 42,
+      angle: -8,
+      paint: () {
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(
+            rect(28, 22, 28, 40),
+            Radius.circular(5 * sx),
+          ),
+          Paint()..color = paperColor,
+        );
+        canvas.drawCircle(
+          Offset(40 * sx, 34 * sy),
+          6 * sx,
+          Paint()..color = accentColor,
+        );
+        final photo = Path()
+          ..moveTo(31 * sx, 51 * sy)
+          ..lineTo(39 * sx, 42 * sy)
+          ..lineTo(46 * sx, 48 * sy)
+          ..lineTo(53 * sx, 40 * sy)
+          ..lineTo(57 * sx, 58 * sy)
+          ..lineTo(31 * sx, 58 * sy)
+          ..close();
+        canvas.drawPath(photo, Paint()..color = softColor);
+      },
     );
 
-    final start = point(0.296, 0.324);
-    final end = point(0.704, 0.639);
-    final nodeRadius = size.width * 0.069;
-    final coreRadius = size.width * 0.022;
-    canvas
-      ..drawCircle(start, nodeRadius, Paint()..color = startColor)
-      ..drawCircle(start, coreRadius, Paint()..color = routeColor)
-      ..drawCircle(end, nodeRadius, Paint()..color = routeColor)
-      ..drawCircle(end, coreRadius, Paint()..color = backgroundColor);
+    drawCard(
+      centerX: 67,
+      centerY: 45,
+      angle: 7,
+      paint: () {
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(
+            rect(53, 25, 28, 40),
+            Radius.circular(5 * sx),
+          ),
+          Paint()..color = accentColor,
+        );
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(
+            rect(60, 33, 14, 5),
+            Radius.circular(2.5 * sx),
+          ),
+          Paint()..color = paperColor,
+        );
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(
+            rect(60, 43, 11, 5),
+            Radius.circular(2.5 * sx),
+          ),
+          Paint()..color = paperColor,
+        );
+      },
+    );
+
+    final lid = Path()
+      ..moveTo(19 * sx, 49 * sy)
+      ..lineTo(89 * sx, 49 * sy)
+      ..lineTo(82 * sx, 63 * sy)
+      ..lineTo(26 * sx, 63 * sy)
+      ..close();
+    canvas.drawPath(lid, Paint()..color = accentColor);
+
+    final box = Path()
+      ..moveTo(25 * sx, 59 * sy)
+      ..lineTo(83 * sx, 59 * sy)
+      ..lineTo(78 * sx, 85 * sy)
+      ..lineTo(30 * sx, 85 * sy)
+      ..close();
+    canvas.drawPath(box, Paint()..color = paperColor);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        rect(45, 65, 18, 8),
+        Radius.circular(4 * sx),
+      ),
+      Paint()..color = accentColor,
+    );
   }
 
   @override
   bool shouldRepaint(covariant _PassingTraceMarkPainter oldDelegate) =>
-      routeColor != oldDelegate.routeColor ||
-      startColor != oldDelegate.startColor ||
-      backgroundColor != oldDelegate.backgroundColor;
+      paperColor != oldDelegate.paperColor ||
+      accentColor != oldDelegate.accentColor ||
+      softColor != oldDelegate.softColor;
 }

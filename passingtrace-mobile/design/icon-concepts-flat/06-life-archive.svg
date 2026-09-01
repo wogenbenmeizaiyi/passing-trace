@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" role="img" aria-labelledby="title desc">
+  <title id="title">PassingTrace 生活档案图标</title>
+  <desc id="desc">收藏文字与照片的个人档案夹</desc>
+  <rect x="3" y="3" width="102" height="102" rx="28" fill="#FFF6E8"/>
+  <path d="M17 31 C17 26 21 22 26 22 H49 L57 31 H82 C87 31 91 35 91 40 V82 C91 87 87 91 82 91 H26 C21 91 17 87 17 82 Z" fill="#2F6B57"/>
+  <rect x="27" y="41" width="54" height="39" rx="8" fill="#A8CCBA"/>
+  <rect x="33" y="46" width="42" height="31" rx="6" fill="#FFF6E8"/>
+  <circle cx="63" cy="55" r="7" fill="#E28A62"/>
+  <path d="M34 72 L45 59 L53 67 L60 62 L75 76 H34 Z" fill="#2F6B57"/>
+  <rect x="37" y="35" width="24" height="8" rx="4" fill="#E28A62"/>
+</svg>

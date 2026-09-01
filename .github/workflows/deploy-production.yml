@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - codex/media-ai-memory
+    paths-ignore:
+      - .github/workflows/release-android.yml
+      - passingtrace-mobile/**
   workflow_dispatch:
 
 concurrency:

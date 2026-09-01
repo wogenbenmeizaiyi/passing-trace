@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" role="img" aria-labelledby="title description">
-  <title id="title">PassingTrace app icon</title>
-  <desc id="description">A memory box holding photo and note cards from everyday life.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" role="img" aria-labelledby="title desc">
+  <title id="title">PassingTrace 记忆盒图标</title>
+  <desc id="desc">装着照片和记录卡片的收藏盒</desc>
   <rect x="3" y="3" width="102" height="102" rx="28" fill="#2F6B57"/>
   <rect x="28" y="22" width="28" height="40" rx="5" fill="#FFF6E8" transform="rotate(-8 42 42)"/>
   <circle cx="40" cy="34" r="6" fill="#E28A62"/>

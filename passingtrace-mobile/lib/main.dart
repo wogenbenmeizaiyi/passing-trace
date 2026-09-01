@@ -5,6 +5,8 @@ import 'auth_service.dart';
 import 'theme/appearance_controller.dart';
 import 'theme/passingtrace_mark.dart';
 import 'theme/passingtrace_theme.dart';
+import 'theme/quiet_trace_components.dart';
+import 'theme/quiet_trace_icons.dart';
 import 'build_environment.dart';
 import 'update_service.dart';
 import 'views/assistant_view.dart';
@@ -617,134 +619,109 @@ class _AccountHomeState extends State<AccountHome> {
     ],
   );
 
-  Widget _buildPrimaryNavigation() => NavigationBar(
+  Widget _buildPrimaryNavigation() => TraceBottomNavigation(
     selectedIndex: _section == 1 ? 0 : 1,
-    onDestinationSelected: (index) {
+    onSelected: (index) {
       final section = index == 0 ? 1 : 0;
       if (_section != section) setState(() => _section = section);
     },
-    destinations: const [
-      NavigationDestination(
-        icon: Icon(Icons.article_outlined),
-        selectedIcon: Icon(Icons.article),
-        label: '记录',
-      ),
-      NavigationDestination(
-        icon: Icon(Icons.auto_awesome_outlined),
-        selectedIcon: Icon(Icons.auto_awesome),
-        label: '问 AI',
-      ),
-    ],
   );
 
   Widget _buildDrawer() => Drawer(
     width: 304,
     child: SafeArea(
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(24, 22, 18, 18),
-            child: Row(
-              children: [
-                const PassingTraceMark(size: 38),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '我的 PassingTrace',
-                        style: Theme.of(context).textTheme.titleMedium,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 20, 14, 12),
+        child: Column(
+          children: [
+            SizedBox(
+              height: 72,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(10, 2, 2, 14),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '我的 PassingTrace',
+                            style: TextStyle(
+                              color: context.traceColors.ink,
+                              fontSize: 17,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            '仅自己可见的生活档案',
+                            style: TextStyle(
+                              color: context.traceColors.inkTertiary,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        '仅自己可见的生活档案',
-                        style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    SizedBox.square(
+                      dimension: 48,
+                      child: TraceIconButton(
+                        glyph: TraceGlyph.scan,
+                        tooltip: '扫一扫',
+                        onPressed: _busy ? null : _scanFromDrawer,
+                        color: context.traceColors.primaryStrong,
+                        backgroundColor: context.traceColors.primarySoft,
+                        borderColor: context.traceColors.lineStrong,
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-                IconButton(
-                  tooltip: '扫一扫',
-                  onPressed: _busy ? null : _scanFromDrawer,
-                  icon: const Icon(Icons.qr_code_scanner),
-                ),
-              ],
+              ),
             ),
-          ),
-          const Divider(height: 1),
-          const SizedBox(height: 10),
-          _DrawerDestination(
-            icon: Icons.article_outlined,
-            selectedIcon: Icons.article,
-            label: '我的记录',
-            selected: _section == 1,
-            onTap: () => _selectSection(1),
-          ),
-          _DrawerDestination(
-            icon: Icons.auto_awesome_outlined,
-            selectedIcon: Icons.auto_awesome,
-            label: '问问记录',
-            selected: _section == 0,
-            onTap: () => _selectSection(0),
-          ),
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-            child: Divider(height: 1),
-          ),
-          _DrawerDestination(
-            icon: Icons.psychology_outlined,
-            selectedIcon: Icons.psychology,
-            label: '我的记忆',
-            selected: _section == 2,
-            onTap: () => _selectSection(2),
-          ),
-          const Spacer(),
-          const Divider(height: 1),
-          ListTile(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 24),
-            minVerticalPadding: 8,
-            leading: const Icon(Icons.settings_outlined),
-            title: const Text('设置'),
-            trailing: const Icon(Icons.chevron_right, size: 20),
-            onTap: _busy ? null : _openSettings,
-          ),
-          const SizedBox(height: 12),
-        ],
+            Divider(height: 1, color: context.traceColors.line),
+            const SizedBox(height: 12),
+            TraceDrawerItem(
+              glyph: TraceGlyph.journal,
+              label: '我的记录',
+              selected: _section == 1,
+              onTap: () => _selectSection(1),
+            ),
+            TraceDrawerItem(
+              glyph: TraceGlyph.sparkle,
+              label: '问问记录',
+              selected: _section == 0,
+              onTap: () => _selectSection(0),
+            ),
+            TraceDrawerItem(
+              glyph: TraceGlyph.memory,
+              label: '我的记忆',
+              selected: _section == 2,
+              onTap: () => _selectSection(2),
+            ),
+            const Spacer(),
+            Divider(height: 1, color: context.traceColors.line),
+            const SizedBox(height: 10),
+            TraceDrawerItem(
+              glyph: TraceGlyph.settings,
+              label: '设置',
+              onTap: _busy ? null : _openSettings,
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+              child: Text(
+                '点击菜单外的区域即可收起',
+                style: TextStyle(
+                  color: context.traceColors.inkTertiary,
+                  fontSize: 10,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     ),
   );
-}
-
-class _DrawerDestination extends StatelessWidget {
-  const _DrawerDestination({
-    required this.icon,
-    required this.selectedIcon,
-    required this.label,
-    this.selected = false,
-    this.onTap,
-  });
-
-  final IconData icon;
-  final IconData selectedIcon;
-  final String label;
-  final bool selected;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final handler = onTap;
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 24),
-      leading: Icon(selected ? selectedIcon : icon),
-      title: Text(label),
-      selected: selected,
-      selectedColor: Theme.of(context).colorScheme.primary,
-      selectedTileColor: context.traceColors.primarySoft,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      onTap: handler ?? () => Navigator.of(context).pop(),
-    );
-  }
 }
 
 class QrScannerPage extends StatefulWidget {
