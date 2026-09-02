@@ -11,11 +11,11 @@ on:
       version_name:
         description: Android version name
         required: true
-        default: 1.0.5
+        default: 1.0.6
       version_code:
         description: Android version code (must always increase)
         required: true
-        default: "8"
+        default: "9"
       minimum_supported_version_code:
         description: Versions below this code must update
         required: true
@@ -23,7 +23,7 @@ on:
       notes:
         description: Chinese release notes
         required: true
-        default: 修复高德地图正式版闪退，并更新界面与故事线体验。
+        default: 固定正式版签名证书，并隔离内测版安装包。
 
 permissions:
   contents: read
@@ -33,15 +33,20 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     env:
-      RELEASE_VERSION_NAME: ${{ inputs.version_name || '1.0.5' }}
-      RELEASE_VERSION_CODE: ${{ inputs.version_code || '8' }}
+      RELEASE_VERSION_NAME: ${{ inputs.version_name || '1.0.6' }}
+      RELEASE_VERSION_CODE: ${{ inputs.version_code || '9' }}
       RELEASE_MINIMUM_SUPPORTED_VERSION_CODE: ${{ inputs.minimum_supported_version_code || '1' }}
-      RELEASE_NOTES: ${{ inputs.notes || '修复高德地图正式版闪退，并更新界面与故事线体验。' }}
+      RELEASE_NOTES: ${{ inputs.notes || '固定正式版签名证书，并隔离内测版安装包。' }}
       S3_ENDPOINT: ${{ vars.S3_ENDPOINT }}
       S3_BUCKET: ${{ vars.S3_BUCKET }}
       S3_REGION: ${{ vars.S3_REGION }}
       AWS_ACCESS_KEY_ID: ${{ secrets.S3_ACCESS_KEY }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_KEY }}
+      ANDROID_SIGNING_STORE_FILE: ${{ github.workspace }}/passingtrace-mobile/android/app/release.keystore
+      ANDROID_SIGNING_STORE_PASSWORD: android
+      ANDROID_SIGNING_KEY_ALIAS: androiddebugkey
+      ANDROID_SIGNING_KEY_PASSWORD: android
+      ANDROID_SIGNING_SHA256: C30A64965913C530169FFA52D4B2D0FFC1E3DEFBC6AF968A8E4DF41A25BC0FAF
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -65,9 +70,8 @@ jobs:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_SIGNING_KEYSTORE_BASE64 }}
         run: |
           set -euo pipefail
-          install -d -m 700 ~/.android
-          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > ~/.android/debug.keystore
-          chmod 600 ~/.android/debug.keystore
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$ANDROID_SIGNING_STORE_FILE"
+          chmod 600 "$ANDROID_SIGNING_STORE_FILE"
 
       - name: Configure Android and restore packages
         working-directory: passingtrace-mobile
@@ -95,6 +99,20 @@ jobs:
             --dart-define PASSINGTRACE_CHANNEL=production \
             --dart-define PASSINGTRACE_IDENTITY_URL=https://auth.passingtrace.com \
             --dart-define PASSINGTRACE_EVENTS_API_URL=https://passingtrace.com
+
+      - name: Verify production signing certificate
+        working-directory: passingtrace-mobile
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk='build/app/outputs/flutter-apk/app-production-release.apk'
+          actual="$($ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/apksigner verify --print-certs "$apk" \
+            | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' \
+            | tr '[:lower:]' '[:upper:]')"
+          if [ "$actual" != "$ANDROID_SIGNING_SHA256" ]; then
+            echo "::error::Unexpected Android signing certificate: $actual"
+            exit 1
+          fi
 
       - name: Create release manifest
         shell: bash

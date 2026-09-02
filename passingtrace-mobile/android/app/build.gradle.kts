@@ -11,6 +11,25 @@ val localProperties = Properties().apply {
     if (file.exists()) file.inputStream().use { load(it) }
 }
 
+val releaseStoreFile = providers.environmentVariable("ANDROID_SIGNING_STORE_FILE")
+    .orElse(localProperties.getProperty("ANDROID_SIGNING_STORE_FILE", ""))
+    .get()
+val releaseStorePassword = providers.environmentVariable("ANDROID_SIGNING_STORE_PASSWORD")
+    .orElse(localProperties.getProperty("ANDROID_SIGNING_STORE_PASSWORD", ""))
+    .get()
+val releaseKeyAlias = providers.environmentVariable("ANDROID_SIGNING_KEY_ALIAS")
+    .orElse(localProperties.getProperty("ANDROID_SIGNING_KEY_ALIAS", ""))
+    .get()
+val releaseKeyPassword = providers.environmentVariable("ANDROID_SIGNING_KEY_PASSWORD")
+    .orElse(localProperties.getProperty("ANDROID_SIGNING_KEY_PASSWORD", ""))
+    .get()
+val releaseSigningConfigured = listOf(
+    releaseStoreFile,
+    releaseStorePassword,
+    releaseKeyAlias,
+    releaseKeyPassword,
+).all(String::isNotBlank)
+
 android {
     namespace = "com.passingtrace.passingtrace_mobile"
     compileSdk = flutter.compileSdkVersion
@@ -40,10 +59,22 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        create("productionRelease") {
+            if (releaseSigningConfigured) {
+                storeFile = file(releaseStoreFile)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
+
     flavorDimensions += "environment"
     productFlavors {
         create("internal") {
             dimension = "environment"
+            applicationIdSuffix = ".internal"
             manifestPlaceholders["appLabel"] = "星期八·内测"
         }
         create("production") {
@@ -54,14 +85,23 @@ android {
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("productionRelease")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
         }
+    }
+
+    if (
+        gradle.startParameter.taskNames.any { it.contains("Release", ignoreCase = true) } &&
+        !releaseSigningConfigured
+    ) {
+        throw GradleException(
+            "Release signing is not configured. Set ANDROID_SIGNING_STORE_FILE, " +
+                "ANDROID_SIGNING_STORE_PASSWORD, ANDROID_SIGNING_KEY_ALIAS and " +
+                "ANDROID_SIGNING_KEY_PASSWORD."
+        )
     }
 }
 
