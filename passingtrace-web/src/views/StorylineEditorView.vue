@@ -74,6 +74,8 @@ const version = ref(0),
   saving = ref(false),
   error = ref(''),
   notice = ref('')
+const titleInput = ref<HTMLInputElement | null>(null),
+  titleError = ref('')
 const flowNodes = shallowRef<StoryNode[]>([]),
   flowEdges = shallowRef<Edge[]>([]),
   stages = ref<StorylineStageInput[]>([])
@@ -158,6 +160,13 @@ function redo() {
 function markDirty() {
   dirty.value = true
   notice.value = ''
+}
+function validateTitle() {
+  titleError.value = title.value.trim() ? '' : '请填写故事线名称。'
+  return !titleError.value
+}
+function onTitleInput() {
+  if (title.value.trim()) titleError.value = ''
 }
 function nextPosition() {
   const count = flowNodes.value.length
@@ -337,6 +346,7 @@ async function loadImages() {
 }
 function fromResponse(value: StorylineRevisionResponse) {
   title.value = value.title
+  titleError.value = ''
   description.value = value.description || ''
   categoryKey.value = value.categoryKey
   status.value = value.status
@@ -452,8 +462,11 @@ function requestBody(): SaveStorylineRequest {
   }
 }
 async function save() {
-  if (!title.value.trim()) {
-    error.value = '请先填写故事线标题。'
+  if (!validateTitle()) {
+    error.value = ''
+    await nextTick()
+    titleInput.value?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    titleInput.value?.focus()
     return
   }
   saving.value = true
@@ -480,6 +493,7 @@ async function load() {
       fromResponse(await storylinesApi.get(storyId.value))
     } else {
       title.value = ''
+      titleError.value = ''
       stages.value = [{ key: uuid(), title: '开始', semanticOrder: 0 }]
       const draft = sessionStorage.getItem(draftKey.value)
       if (draft) {
@@ -576,14 +590,10 @@ onUnmounted(() => window.removeEventListener('beforeunload', beforeUnload))
     <WebAppHeader />
     <main class="story-editor">
       <header class="editor-top">
-        <div>
+        <div class="editor-title-summary">
           <p class="eyebrow">STORYLINE EDITOR</p>
-          <input
-            v-model="title"
-            class="title-input"
-            placeholder="给这段经历起个名字"
-            aria-label="故事线标题"
-          />
+          <h1>{{ title.trim() || (storyId ? '未命名故事线' : '新故事线') }}</h1>
+          <p>在右侧整理故事线信息与节点属性</p>
         </div>
         <div class="editor-actions">
           <button class="text-button" :disabled="!history.length" @click="undo">撤销</button
@@ -665,7 +675,29 @@ onUnmounted(() => window.removeEventListener('beforeunload', beforeUnload))
             <div><span>整理</span><small>故事线与节点属性</small></div>
           </div>
           <div class="property-scroll">
-            <section>
+            <section class="story-properties">
+              <div class="story-title-field" :class="{ 'has-error': titleError }">
+                <label for="storyline-title">故事线名称 <span>必填</span></label>
+                <input
+                  id="storyline-title"
+                  ref="titleInput"
+                  v-model="title"
+                  type="text"
+                  maxlength="120"
+                  placeholder="例如：黄山旅行"
+                  required
+                  :aria-invalid="Boolean(titleError)"
+                  :aria-describedby="titleError ? 'storyline-title-error' : 'storyline-title-hint'"
+                  @input="onTitleInput"
+                  @blur="validateTitle"
+                />
+                <p v-if="titleError" id="storyline-title-error" class="field-error" role="alert">
+                  {{ titleError }}
+                </p>
+                <p v-else id="storyline-title-hint" class="field-hint">
+                  用一个容易辨认的名字概括这段经历
+                </p>
+              </div>
               <label
                 >主分类<select v-model="categoryKey">
                   <option v-for="option in categoryOptions" :key="option[0]" :value="option[0]">
@@ -829,17 +861,16 @@ onUnmounted(() => window.removeEventListener('beforeunload', beforeUnload))
 .editor-top .eyebrow {
   margin: 0;
 }
-.title-input {
-  width: min(520px, 50vw);
-  padding: 4px 0;
-  border: 0;
-  background: transparent;
+.editor-title-summary h1 {
+  margin: 2px 0 0;
   font-size: 24px;
   font-weight: 800;
   letter-spacing: -0.03em;
 }
-.title-input:focus {
-  outline: 0;
+.editor-title-summary > p:last-child {
+  margin: 2px 0 0;
+  color: var(--ink-tertiary);
+  font-size: 10px;
 }
 .editor-actions {
   display: flex;
@@ -1049,6 +1080,58 @@ onUnmounted(() => window.removeEventListener('beforeunload', beforeUnload))
   border-radius: 9px;
   background: var(--surface-soft);
   font-size: 12px;
+}
+.story-title-field {
+  margin-bottom: 16px;
+}
+.story-title-field > label {
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--ink-secondary);
+  font-size: 11px;
+  font-weight: 700;
+}
+.story-title-field > label span {
+  padding: 2px 6px;
+  border-radius: 5px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 9px;
+  font-weight: 700;
+}
+.property-scroll .story-title-field input {
+  min-height: 48px;
+  border-color: color-mix(in srgb, var(--primary) 45%, var(--line));
+  background: var(--surface);
+  box-shadow: inset 3px 0 0 var(--primary);
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 700;
+}
+.property-scroll input:focus-visible,
+.property-scroll select:focus-visible,
+.property-scroll textarea:focus-visible {
+  border-color: var(--primary);
+  outline: 2px solid color-mix(in srgb, var(--primary) 36%, transparent);
+  outline-offset: 2px;
+}
+.property-scroll .story-title-field.has-error input {
+  border-color: var(--danger);
+  box-shadow: inset 3px 0 0 var(--danger);
+}
+.field-hint,
+.field-error {
+  margin: 6px 0 0;
+  font-size: 9px;
+  line-height: 1.5;
+}
+.field-hint {
+  color: var(--ink-tertiary);
+}
+.field-error {
+  color: var(--danger);
 }
 .section-title {
   display: flex;

@@ -191,6 +191,29 @@ public sealed class EventServiceTimeZoneTests : IDisposable
     }
 
     [Fact]
+    public async Task OpenContentAsync_AllowsConfirmedImageWhenAiProcessingFailed()
+    {
+        var asset = AddReadyMedia(42, "original.png", MediaKind.Image);
+        asset.Status = MediaAssetStatus.Failed;
+        asset.ProcessingError = "AI derivative processing failed";
+        await _db.SaveChangesAsync();
+        var bytes = new byte[] { 0x89, 0x50, 0x4E, 0x47 };
+        var media = new MediaService(
+            _db,
+            new MemoryObjectStorage(bytes),
+            new AnalysisOutbox(_db),
+            TimeProvider.System);
+
+        var content = await media.OpenContentAsync(42, asset.Id, CancellationToken.None);
+        await using var stream = content.Stream;
+        await using var copy = new MemoryStream();
+        await stream.CopyToAsync(copy);
+
+        Assert.Equal(bytes, copy.ToArray());
+        Assert.True(content.Inline);
+    }
+
+    [Fact]
     public async Task ConfirmAsync_RejectsImageWhoseDeclaredMimeDoesNotMatchMagicBytes()
     {
         var bytes = new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 1, 2, 3 };
@@ -387,11 +410,19 @@ public sealed class EventServiceTimeZoneTests : IDisposable
         var now = DateTimeOffset.UtcNow;
         var asset = new MediaAsset
         {
-            Id = Guid.NewGuid(), UserId = 72, ObjectKey = "tests/proxy.png", OriginalFileName = "proxy.png",
-            Kind = MediaKind.Image, DeclaredMimeType = "image/png", ExpectedSize = bytes.Length,
+            Id = Guid.NewGuid(),
+            UserId = 72,
+            ObjectKey = "tests/proxy.png",
+            OriginalFileName = "proxy.png",
+            Kind = MediaKind.Image,
+            DeclaredMimeType = "image/png",
+            ExpectedSize = bytes.Length,
             ExpectedSha256 = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant(),
-            Status = MediaAssetStatus.PendingUpload, UploadMode = MediaUploadMode.Single,
-            UploadExpiresAt = now.AddHours(1), CreatedAt = now, UpdatedAt = now,
+            Status = MediaAssetStatus.PendingUpload,
+            UploadMode = MediaUploadMode.Single,
+            UploadExpiresAt = now.AddHours(1),
+            CreatedAt = now,
+            UpdatedAt = now,
         };
         _db.MediaAssets.Add(asset);
         await _db.SaveChangesAsync();
@@ -475,7 +506,7 @@ public sealed class EventServiceTimeZoneTests : IDisposable
         public Task AbortMultipartUploadAsync(string objectKey, string uploadId, CancellationToken cancellationToken) => throw Unused();
         public Task<StoredObjectInfo> GetInfoAsync(string objectKey, CancellationToken cancellationToken) => throw Unused();
         public Task<Stream> OpenReadAsync(string objectKey, CancellationToken cancellationToken) => throw Unused();
-        public Task PutAsync(string objectKey, Stream content, string contentType, CancellationToken cancellationToken) => throw Unused();
+        public Task PutAsync(string objectKey, Stream content, string contentType, long contentLength, CancellationToken cancellationToken) => throw Unused();
         public Task<Uri> CreateDownloadUrlAsync(string objectKey, string fileName, string contentType, bool inline, DateTimeOffset expiresAt, CancellationToken cancellationToken) => throw Unused();
         public Task DeleteAsync(string objectKey, CancellationToken cancellationToken) => throw Unused();
     }
@@ -497,7 +528,7 @@ public sealed class EventServiceTimeZoneTests : IDisposable
             Task.FromResult(new StoredObjectInfo(_content.Length, "image/png"));
         public Task<Stream> OpenReadAsync(string objectKey, CancellationToken cancellationToken) =>
             Task.FromResult<Stream>(new MemoryStream(_content, writable: false));
-        public async Task PutAsync(string objectKey, Stream stream, string contentType, CancellationToken cancellationToken)
+        public async Task PutAsync(string objectKey, Stream stream, string contentType, long contentLength, CancellationToken cancellationToken)
         {
             await using var output = new MemoryStream();
             await stream.CopyToAsync(output, cancellationToken);

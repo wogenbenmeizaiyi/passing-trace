@@ -185,17 +185,26 @@ public sealed class S3ObjectStorage : IObjectStorage, IDisposable
         return new ResponseOwnedStream(response);
     }
 
-    public async Task PutAsync(string objectKey, Stream content, string contentType, CancellationToken cancellationToken)
+    public async Task PutAsync(
+        string objectKey,
+        Stream content,
+        string contentType,
+        long contentLength,
+        CancellationToken cancellationToken)
     {
         await EnsureBucketAsync(cancellationToken);
-        await _internalClient.PutObjectAsync(new PutObjectRequest
+        var request = new PutObjectRequest
         {
             BucketName = _options.Bucket,
             Key = objectKey,
             InputStream = content,
             ContentType = contentType,
             AutoCloseStream = false,
-        }, cancellationToken);
+        };
+        // ASP.NET request bodies are non-seekable. AWSSDK otherwise tries to infer
+        // the length from Stream.Length and fails before contacting S3.
+        request.Headers.ContentLength = contentLength;
+        await _internalClient.PutObjectAsync(request, cancellationToken);
     }
 
     public async Task<Uri> CreateDownloadUrlAsync(string objectKey, string fileName, string contentType, bool inline, DateTimeOffset expiresAt, CancellationToken cancellationToken)

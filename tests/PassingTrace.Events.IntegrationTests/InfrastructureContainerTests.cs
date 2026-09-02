@@ -64,9 +64,10 @@ public sealed class InfrastructureContainerTests : IAsyncLifetime
         await storage.EnsureBucketAsync(CancellationToken.None);
         const string key = "users/1/media/private.txt";
         var expected = "private PassingTrace object"u8.ToArray();
-        await using (var upload = new MemoryStream(expected, writable: false))
+        await using (var source = new MemoryStream(expected, writable: false))
+        await using (var upload = new NonSeekableReadStream(source))
         {
-            await storage.PutAsync(key, upload, "text/plain", CancellationToken.None);
+            await storage.PutAsync(key, upload, "text/plain", expected.Length, CancellationToken.None);
         }
 
         var info = await storage.GetInfoAsync(key, CancellationToken.None);
@@ -76,5 +77,27 @@ public sealed class InfrastructureContainerTests : IAsyncLifetime
         await stored.CopyToAsync(copy);
         Assert.Equal(expected, copy.ToArray());
         await storage.DeleteAsync(key, CancellationToken.None);
+    }
+
+    private sealed class NonSeekableReadStream(Stream inner) : Stream
+    {
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position
+        {
+            get => throw new NotSupportedException();
+            set => throw new NotSupportedException();
+        }
+
+        public override void Flush() { }
+        public override int Read(byte[] buffer, int offset, int count) => inner.Read(buffer, offset, count);
+        public override int Read(Span<byte> buffer) => inner.Read(buffer);
+        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default) =>
+            inner.ReadAsync(buffer, cancellationToken);
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
     }
 }

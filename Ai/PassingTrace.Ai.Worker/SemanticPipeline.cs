@@ -97,9 +97,9 @@ public sealed class SemanticPipeline(
             var aiKey = $"{baseKey}/ai.jpg";
             var thumbnailKey = $"{baseKey}/thumbnail.jpg";
             await using var aiStream = new MemoryStream(derivatives.AiImage, writable: false);
-            await storage.PutAsync(aiKey, aiStream, "image/jpeg", cancellationToken);
+            await storage.PutAsync(aiKey, aiStream, "image/jpeg", aiStream.Length, cancellationToken);
             await using var thumbnailStream = new MemoryStream(derivatives.Thumbnail, writable: false);
-            await storage.PutAsync(thumbnailKey, thumbnailStream, "image/jpeg", cancellationToken);
+            await storage.PutAsync(thumbnailKey, thumbnailStream, "image/jpeg", thumbnailStream.Length, cancellationToken);
 
             asset.AiObjectKey = aiKey;
             asset.ThumbnailObjectKey = thumbnailKey;

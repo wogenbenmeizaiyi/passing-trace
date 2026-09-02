@@ -40,8 +40,13 @@ public sealed class StorylineService(TraceDbContext db, IAnalysisOutbox outbox, 
         var now = clock.GetUtcNow();
         var storyline = new Storyline
         {
-            Id = Guid.NewGuid(), UserId = userId, Status = StorylineStatus.Ongoing, CurrentRevision = 0,
-            CreationIdempotencyKey = NormalizeIdempotency(idempotencyKey), CreatedAt = now, UpdatedAt = now,
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            Status = StorylineStatus.Ongoing,
+            CurrentRevision = 0,
+            CreationIdempotencyKey = NormalizeIdempotency(idempotencyKey),
+            CreatedAt = now,
+            UpdatedAt = now,
         };
         db.Storylines.Add(storyline);
         return await SaveCoreAsync(storyline, request, NormalizeIdempotency(idempotencyKey), null, false, cancellationToken);
@@ -83,66 +88,66 @@ public sealed class StorylineService(TraceDbContext db, IAnalysisOutbox outbox, 
         {
             case "add-existing-event":
             case "add-plan":
-            {
-                var key = change.NodeKey is { } supplied && supplied != Guid.Empty ? supplied : Guid.NewGuid();
-                if (nodes.Any(x => x.Key == key)) throw new DomainValidationException("节点 Key 已存在。");
-                var newNode = operation == "add-plan"
-                    ? new StorylineNodeInput(key, "new-plan", null, null,
-                        change.NewPlan ?? throw new DomainValidationException("缺少轻量计划内容。"), change.StageKey,
-                        change.SemanticOrder ?? NextOrder(nodes, change.StageKey), change.Emphasis ?? StorylineNodeEmphasis.Normal)
-                    : new StorylineNodeInput(key, "existing-event",
-                        change.EventId ?? throw new DomainValidationException("缺少记录 ID。"), change.SourceRevision, null,
-                        change.StageKey, change.SemanticOrder ?? NextOrder(nodes, change.StageKey),
-                        change.Emphasis ?? StorylineNodeEmphasis.Normal);
-                nodes.Add(newNode);
-                if (change.ParentNodeKey is { } parent)
                 {
-                    if (nodes.All(x => x.Key != parent)) throw new DomainValidationException("前置节点不存在。");
-                    edges.Add(new StorylineEdgeInput(Guid.NewGuid(), parent, key,
-                        change.CreateBranch ? StorylineRelationType.Branch : StorylineRelationType.Sequence, null));
+                    var key = change.NodeKey is { } supplied && supplied != Guid.Empty ? supplied : Guid.NewGuid();
+                    if (nodes.Any(x => x.Key == key)) throw new DomainValidationException("节点 Key 已存在。");
+                    var newNode = operation == "add-plan"
+                        ? new StorylineNodeInput(key, "new-plan", null, null,
+                            change.NewPlan ?? throw new DomainValidationException("缺少轻量计划内容。"), change.StageKey,
+                            change.SemanticOrder ?? NextOrder(nodes, change.StageKey), change.Emphasis ?? StorylineNodeEmphasis.Normal)
+                        : new StorylineNodeInput(key, "existing-event",
+                            change.EventId ?? throw new DomainValidationException("缺少记录 ID。"), change.SourceRevision, null,
+                            change.StageKey, change.SemanticOrder ?? NextOrder(nodes, change.StageKey),
+                            change.Emphasis ?? StorylineNodeEmphasis.Normal);
+                    nodes.Add(newNode);
+                    if (change.ParentNodeKey is { } parent)
+                    {
+                        if (nodes.All(x => x.Key != parent)) throw new DomainValidationException("前置节点不存在。");
+                        edges.Add(new StorylineEdgeInput(Guid.NewGuid(), parent, key,
+                            change.CreateBranch ? StorylineRelationType.Branch : StorylineRelationType.Sequence, null));
+                    }
+                    break;
                 }
-                break;
-            }
             case "sync-node":
-            {
-                var index = FindNode(nodes, change.NodeKey);
-                nodes[index] = nodes[index] with { SourceRevision = null };
-                break;
-            }
-            case "move-node-to-stage":
-            {
-                var index = FindNode(nodes, change.NodeKey);
-                nodes[index] = nodes[index] with
                 {
-                    StageKey = change.StageKey,
-                    SemanticOrder = change.SemanticOrder ?? NextOrder(nodes.Where((_, i) => i != index), change.StageKey),
-                };
-                break;
-            }
+                    var index = FindNode(nodes, change.NodeKey);
+                    nodes[index] = nodes[index] with { SourceRevision = null };
+                    break;
+                }
+            case "move-node-to-stage":
+                {
+                    var index = FindNode(nodes, change.NodeKey);
+                    nodes[index] = nodes[index] with
+                    {
+                        StageKey = change.StageKey,
+                        SemanticOrder = change.SemanticOrder ?? NextOrder(nodes.Where((_, i) => i != index), change.StageKey),
+                    };
+                    break;
+                }
             case "remove-node":
-            {
-                var index = FindNode(nodes, change.NodeKey);
-                var key = nodes[index].Key;
-                if (edges.Any(x => x.SourceNodeKey == key))
-                    throw new DomainValidationException("手机端只能直接移除叶子节点；复杂关系请在网页整理。");
-                nodes.RemoveAt(index);
-                edges.RemoveAll(x => x.SourceNodeKey == key || x.TargetNodeKey == key);
-                break;
-            }
+                {
+                    var index = FindNode(nodes, change.NodeKey);
+                    var key = nodes[index].Key;
+                    if (edges.Any(x => x.SourceNodeKey == key))
+                        throw new DomainValidationException("手机端只能直接移除叶子节点；复杂关系请在网页整理。");
+                    nodes.RemoveAt(index);
+                    edges.RemoveAll(x => x.SourceNodeKey == key || x.TargetNodeKey == key);
+                    break;
+                }
             case "remove-node-and-reconnect":
-            {
-                var index = FindNode(nodes, change.NodeKey);
-                var key = nodes[index].Key;
-                var incoming = edges.Where(x => x.TargetNodeKey == key).ToArray();
-                var outgoing = edges.Where(x => x.SourceNodeKey == key).ToArray();
-                if (incoming.Length != 1 || outgoing.Length != 1)
-                    throw new DomainValidationException("只有单入边、单出边节点可以在手机端移除并连接前后。");
-                edges.RemoveAll(x => x.SourceNodeKey == key || x.TargetNodeKey == key);
-                edges.Add(new StorylineEdgeInput(Guid.NewGuid(), incoming[0].SourceNodeKey, outgoing[0].TargetNodeKey,
-                    StorylineRelationType.Sequence, null));
-                nodes.RemoveAt(index);
-                break;
-            }
+                {
+                    var index = FindNode(nodes, change.NodeKey);
+                    var key = nodes[index].Key;
+                    var incoming = edges.Where(x => x.TargetNodeKey == key).ToArray();
+                    var outgoing = edges.Where(x => x.SourceNodeKey == key).ToArray();
+                    if (incoming.Length != 1 || outgoing.Length != 1)
+                        throw new DomainValidationException("只有单入边、单出边节点可以在手机端移除并连接前后。");
+                    edges.RemoveAll(x => x.SourceNodeKey == key || x.TargetNodeKey == key);
+                    edges.Add(new StorylineEdgeInput(Guid.NewGuid(), incoming[0].SourceNodeKey, outgoing[0].TargetNodeKey,
+                        StorylineRelationType.Sequence, null));
+                    nodes.RemoveAt(index);
+                    break;
+                }
             case "update-metadata":
                 request = request with
                 {
@@ -252,85 +257,108 @@ public sealed class StorylineService(TraceDbContext db, IAnalysisOutbox outbox, 
             }
         }
 
-        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
-        var now = clock.GetUtcNow();
-        var createdPlans = new Dictionary<Guid, Event>();
-        var nodes = (request.Nodes ?? []).ToList();
-        var existingIds = nodes.Where(x => x.NodeType == "existing-event" && x.EventId.HasValue).Select(x => x.EventId!.Value).Distinct().ToArray();
-        var events = await db.Events
-            .Include(x => x.SourceRevisions).ThenInclude(x => x.MediaAssets).ThenInclude(x => x.MediaAsset)
-            .Include(x => x.LabelIndexes).Include(x => x.Locations)
-            .Where(x => x.UserId == storyline.UserId && existingIds.Contains(x.Id)).AsSplitQuery().ToListAsync(cancellationToken);
-        if (events.Count != existingIds.Length || events.Any(x => x.DeletedAt is not null))
-            throw new DomainValidationException("故事线包含不存在、已删除或不属于当前用户的记录。");
+        var strategy = db.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
+        {
+            await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+            var now = clock.GetUtcNow();
+            var createdPlans = new Dictionary<Guid, Event>();
+            var nodes = (request.Nodes ?? []).ToList();
+            var existingIds = nodes.Where(x => x.NodeType == "existing-event" && x.EventId.HasValue).Select(x => x.EventId!.Value).Distinct().ToArray();
+            var events = await db.Events
+                .Include(x => x.SourceRevisions).ThenInclude(x => x.MediaAssets).ThenInclude(x => x.MediaAsset)
+                .Include(x => x.LabelIndexes).Include(x => x.Locations)
+                .Where(x => x.UserId == storyline.UserId && existingIds.Contains(x.Id)).AsSplitQuery().ToListAsync(cancellationToken);
+            if (events.Count != existingIds.Length || events.Any(x => x.DeletedAt is not null))
+                throw new DomainValidationException("故事线包含不存在、已删除或不属于当前用户的记录。");
 
-        foreach (var input in nodes.Where(x => x.NodeType == "new-plan"))
-        {
-            var plan = CreateInlinePlan(storyline.UserId, storyline.Id, input, idempotencyKey, now);
-            db.Events.Add(plan);
-            createdPlans[input.Key] = plan;
-            events.Add(plan);
-        }
+            foreach (var input in nodes.Where(x => x.NodeType == "new-plan"))
+            {
+                var plan = CreateInlinePlan(storyline.UserId, storyline.Id, input, idempotencyKey, now);
+                db.Events.Add(plan);
+                createdPlans[input.Key] = plan;
+                events.Add(plan);
+            }
 
-        var resolved = ResolveNodes(nodes, events, createdPlans);
-        ValidateGraph(request.Stages ?? [], resolved, request.Edges ?? [], request.Status);
-        var range = DeriveRange(resolved);
-        var cover = ResolveCover(request.CoverMediaAssetId, resolved);
-        var tags = BuildTags(request.Tags ?? [], resolved);
-        var nextRevision = storyline.CurrentRevision + 1;
-        var revision = new StorylineRevision
-        {
-            Storyline = storyline, Revision = nextRevision, IdempotencyKey = idempotencyKey,
-            ContentHash = requestHash, Title = request.Title.Trim(), Description = NormalizeDescription(request.Description),
-            CategoryKey = request.CategoryKey.Trim().ToLowerInvariant(), Status = request.Status,
-            CoverMediaAssetId = cover, RangeStart = range.Start, RangeEnd = range.End,
-            LayoutState = StorylineLayoutState.Arranged, CreatedAt = now,
-        };
-        revision.Stages.AddRange((request.Stages ?? []).OrderBy(x => x.SemanticOrder).Select(x => new StorylineStage
-        { Key = x.Key, Title = x.Title.Trim(), SemanticOrder = x.SemanticOrder }));
-        revision.Nodes.AddRange(resolved.Select(x => new StorylineNode
-        {
-            Key = x.Input.Key, Event = x.Event, SourceRevision = x.Source.Revision, StageKey = x.Input.StageKey,
-            SemanticOrder = x.Input.SemanticOrder, Emphasis = x.Input.Emphasis,
-        }));
-        revision.Edges.AddRange((request.Edges ?? []).Select(x => new StorylineEdge
-        {
-            Key = x.Key == Guid.Empty ? Guid.NewGuid() : x.Key, SourceNodeKey = x.SourceNodeKey,
-            TargetNodeKey = x.TargetNodeKey, RelationType = x.RelationType, Label = Limit(x.Label, 120),
-        }));
-        revision.Tags.AddRange(tags);
+            var resolved = ResolveNodes(nodes, events, createdPlans);
+            ValidateGraph(request.Stages ?? [], resolved, request.Edges ?? [], request.Status);
+            var range = DeriveRange(resolved);
+            var cover = ResolveCover(request.CoverMediaAssetId, resolved);
+            var tags = BuildTags(request.Tags ?? [], resolved);
+            var nextRevision = storyline.CurrentRevision + 1;
+            var revision = new StorylineRevision
+            {
+                Storyline = storyline,
+                Revision = nextRevision,
+                IdempotencyKey = idempotencyKey,
+                ContentHash = requestHash,
+                Title = request.Title.Trim(),
+                Description = NormalizeDescription(request.Description),
+                CategoryKey = request.CategoryKey.Trim().ToLowerInvariant(),
+                Status = request.Status,
+                CoverMediaAssetId = cover,
+                RangeStart = range.Start,
+                RangeEnd = range.End,
+                LayoutState = StorylineLayoutState.Arranged,
+                CreatedAt = now,
+            };
+            revision.Stages.AddRange((request.Stages ?? []).OrderBy(x => x.SemanticOrder).Select(x => new StorylineStage
+            { Key = x.Key, Title = x.Title.Trim(), SemanticOrder = x.SemanticOrder }));
+            revision.Nodes.AddRange(resolved.Select(x => new StorylineNode
+            {
+                Key = x.Input.Key,
+                Event = x.Event,
+                SourceRevision = x.Source.Revision,
+                StageKey = x.Input.StageKey,
+                SemanticOrder = x.Input.SemanticOrder,
+                Emphasis = x.Input.Emphasis,
+            }));
+            revision.Edges.AddRange((request.Edges ?? []).Select(x => new StorylineEdge
+            {
+                Key = x.Key == Guid.Empty ? Guid.NewGuid() : x.Key,
+                SourceNodeKey = x.SourceNodeKey,
+                TargetNodeKey = x.TargetNodeKey,
+                RelationType = x.RelationType,
+                Label = Limit(x.Label, 120),
+            }));
+            revision.Tags.AddRange(tags);
 
-        var layoutInput = request.WebCanvasLayout;
-        if (layoutInput is null && preserveLayout && storyline.CurrentRevision > 0)
-            layoutInput = CopyLayout(storyline.Revisions.Single(x => x.Revision == storyline.CurrentRevision));
-        if (layoutInput is not null)
-        {
-            revision.WebLayout = BuildLayout(layoutInput, resolved.Select(x => x.Input.Key).ToHashSet(),
-                revision.Stages.Select(x => x.Key).ToHashSet());
-            if (resolved.Any(x => revision.WebLayout.Nodes.All(p => p.NodeKey != x.Input.Key)))
+            var layoutInput = request.WebCanvasLayout;
+            if (layoutInput is null && preserveLayout && storyline.CurrentRevision > 0)
+                layoutInput = CopyLayout(storyline.Revisions.Single(x => x.Revision == storyline.CurrentRevision));
+            if (layoutInput is not null)
+            {
+                revision.WebLayout = BuildLayout(layoutInput, resolved.Select(x => x.Input.Key).ToHashSet(),
+                    revision.Stages.Select(x => x.Key).ToHashSet());
+                if (resolved.Any(x => revision.WebLayout.Nodes.All(p => p.NodeKey != x.Input.Key)))
+                    revision.LayoutState = StorylineLayoutState.NeedsArrangement;
+            }
+            else if (resolved.Count > 0)
+            {
                 revision.LayoutState = StorylineLayoutState.NeedsArrangement;
-        }
-        else if (resolved.Count > 0)
-        {
-            revision.LayoutState = StorylineLayoutState.NeedsArrangement;
-        }
+            }
 
-        storyline.Title = revision.Title; storyline.Description = revision.Description; storyline.CategoryKey = revision.CategoryKey;
-        storyline.Status = revision.Status; storyline.CurrentRevision = nextRevision; storyline.CoverMediaAssetId = cover;
-        storyline.RangeStart = range.Start; storyline.RangeEnd = range.End; storyline.UpdatedAt = now;
-        storyline.Revisions.Add(revision);
-        foreach (var index in storyline.SearchIndexes.Where(x => x.IsCurrent)) index.IsCurrent = false;
-        storyline.SearchIndexes.Add(new StorylineSearchIndex
-        {
-            Storyline = storyline, UserId = storyline.UserId, Revision = nextRevision,
-            RetrievalText = BuildRetrieval(revision, resolved, tags), IsCurrent = true, UpdatedAt = now,
+            storyline.Title = revision.Title; storyline.Description = revision.Description; storyline.CategoryKey = revision.CategoryKey;
+            storyline.Status = revision.Status; storyline.CurrentRevision = nextRevision; storyline.CoverMediaAssetId = cover;
+            storyline.RangeStart = range.Start; storyline.RangeEnd = range.End; storyline.UpdatedAt = now;
+            storyline.Revisions.Add(revision);
+            foreach (var index in storyline.SearchIndexes.Where(x => x.IsCurrent)) index.IsCurrent = false;
+            storyline.SearchIndexes.Add(new StorylineSearchIndex
+            {
+                Storyline = storyline,
+                UserId = storyline.UserId,
+                Revision = nextRevision,
+                RetrievalText = BuildRetrieval(revision, resolved, tags),
+                IsCurrent = true,
+                UpdatedAt = now,
+            });
+            outbox.EnqueueStoryline(storyline.UserId, storyline.Id, nextRevision, now);
+            await outbox.IncrementWatermarkAsync(storyline.UserId, now, cancellationToken);
+            await SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return new StorylineSaveResponse(ToResponse(storyline, revision),
+                createdPlans.ToDictionary(x => x.Key, x => x.Value.Id), undoRevision);
         });
-        outbox.EnqueueStoryline(storyline.UserId, storyline.Id, nextRevision, now);
-        await outbox.IncrementWatermarkAsync(storyline.UserId, now, cancellationToken);
-        await SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-        return new StorylineSaveResponse(ToResponse(storyline, revision),
-            createdPlans.ToDictionary(x => x.Key, x => x.Value.Id), undoRevision);
     }
 
     private Event CreateInlinePlan(long userId, Guid storylineId, StorylineNodeInput input, string? operationKey, DateTimeOffset now)
@@ -347,9 +375,13 @@ public sealed class StorylineService(TraceDbContext db, IAnalysisOutbox outbox, 
         evt.SourceRevisions.Add(source);
         evt.SearchIndexes.Add(new EventSearchIndex
         {
-            UserId = userId, SourceRevision = 1, Title = title, RawContent = evt.RawContent ?? string.Empty,
+            UserId = userId,
+            SourceRevision = 1,
+            Title = title,
+            RawContent = evt.RawContent ?? string.Empty,
             RetrievalText = string.Join('\n', new[] { title, evt.RawContent }.Where(x => !string.IsNullOrWhiteSpace(x))),
-            IsCurrent = true, UpdatedAt = now,
+            IsCurrent = true,
+            UpdatedAt = now,
         });
         outbox.EnqueueEvent(evt, 1, now);
         return evt;
@@ -461,8 +493,13 @@ public sealed class StorylineService(TraceDbContext db, IAnalysisOutbox outbox, 
         {
             if (result.Count >= 10) break;
             if (seen.Add(tag.NormalizedValue)) result.Add(new StorylineRevisionTag
-            { Origin = StorylineTagOrigin.Derived, TaxonomyKey = tag.TaxonomyKey, DisplayName = tag.DisplayName,
-                NormalizedValue = tag.NormalizedValue, SortOrder = order++ });
+            {
+                Origin = StorylineTagOrigin.Derived,
+                TaxonomyKey = tag.TaxonomyKey,
+                DisplayName = tag.DisplayName,
+                NormalizedValue = tag.NormalizedValue,
+                SortOrder = order++
+            });
         }
         return result;
     }

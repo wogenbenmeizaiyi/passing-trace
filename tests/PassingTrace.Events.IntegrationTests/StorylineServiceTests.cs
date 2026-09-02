@@ -25,7 +25,11 @@ public sealed class StorylinePostgresFixture : IAsyncLifetime
     {
         await _postgres.StartAsync();
         Options = new DbContextOptionsBuilder<TraceDbContext>()
-            .UseNpgsql(_postgres.GetConnectionString(), npgsql => npgsql.UseVector())
+            .UseNpgsql(_postgres.GetConnectionString(), npgsql =>
+            {
+                npgsql.UseVector();
+                npgsql.EnableRetryOnFailure();
+            })
             .Options;
         await using var db = new TraceDbContext(Options);
         await db.Database.MigrateAsync();

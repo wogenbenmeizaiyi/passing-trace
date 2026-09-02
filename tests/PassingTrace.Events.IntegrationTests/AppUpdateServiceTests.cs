@@ -137,7 +137,7 @@ public sealed class AppUpdateServiceTests
         public Task CompleteMultipartUploadAsync(string objectKey, string uploadId, IReadOnlyList<CompletedPart> parts, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task AbortMultipartUploadAsync(string objectKey, string uploadId, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<StoredObjectInfo> GetInfoAsync(string objectKey, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task PutAsync(string objectKey, Stream content, string contentType, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task PutAsync(string objectKey, Stream content, string contentType, long contentLength, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task DeleteAsync(string objectKey, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 
@@ -154,7 +154,7 @@ public sealed class AppUpdateServiceTests
         public Task CompleteMultipartUploadAsync(string objectKey, string uploadId, IReadOnlyList<CompletedPart> parts, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task AbortMultipartUploadAsync(string objectKey, string uploadId, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<StoredObjectInfo> GetInfoAsync(string objectKey, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task PutAsync(string objectKey, Stream content, string contentType, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task PutAsync(string objectKey, Stream content, string contentType, long contentLength, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<Uri> CreateDownloadUrlAsync(string objectKey, string fileName, string contentType, bool inline, DateTimeOffset expiresAt, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task DeleteAsync(string objectKey, CancellationToken cancellationToken) => throw new NotSupportedException();
     }

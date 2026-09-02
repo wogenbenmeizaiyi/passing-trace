@@ -14,7 +14,7 @@ public interface IObjectStorage
     Task AbortMultipartUploadAsync(string objectKey, string uploadId, CancellationToken cancellationToken);
     Task<StoredObjectInfo> GetInfoAsync(string objectKey, CancellationToken cancellationToken);
     Task<Stream> OpenReadAsync(string objectKey, CancellationToken cancellationToken);
-    Task PutAsync(string objectKey, Stream content, string contentType, CancellationToken cancellationToken);
+    Task PutAsync(string objectKey, Stream content, string contentType, long contentLength, CancellationToken cancellationToken);
     Task<Uri> CreateDownloadUrlAsync(string objectKey, string fileName, string contentType, bool inline, DateTimeOffset expiresAt, CancellationToken cancellationToken);
     Task DeleteAsync(string objectKey, CancellationToken cancellationToken);
 }

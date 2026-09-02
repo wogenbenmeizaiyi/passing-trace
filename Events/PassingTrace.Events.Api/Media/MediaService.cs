@@ -159,7 +159,7 @@ public sealed class MediaService(
             throw new DomainValidationException("上传 Content-Type 与申请时不一致。");
         }
 
-        await storage.PutAsync(asset.ObjectKey, content, asset.DeclaredMimeType, cancellationToken);
+        await storage.PutAsync(asset.ObjectKey, content, asset.DeclaredMimeType, asset.ExpectedSize, cancellationToken);
     }
 
     public async Task<string> UploadPartContentAsync(
@@ -275,7 +275,8 @@ public sealed class MediaService(
                  (x.UserId == userId || x.EventLinks.Any(link =>
                      link.Event.UserId == userId && link.Event.DeletedAt == null)),
             cancellationToken) ?? throw new MediaAssetNotFoundException(mediaId);
-        if (asset.Status is not (MediaAssetStatus.Uploaded or MediaAssetStatus.Processing or MediaAssetStatus.Ready))
+        if (asset.Status is not (MediaAssetStatus.Uploaded or MediaAssetStatus.Processing or MediaAssetStatus.Ready) &&
+            !(asset.Status == MediaAssetStatus.Failed && asset.ConfirmedAt is not null))
         {
             throw new MediaAssetNotFoundException(mediaId);
         }
@@ -345,7 +346,8 @@ public sealed class MediaService(
 
         var byId = await dbContext.MediaAssets
             .Where(x => ids.Contains(x.Id) && x.UserId == userId && x.DeletedAt == null &&
-                (x.Status == MediaAssetStatus.Uploaded || x.Status == MediaAssetStatus.Processing || x.Status == MediaAssetStatus.Ready))
+                (x.Status == MediaAssetStatus.Uploaded || x.Status == MediaAssetStatus.Processing ||
+                 x.Status == MediaAssetStatus.Ready || (x.Status == MediaAssetStatus.Failed && x.ConfirmedAt != null)))
             .ToDictionaryAsync(x => x.Id, cancellationToken);
         if (byId.Count != ids.Length)
         {
@@ -389,7 +391,8 @@ public sealed class MediaService(
                  (x.UserId == userId || x.EventLinks.Any(link =>
                      link.Event.UserId == userId && link.Event.DeletedAt == null)),
             cancellationToken) ?? throw new MediaAssetNotFoundException(mediaId);
-        if (asset.Status is not (MediaAssetStatus.Uploaded or MediaAssetStatus.Processing or MediaAssetStatus.Ready))
+        if (asset.Status is not (MediaAssetStatus.Uploaded or MediaAssetStatus.Processing or MediaAssetStatus.Ready) &&
+            !(asset.Status == MediaAssetStatus.Failed && asset.ConfirmedAt is not null))
         {
             throw new MediaAssetNotFoundException(mediaId);
         }

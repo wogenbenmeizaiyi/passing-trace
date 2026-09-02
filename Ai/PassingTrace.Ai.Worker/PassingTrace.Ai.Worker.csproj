@@ -5,6 +5,7 @@
     <PackageReference Include="Microsoft.Extensions.AI.OpenAI" />
     <PackageReference Include="Pgvector.EntityFrameworkCore" />
     <PackageReference Include="SkiaSharp" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\Events\PassingTrace.Events.Api\PassingTrace.Events.Api.csproj" />
