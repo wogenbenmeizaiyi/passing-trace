@@ -86,6 +86,11 @@ android {
     buildTypes {
         release {
             signingConfig = signingConfigs.getByName("productionRelease")
+            // AMap's native renderer can crash after R8 removes classes/resources
+            // referenced only through JNI. Keep production stable until the SDK
+            // publishes a verified shrinker configuration for this version.
+            isMinifyEnabled = false
+            isShrinkResources = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",

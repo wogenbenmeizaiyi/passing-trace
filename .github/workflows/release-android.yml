@@ -5,17 +5,18 @@ on:
     branches:
       - codex/media-ai-memory
     paths:
+      - passingtrace-mobile/**
       - .github/workflows/release-android.yml
   workflow_dispatch:
     inputs:
       version_name:
         description: Android version name
         required: true
-        default: 1.0.6
+        default: 1.0.10
       version_code:
         description: Android version code (must always increase)
         required: true
-        default: "9"
+        default: "10"
       minimum_supported_version_code:
         description: Versions below this code must update
         required: true
@@ -23,7 +24,11 @@ on:
       notes:
         description: Chinese release notes
         required: true
-        default: 固定正式版签名证书，并隔离内测版安装包。
+        default: 修复高德地图正式版闪退，并完善自动发布链路。
+
+concurrency:
+  group: release-android-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -33,10 +38,10 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     env:
-      RELEASE_VERSION_NAME: ${{ inputs.version_name || '1.0.6' }}
-      RELEASE_VERSION_CODE: ${{ inputs.version_code || '9' }}
+      RELEASE_VERSION_NAME: ${{ inputs.version_name || format('1.0.{0}', github.run_number) }}
+      RELEASE_VERSION_CODE: ${{ inputs.version_code || github.run_number }}
       RELEASE_MINIMUM_SUPPORTED_VERSION_CODE: ${{ inputs.minimum_supported_version_code || '1' }}
-      RELEASE_NOTES: ${{ inputs.notes || '固定正式版签名证书，并隔离内测版安装包。' }}
+      RELEASE_NOTES: ${{ inputs.notes || github.event.head_commit.message || '自动发布移动端正式版本。' }}
       S3_ENDPOINT: ${{ vars.S3_ENDPOINT }}
       S3_BUCKET: ${{ vars.S3_BUCKET }}
       S3_REGION: ${{ vars.S3_REGION }}
