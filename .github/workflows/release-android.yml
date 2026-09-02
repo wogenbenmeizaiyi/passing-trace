@@ -73,6 +73,21 @@ jobs:
           printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$ANDROID_SIGNING_STORE_FILE"
           chmod 600 "$ANDROID_SIGNING_STORE_FILE"
 
+      - name: Verify release keystore certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual="$(keytool -exportcert \
+            -keystore "$ANDROID_SIGNING_STORE_FILE" \
+            -storepass "$ANDROID_SIGNING_STORE_PASSWORD" \
+            -alias "$ANDROID_SIGNING_KEY_ALIAS" \
+            | sha256sum \
+            | awk '{print toupper($1)}')"
+          if [ "$actual" != "$ANDROID_SIGNING_SHA256" ]; then
+            echo "::error::Unexpected release keystore certificate: $actual"
+            exit 1
+          fi
+
       - name: Configure Android and restore packages
         working-directory: passingtrace-mobile
         shell: bash
@@ -106,9 +121,12 @@ jobs:
         run: |
           set -euo pipefail
           apk='build/app/outputs/flutter-apk/app-production-release.apk'
-          actual="$($ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/apksigner verify --print-certs "$apk" \
-            | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' \
-            | tr '[:lower:]' '[:upper:]')"
+          signer_output="$($ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/apksigner \
+            verify --print-certs "$apk" 2>&1)"
+          printf '%s\n' "$signer_output"
+          actual="$(printf '%s\n' "$signer_output" \
+            | awk -F ': ' '/certificate SHA-256 digest/ {print toupper($2); exit}' \
+            | tr -d '\r')"
           if [ "$actual" != "$ANDROID_SIGNING_SHA256" ]; then
             echo "::error::Unexpected Android signing certificate: $actual"
             exit 1
