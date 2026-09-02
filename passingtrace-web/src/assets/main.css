@@ -49,6 +49,146 @@
   --sage: var(--success);
 }
 
+:root[data-palette='tide'][data-theme='light'] {
+  --canvas: #e8eef0;
+  --canvas-deep: #d9e4e7;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --surface-soft: #f2f6f7;
+  --surface-tint: #e0edf1;
+  --ink: #17252a;
+  --ink-secondary: #4c6067;
+  --ink-tertiary: #64777e;
+  --line: #d6e0e3;
+  --line-strong: #bbcbd0;
+  --primary: #2b6678;
+  --primary-strong: #215364;
+  --primary-soft: #d8eaf0;
+  --accent: #c76849;
+  --accent-soft: #f5e1d9;
+  --focus-color: rgba(43, 102, 120, 0.28);
+}
+:root[data-palette='plum'][data-theme='light'] {
+  --canvas: #eeeaf0;
+  --canvas-deep: #e2dae5;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --surface-soft: #f7f4f8;
+  --surface-tint: #eee5f1;
+  --ink: #291f2c;
+  --ink-secondary: #625568;
+  --ink-tertiary: #77697c;
+  --line: #e2d9e5;
+  --line-strong: #cfc2d3;
+  --primary: #725a7d;
+  --primary-strong: #5c4667;
+  --primary-soft: #e9ddec;
+  --accent: #b95863;
+  --accent-soft: #f4dfe2;
+  --focus-color: rgba(114, 90, 125, 0.28);
+}
+:root[data-palette='dune'][data-theme='light'] {
+  --canvas: #eeece5;
+  --canvas-deep: #e3dfd1;
+  --surface: #fffdf9;
+  --surface-raised: #fffdf9;
+  --surface-soft: #f7f4ec;
+  --surface-tint: #f2ebd6;
+  --ink: #28241a;
+  --ink-secondary: #665f4d;
+  --ink-tertiary: #746a54;
+  --line: #e3ddcd;
+  --line-strong: #cec5ae;
+  --primary: #77622a;
+  --primary-strong: #5f4e20;
+  --primary-soft: #ece4c7;
+  --accent: #b85f38;
+  --accent-soft: #f4e1d5;
+  --focus-color: rgba(119, 98, 42, 0.28);
+}
+:root[data-theme='dark'] {
+  --canvas: #101713;
+  --canvas-deep: #0b110e;
+  --surface: #18211c;
+  --surface-raised: #202b25;
+  --surface-soft: #1d2822;
+  --surface-tint: #243a31;
+  --ink: #f1f5f2;
+  --ink-secondary: #bcc8c0;
+  --ink-tertiary: #92a097;
+  --line: #334139;
+  --line-strong: #46564c;
+  --primary: #75b89f;
+  --primary-strong: #8dcbb4;
+  --primary-soft: #29483b;
+  --accent: #e29a79;
+  --accent-soft: #4c3027;
+  --on-primary: #101713;
+  --focus-color: rgba(117, 184, 159, 0.34);
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.18), 0 8px 22px rgba(0, 0, 0, 0.18);
+  --shadow-2: 0 18px 52px rgba(0, 0, 0, 0.42);
+}
+:root[data-palette='tide'][data-theme='dark'] {
+  --canvas: #0d171b;
+  --canvas-deep: #091115;
+  --surface: #142127;
+  --surface-raised: #1c2d34;
+  --surface-soft: #17262c;
+  --surface-tint: #203b45;
+  --ink: #edf4f6;
+  --ink-secondary: #b5c7cd;
+  --ink-tertiary: #8da3aa;
+  --line: #30444b;
+  --line-strong: #435b63;
+  --primary: #76b3c6;
+  --primary-strong: #92c7d7;
+  --primary-soft: #254553;
+  --accent: #e7a184;
+  --accent-soft: #4c3127;
+  --on-primary: #0d171b;
+  --focus-color: rgba(118, 179, 198, 0.34);
+}
+:root[data-palette='plum'][data-theme='dark'] {
+  --canvas: #18131a;
+  --canvas-deep: #100c12;
+  --surface: #211a24;
+  --surface-raised: #2c2330;
+  --surface-soft: #271f2a;
+  --surface-tint: #3b2d40;
+  --ink: #f5f0f6;
+  --ink-secondary: #cbbfce;
+  --ink-tertiary: #a596aa;
+  --line: #433749;
+  --line-strong: #5b4b62;
+  --primary: #c1a1cb;
+  --primary-strong: #d2b8da;
+  --primary-soft: #493751;
+  --accent: #e49aa1;
+  --accent-soft: #503036;
+  --on-primary: #18131a;
+  --focus-color: rgba(193, 161, 203, 0.34);
+}
+:root[data-palette='dune'][data-theme='dark'] {
+  --canvas: #181710;
+  --canvas-deep: #100f0a;
+  --surface: #222017;
+  --surface-raised: #2d2a1e;
+  --surface-soft: #28251b;
+  --surface-tint: #403a25;
+  --ink: #f5f2e9;
+  --ink-secondary: #cbc5b3;
+  --ink-tertiary: #a59d85;
+  --line: #443f30;
+  --line-strong: #5c5540;
+  --primary: #c9b56b;
+  --primary-strong: #dac983;
+  --primary-soft: #4a4228;
+  --accent: #e7a178;
+  --accent-soft: #503328;
+  --on-primary: #181710;
+  --focus-color: rgba(201, 181, 107, 0.34);
+}
+
 * {
   box-sizing: border-box;
 }
@@ -72,6 +212,19 @@ textarea,
 select {
   color: inherit;
   font: inherit;
+}
+input,
+textarea,
+select {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  color: var(--ink);
+  background: var(--surface-soft);
+}
+input::placeholder,
+textarea::placeholder {
+  color: var(--ink-tertiary);
+  opacity: 1;
 }
 button,
 a {

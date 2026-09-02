@@ -379,7 +379,7 @@
       width: 216px;
       min-height: 116px;
       display: block;
-      padding: 14px;
+      padding: 0;
       color: var(--ink);
       text-align: left;
       border: 1px solid var(--line-strong);
@@ -399,6 +399,40 @@
     .flow-node.type-start .node-icon { color: var(--on-primary); background: color-mix(in srgb, var(--on-primary) 15%, transparent); }
     .flow-node.type-summary { border-color: color-mix(in srgb, var(--accent) 68%, var(--line)); background: var(--accent-soft); }
     .flow-node.type-summary .node-icon { color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--surface)); }
+    .node-photo {
+      position: relative;
+      height: 82px;
+      display: block;
+      overflow: hidden;
+      border-radius: 11px 11px 0 0;
+      background: var(--surface-soft);
+      pointer-events: none;
+    }
+    .node-photo::after {
+      position: absolute;
+      inset: auto 0 0;
+      height: 32px;
+      content: "";
+      background: linear-gradient(to top, rgba(11, 22, 16, .34), transparent);
+    }
+    .node-photo img { width: 100%; height: 100%; display: block; object-fit: cover; }
+    .photo-count {
+      position: absolute;
+      z-index: 1;
+      right: 8px;
+      bottom: 7px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 6px;
+      color: #fff;
+      border-radius: 5px;
+      background: rgba(15, 27, 20, .68);
+      font-size: 10px;
+      font-weight: 700;
+    }
+    .photo-count .icon { width: 12px; height: 12px; }
+    .node-body { display: block; padding: 14px; }
     .node-top { display: flex; align-items: center; gap: 10px; }
     .node-icon { width: 32px; height: 32px; flex: 0 0 32px; }
     .node-icon .icon { width: 17px; height: 17px; }
@@ -465,6 +499,60 @@
     .detail-row dd { margin: 0; color: var(--ink); font-size: 13px; overflow-wrap: anywhere; }
     .detail-tags { display: flex; flex-wrap: wrap; gap: 6px; }
     .detail-tags span { padding: 3px 7px; color: var(--primary-strong); border: 1px solid color-mix(in srgb, var(--primary) 32%, var(--line)); border-radius: 6px; background: var(--primary-soft); font-size: 11px; }
+    .detail-photo-button {
+      position: relative;
+      width: 100%;
+      min-height: 152px;
+      display: block;
+      margin: 0 0 var(--space-5);
+      padding: 0;
+      overflow: hidden;
+      color: #fff;
+      text-align: left;
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius-md);
+      background: var(--surface-soft);
+      cursor: zoom-in;
+    }
+    .detail-photo-button[hidden] { display: none; }
+    .detail-photo-button img { width: 100%; height: 168px; display: block; object-fit: cover; }
+    .detail-photo-button::after {
+      position: absolute;
+      inset: auto 0 0;
+      height: 68px;
+      content: "";
+      background: linear-gradient(to top, rgba(8, 17, 12, .75), transparent);
+      pointer-events: none;
+    }
+    .detail-photo-copy {
+      position: absolute;
+      z-index: 1;
+      right: 12px;
+      bottom: 10px;
+      left: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      font-size: 12px;
+    }
+    .detail-photo-copy strong { font-weight: 700; }
+    .detail-photo-copy span { display: inline-flex; align-items: center; gap: 5px; }
+    .detail-photo-copy .icon { width: 15px; height: 15px; }
+    .detail-media-empty {
+      min-height: 88px;
+      display: grid;
+      place-items: center;
+      margin: 0 0 var(--space-5);
+      padding: var(--space-3);
+      color: var(--ink-tertiary);
+      border: 1px dashed var(--line-strong);
+      border-radius: var(--radius-sm);
+      background: var(--surface-soft);
+      font-size: 12px;
+      text-align: center;
+    }
+    .detail-media-empty[hidden] { display: none; }
     .relation-card { margin-top: var(--space-4); padding: var(--space-3); border-left: 3px solid var(--accent); background: var(--accent-soft); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
     .relation-card strong { display: block; font-size: 12px; }
     .relation-card p { margin: 5px 0 0; color: var(--ink-secondary); font-size: 12px; }
@@ -499,6 +587,42 @@
       pointer-events: none;
     }
     .toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+    .lightbox {
+      position: fixed;
+      z-index: 200;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: 32px;
+      background: rgba(5, 10, 7, .82);
+      backdrop-filter: blur(8px);
+    }
+    .lightbox[hidden] { display: none; }
+    .lightbox-figure {
+      width: min(920px, 100%);
+      max-height: calc(100dvh - 64px);
+      margin: 0;
+      display: grid;
+      grid-template-rows: minmax(0, 1fr) auto;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, .24);
+      border-radius: var(--radius-lg);
+      background: #101713;
+      box-shadow: 0 28px 86px rgba(0, 0, 0, .52);
+    }
+    .lightbox-figure img { width: 100%; max-height: calc(100dvh - 132px); display: block; object-fit: contain; background: #0b100d; }
+    .lightbox-figure figcaption { padding: 14px 18px; color: #eef4f0; background: #18211c; font-size: 13px; }
+    .lightbox-close {
+      position: fixed;
+      z-index: 1;
+      top: 20px;
+      right: 20px;
+      color: #fff;
+      border-color: rgba(255, 255, 255, .28);
+      background: rgba(20, 33, 26, .8);
+    }
+    .lightbox-close:hover { color: #fff; border-color: #fff; background: rgba(34, 52, 42, .92); }
 
     @media (max-width: 1100px) {
       .workspace { grid-template-columns: 220px minmax(420px, 1fr) 300px; }
@@ -548,6 +672,8 @@
       .canvas-toolbar .zoom-label, .canvas-toolbar .toolbar-divider:nth-of-type(2) { display: none; }
       .minimap { width: 124px; height: 78px; }
       .canvas-hint { display: none; }
+      .lightbox { padding: 12px; }
+      .lightbox-close { top: 12px; right: 12px; }
     }
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; }
@@ -581,6 +707,9 @@
     <symbol id="i-panel" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/></symbol>
     <symbol id="i-link" viewBox="0 0 24 24"><path d="m9.5 14.5 5-5M7 17l-1 1a3.5 3.5 0 0 1-5-5l4-4a3.5 3.5 0 0 1 5 0M17 7l1-1a3.5 3.5 0 0 1 5 5l-4 4a3.5 3.5 0 0 1-5 0"/></symbol>
     <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M7 7l1 14h8l1-14M10 11v6M14 11v6"/></symbol>
+    <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m4 17 5-5 4 4 2-2 5 5"/></symbol>
+    <symbol id="i-maximize" viewBox="0 0 24 24"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
   </svg>
 
   <div class="app-shell">
@@ -619,12 +748,12 @@
             <input id="recordSearch" type="search" placeholder="搜索标题、地点或标签" />
           </label>
           <div class="record-bank" id="recordBank">
-            <button class="bank-card" data-title="灵隐寺的清晨" data-date="8 月 4 日 · 08:20" data-place="灵隐寺" data-tags="旅行,拍照">
+            <button class="bank-card" data-title="灵隐寺的清晨" data-date="8 月 4 日 · 08:20" data-place="灵隐寺" data-tags="旅行,拍照" data-media="temple" data-media-count="2" data-media-alt="清晨薄雾里的寺院屋檐">
               <span class="bank-icon"><svg class="icon"><use href="#i-file"/></svg></span>
               <span class="bank-copy"><strong>灵隐寺的清晨</strong><span>8 月 4 日 · 2 张图片</span></span>
               <svg class="icon"><use href="#i-plus"/></svg>
             </button>
-            <button class="bank-card" data-title="回程高铁随记" data-date="8 月 4 日 · 17:45" data-place="杭州东站" data-tags="交通,随记">
+            <button class="bank-card" data-title="回程高铁随记" data-date="8 月 4 日 · 17:45" data-place="杭州东站" data-tags="交通,随记" data-media="station" data-media-count="1" data-media-alt="傍晚的杭州东站站台">
               <span class="bank-icon"><svg class="icon"><use href="#i-file"/></svg></span>
               <span class="bank-copy"><strong>回程高铁随记</strong><span>8 月 4 日 · 杭州东站</span></span>
               <svg class="icon"><use href="#i-plus"/></svg>
@@ -690,6 +819,11 @@
         </div>
 
         <section class="panel-section">
+          <button class="detail-photo-button" id="detailPhotoButton" type="button" aria-label="查看参观城市博物馆的原图">
+            <img id="detailPhoto" width="288" height="168" alt="浙江省博物馆建筑外观" />
+            <span class="detail-photo-copy"><strong id="detailPhotoCount">来自原记录 · 2 张</strong><span><svg class="icon"><use href="#i-maximize"/></svg>查看原图</span></span>
+          </button>
+          <div class="detail-media-empty" id="detailMediaEmpty" hidden>这条记录没有图片，仍可通过文字、地点和附件参与故事线。</div>
           <dl class="detail-list">
             <div class="detail-row"><dt>发生时间</dt><dd id="detailDate">8 月 3 日 · 14:20</dd></div>
             <div class="detail-row"><dt>地点</dt><dd id="detailPlace">浙江省博物馆</dd></div>
@@ -719,17 +853,36 @@
   </div>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-labelledby="lightboxCaption" hidden>
+    <button class="icon-button lightbox-close" id="closeLightbox" type="button" aria-label="关闭图片预览"><svg class="icon"><use href="#i-x"/></svg></button>
+    <figure class="lightbox-figure">
+      <img id="lightboxImage" alt="" />
+      <figcaption id="lightboxCaption">记录图片</figcaption>
+    </figure>
+  </div>
 
   <script>
     const icon = (name) => `<svg class="icon" aria-hidden="true"><use href="#i-${name}"/></svg>`;
 
+    function sampleImage(kind) {
+      const scenes = {
+        station: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 450"><defs><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#b8d8dd"/><stop offset="1" stop-color="#eef0df"/></linearGradient><linearGradient id="glass" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#5b8182"/><stop offset="1" stop-color="#243f3d"/></linearGradient></defs><rect width="800" height="450" fill="url(#sky)"/><circle cx="655" cy="95" r="44" fill="#e7aa71" opacity=".9"/><path d="M0 326h800v124H0z" fill="#596961"/><path d="M84 151h631l51 174H35z" fill="#e8e5d7"/><path d="M118 181h565l29 116H88z" fill="url(#glass)"/><path d="M182 181v116M278 181v116M374 181v116M470 181v116M566 181v116" stroke="#d3e3dc" stroke-width="8" opacity=".62"/><path d="M0 337h800M0 372h800" stroke="#d3d0bd" stroke-width="5"/><path d="M108 326h585" stroke="#bd6f4f" stroke-width="9"/><rect x="341" y="212" width="118" height="42" rx="7" fill="#f2f0e5"/><path d="M370 233h60" stroke="#2e6555" stroke-width="8" stroke-linecap="round"/></svg>`,
+        lake: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 450"><defs><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#e6af84"/><stop offset=".55" stop-color="#eedbc0"/><stop offset="1" stop-color="#8eaaa0"/></linearGradient><linearGradient id="water" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#718f88"/><stop offset="1" stop-color="#264b43"/></linearGradient></defs><rect width="800" height="450" fill="url(#sky)"/><circle cx="615" cy="126" r="54" fill="#f8d095"/><path d="M0 247c95-25 160-7 236-28 85-24 151-67 247-45 94 21 194-5 317-40v162H0z" fill="#476c5f" opacity=".7"/><path d="M0 270h800v180H0z" fill="url(#water)"/><path d="M90 316c124 23 235-20 355 3 117 22 192-10 286 1M45 365c134 26 267-19 397 4 117 21 217-9 318 5" stroke="#c7d6ca" stroke-width="5" opacity=".32"/><path d="M109 253c18-91 44-141 76-179-9 65-3 123 27 177M164 218c-34-45-58-71-98-87M184 183c27-40 51-62 83-82" fill="none" stroke="#24483c" stroke-width="15" stroke-linecap="round"/><path d="M335 260h184l-23-39H359z" fill="#273d37"/><path d="M386 221v-50h62v50M371 171h92l-46-31z" fill="#bd6d4e"/><path d="M550 287c30-8 64-7 105 0l-27 12h-58z" fill="#eeddbf"/></svg>`,
+        museum: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 450"><defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#c9ddd6"/><stop offset="1" stop-color="#f0e8d8"/></linearGradient></defs><rect width="800" height="450" fill="url(#bg)"/><circle cx="667" cy="91" r="42" fill="#e9a173" opacity=".85"/><path d="M0 356h800v94H0z" fill="#7a8a7f"/><path d="M105 336h590v32H105z" fill="#d2c8b5"/><path d="M154 167h492v169H154z" fill="#f5f0e4"/><path d="m127 167 273-93 273 93z" fill="#335f51"/><path d="M205 192h54v144h-54zM302 192h54v144h-54zM444 192h54v144h-54zM541 192h54v144h-54z" fill="#bd7656"/><path d="M219 207h26v112h-26zM316 207h26v112h-26zM458 207h26v112h-26zM555 207h26v112h-26z" fill="#dce7df"/><rect x="374" y="220" width="52" height="116" fill="#294d43"/><path d="M104 375h592" stroke="#eadcc4" stroke-width="8"/><path d="M66 355c23-66 40-108 74-151-8 61-3 105 18 151M686 355c15-58 39-98 69-130-8 53-4 92 13 130" fill="none" stroke="#315c4e" stroke-width="18" stroke-linecap="round"/></svg>`,
+        hotpot: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 450"><defs><linearGradient id="table" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#d29872"/><stop offset="1" stop-color="#8e543d"/></linearGradient><radialGradient id="soup"><stop stop-color="#f2b45f"/><stop offset="1" stop-color="#b84631"/></radialGradient></defs><rect width="800" height="450" fill="#263d35"/><rect y="245" width="800" height="205" fill="url(#table)"/><ellipse cx="400" cy="306" rx="245" ry="112" fill="#312d29" opacity=".3"/><ellipse cx="400" cy="276" rx="216" ry="105" fill="#d9d2bd"/><ellipse cx="400" cy="270" rx="190" ry="85" fill="url(#soup)"/><path d="M401 187v166" stroke="#e8dfcc" stroke-width="10"/><circle cx="324" cy="242" r="22" fill="#e8d2a4"/><circle cx="473" cy="282" r="26" fill="#d6b28b"/><path d="m270 282 34-46 40 42M506 229c32-22 60-17 78 13M339 307c35-22 72-18 104 9" fill="none" stroke="#477e55" stroke-width="18" stroke-linecap="round"/><circle cx="549" cy="308" r="17" fill="#eee2c8"/><circle cx="252" cy="252" r="14" fill="#f0d9c0"/><path d="M152 120c19 24 7 48 24 71M226 96c20 27 6 51 24 78M607 102c17 25 7 50 21 72" fill="none" stroke="#e7dfce" stroke-width="10" stroke-linecap="round" opacity=".62"/><circle cx="114" cy="321" r="53" fill="#f0e7d5"/><circle cx="681" cy="327" r="49" fill="#efe4ce"/><path d="M77 321h74M646 327h70" stroke="#bd7656" stroke-width="8"/></svg>`,
+        temple: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 450"><defs><linearGradient id="mist" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#b9d1c8"/><stop offset="1" stop-color="#eff0df"/></linearGradient></defs><rect width="800" height="450" fill="url(#mist)"/><path d="M0 240c103-89 190-102 283-21 91-121 221-139 340-34 58-56 112-72 177-44v309H0z" fill="#557568" opacity=".74"/><path d="M122 332h556v73H122z" fill="#c77b55"/><path d="m73 326 327-133 327 133z" fill="#24483e"/><path d="m148 264 252-128 252 128z" fill="#2f5b4c"/><path d="M209 321h382v84H209z" fill="#dfd2bb"/><path d="M250 321v84M550 321v84" stroke="#a4513c" stroke-width="22"/><rect x="360" y="319" width="80" height="86" fill="#3e493f"/><path d="M69 410h662" stroke="#d8d7c8" stroke-width="9"/><path d="M85 420c16-102 40-187 78-260M706 420c-15-102-43-178-78-245" stroke="#294d42" stroke-width="20" stroke-linecap="round"/></svg>`,
+      };
+      const svg = scenes[kind] || scenes.lake;
+      return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+    }
+
     const graph = {
       nodes: [
         { id: 'start', x: 72, y: 278, type: 'start', kind: '事件起点', title: '临时决定去杭州', date: '8 月 2 日 · 21:30', place: '家中', tags: ['写下计划', '旅行'], relation: '这条记录是整个周末事件的起点。' },
-        { id: 'arrive', x: 326, y: 194, type: 'record', kind: '记录', title: '清晨抵达杭州东站', date: '8 月 3 日 · 08:16', place: '杭州东站', tags: ['交通', '旅行'], relation: '兑现前一晚的临时计划，正式开始这次周末出行。' },
-        { id: 'walk', x: 498, y: 390, type: 'record', kind: '记录', title: '傍晚在西湖边散步', date: '8 月 3 日 · 17:40', place: '西湖断桥附近', tags: ['美景', '步行'], relation: '到达杭州后先放下行李，再沿湖慢慢走了一段。' },
-        { id: 'museum', x: 620, y: 158, type: 'record', kind: '记录', title: '参观城市博物馆', date: '8 月 3 日 · 14:20', place: '浙江省博物馆', tags: ['旅行', '博物馆', '拍照'], relation: '沿西湖散步后，临时决定进馆看看。' },
-        { id: 'dinner', x: 912, y: 318, type: 'record', kind: '记录', title: '和朋友吃了顿火锅', date: '8 月 3 日 · 19:10', place: '湖滨银泰附近', tags: ['美食', '朋友'], relation: '结束白天的游览后，与住在杭州的朋友会合。' },
+        { id: 'arrive', x: 326, y: 162, type: 'record', kind: '记录', title: '清晨抵达杭州东站', date: '8 月 3 日 · 08:16', place: '杭州东站', tags: ['交通', '旅行'], media: sampleImage('station'), mediaCount: 1, mediaAlt: '晨光里的杭州东站站房', relation: '兑现前一晚的临时计划，正式开始这次周末出行。' },
+        { id: 'walk', x: 498, y: 382, type: 'record', kind: '记录', title: '傍晚在西湖边散步', date: '8 月 3 日 · 17:40', place: '西湖断桥附近', tags: ['美景', '步行'], media: sampleImage('lake'), mediaCount: 3, mediaAlt: '夕阳下的西湖湖面与亭子', relation: '到达杭州后先放下行李，再沿湖慢慢走了一段。' },
+        { id: 'museum', x: 620, y: 120, type: 'record', kind: '记录', title: '参观城市博物馆', date: '8 月 3 日 · 14:20', place: '浙江省博物馆', tags: ['旅行', '博物馆', '拍照'], media: sampleImage('museum'), mediaCount: 2, mediaAlt: '浙江省博物馆建筑外观', relation: '沿西湖散步后，临时决定进馆看看。' },
+        { id: 'dinner', x: 912, y: 312, type: 'record', kind: '记录', title: '和朋友吃了顿火锅', date: '8 月 3 日 · 19:10', place: '湖滨银泰附近', tags: ['美食', '朋友'], media: sampleImage('hotpot'), mediaCount: 1, mediaAlt: '朋友聚餐时桌上的鸳鸯火锅', relation: '结束白天的游览后，与住在杭州的朋友会合。' },
         { id: 'summary', x: 1024, y: 116, type: 'summary', kind: '回顾', title: '这个周末比计划更松弛', date: '8 月 4 日 · 21:20', place: '回程后', tags: ['周末回顾', 'AI 可辅助'], relation: '把前面的记录收束成一次完整经历，但不覆盖任何原记录。' },
       ],
       edges: [
@@ -768,12 +921,15 @@
         button.innerHTML = `
           <span class="node-handle input"></span>
           <span class="node-handle output"></span>
-          <span class="node-top">
-            <span class="node-icon">${icon(nodeIcon(node.type))}</span>
-            <span class="node-heading"><span class="node-kind">${node.kind}</span><span class="node-title">${node.title}</span></span>
-          </span>
-          <span class="node-meta">${icon(node.place === '回程后' ? 'calendar' : 'pin')}<span>${node.place}</span></span>
-          <span class="node-tags">${node.tags.slice(0, 2).map((tag) => `<span class="node-tag">${tag}</span>`).join('')}</span>`;
+          ${node.media ? `<span class="node-photo"><img src="${node.media}" width="216" height="82" alt="" draggable="false" /><span class="photo-count">${icon('image')}${node.mediaCount} 张</span></span>` : ''}
+          <span class="node-body">
+            <span class="node-top">
+              <span class="node-icon">${icon(nodeIcon(node.type))}</span>
+              <span class="node-heading"><span class="node-kind">${node.kind}</span><span class="node-title">${node.title}</span></span>
+            </span>
+            <span class="node-meta">${icon(node.place === '回程后' ? 'calendar' : 'pin')}<span>${node.place}</span></span>
+            <span class="node-tags">${node.tags.slice(0, 2).map((tag) => `<span class="node-tag">${tag}</span>`).join('')}</span>
+          </span>`;
         bindNodeInteractions(button, node);
         nodeLayer.appendChild(button);
       });
@@ -864,6 +1020,22 @@
       document.getElementById('detailTags').innerHTML = node.tags.map((tag) => `<span>${tag}</span>`).join('');
       document.getElementById('detailRelation').textContent = node.relation;
       document.getElementById('detailIconUse').setAttribute('href', `#i-${nodeIcon(node.type)}`);
+      const photoButton = document.getElementById('detailPhotoButton');
+      const mediaEmpty = document.getElementById('detailMediaEmpty');
+      const photo = document.getElementById('detailPhoto');
+      if (node.media) {
+        photoButton.hidden = false;
+        mediaEmpty.hidden = true;
+        photo.src = node.media;
+        photo.alt = node.mediaAlt;
+        photoButton.setAttribute('aria-label', `查看“${node.title}”的原图`);
+        document.getElementById('detailPhotoCount').textContent = `来自原记录 · ${node.mediaCount} 张`;
+      } else {
+        photoButton.hidden = true;
+        mediaEmpty.hidden = false;
+        photo.removeAttribute('src');
+        photo.alt = '';
+      }
     }
 
     function applyViewport() {
@@ -886,8 +1058,8 @@
       const padding = 60;
       const minX = Math.min(...graph.nodes.map((n) => n.x));
       const minY = Math.min(...graph.nodes.map((n) => n.y));
-      const maxX = Math.max(...graph.nodes.map((n) => n.x + 216));
-      const maxY = Math.max(...graph.nodes.map((n) => n.y + 120));
+      const maxX = Math.max(...graph.nodes.map((n) => n.x + (nodeLayer.querySelector(`[data-node-id="${n.id}"]`)?.offsetWidth || 216)));
+      const maxY = Math.max(...graph.nodes.map((n) => n.y + (nodeLayer.querySelector(`[data-node-id="${n.id}"]`)?.offsetHeight || (n.media ? 202 : 120))));
       const graphWidth = maxX - minX;
       const graphHeight = maxY - minY;
       state.scale = Math.max(.5, Math.min(1.1, Math.min((viewport.clientWidth - padding * 2) / graphWidth, (viewport.clientHeight - padding * 2) / graphHeight)));
@@ -942,6 +1114,9 @@
         date: payload.date || '等待补充时间',
         place: payload.place || '尚未设置地点',
         tags: payload.tags ? payload.tags.split(',') : ['未整理'],
+        media: payload.media ? sampleImage(payload.media) : null,
+        mediaCount: Number(payload.mediaCount) || 0,
+        mediaAlt: payload.mediaAlt || '',
         relation: '这是刚刚加入的节点，可以在右侧补充它与上一条记录的关系。',
       };
       graph.nodes.push(node);
@@ -1008,6 +1183,26 @@
     document.getElementById('openRecord').addEventListener('click', () => showToast('正式版本会在这里打开对应的原记录'));
     document.getElementById('previewStory').addEventListener('click', () => showToast('预览会按主路径依次播放 6 条记录'));
     document.getElementById('saveStory').addEventListener('click', () => showToast('样板已保存：正式版本会生成一个新的事件修订'));
+    const lightbox = document.getElementById('lightbox');
+    function openLightbox() {
+      const node = graph.nodes.find((item) => item.id === state.selectedId);
+      if (!node?.media) return;
+      const image = document.getElementById('lightboxImage');
+      image.src = node.media;
+      image.alt = node.mediaAlt;
+      document.getElementById('lightboxCaption').textContent = `${node.title} · 来自原记录的图片证据`;
+      lightbox.hidden = false;
+      document.getElementById('closeLightbox').focus();
+    }
+    function closeLightbox() {
+      if (lightbox.hidden) return;
+      lightbox.hidden = true;
+      document.getElementById('detailPhotoButton').focus();
+    }
+    document.getElementById('detailPhotoButton').addEventListener('click', openLightbox);
+    document.getElementById('closeLightbox').addEventListener('click', closeLightbox);
+    lightbox.addEventListener('click', (event) => { if (event.target === lightbox) closeLightbox(); });
+    document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !lightbox.hidden) closeLightbox(); });
     document.getElementById('themeToggle').addEventListener('click', () => {
       const dark = document.documentElement.dataset.theme === 'dark';
       document.documentElement.dataset.theme = dark ? 'light' : 'dark';
@@ -1019,11 +1214,20 @@
         card.hidden = query && !card.textContent.toLowerCase().includes(query) && !card.dataset.place.toLowerCase().includes(query) && !card.dataset.tags.toLowerCase().includes(query);
       });
     });
-    document.querySelectorAll('.bank-card').forEach((card) => card.addEventListener('click', () => {
-      addNode(card.dataset);
-      card.remove();
-      document.getElementById('bankCount').textContent = `${document.querySelectorAll('.bank-card').length} 条`;
-    }));
+    document.querySelectorAll('.bank-card').forEach((card) => {
+      if (card.dataset.media) {
+        const holder = card.querySelector('.bank-icon');
+        holder.style.backgroundImage = `url("${sampleImage(card.dataset.media)}")`;
+        holder.style.backgroundSize = 'cover';
+        holder.style.backgroundPosition = 'center';
+        holder.innerHTML = '';
+      }
+      card.addEventListener('click', () => {
+        addNode(card.dataset);
+        card.remove();
+        document.getElementById('bankCount').textContent = `${document.querySelectorAll('.bank-card').length} 条`;
+      });
+    });
 
     const libraryPanel = document.getElementById('libraryPanel');
     const inspectorPanel = document.getElementById('inspectorPanel');

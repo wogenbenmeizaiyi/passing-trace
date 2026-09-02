@@ -2,6 +2,7 @@
 import { RouterLink } from 'vue-router'
 
 import BrandMark from '@/components/BrandMark.vue'
+import AppearanceMenu from '@/components/AppearanceMenu.vue'
 import { useAuthStore } from '@/stores/auth'
 
 const props = withDefaults(
@@ -48,6 +49,7 @@ function download(event: MouseEvent) {
       </nav>
 
       <div class="site-header__actions">
+        <AppearanceMenu />
         <template v-if="auth.isAuthenticated">
           <span class="signed-user" :title="auth.username"
             ><i aria-hidden="true"></i><span>{{ auth.username || '已登录' }}</span></span

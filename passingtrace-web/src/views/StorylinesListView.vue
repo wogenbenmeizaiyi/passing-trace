@@ -57,6 +57,13 @@ async function load() {
     loading.value = false
   }
 }
+function clearFilters() {
+  status.value = ''
+  category.value = ''
+  from.value = ''
+  to.value = ''
+  void load()
+}
 onMounted(() => {
   if (auth.isAuthenticated) void load()
 })
@@ -81,30 +88,56 @@ watch(
         <RouterLink class="button button-primary" to="/storylines/new">新建故事线</RouterLink>
       </header>
       <section class="story-filter" aria-label="故事线筛选">
-        <label
-          ><span>进度</span
-          ><select v-model="status" @change="load">
-            <option value="">全部</option>
-            <option :value="StorylineStatus.Ongoing">进行中</option>
-            <option :value="StorylineStatus.Completed">已完成</option>
-          </select></label
-        >
-        <label><span>从</span><input v-model="from" type="date" @change="load" /></label>
-        <label><span>到</span><input v-model="to" type="date" @change="load" /></label>
-        <label
-          ><span>分类</span
-          ><select v-model="category" @change="load">
-            <option value="">全部</option>
-            <option value="trip">行程旅行</option>
-            <option value="activity">活动纪实</option>
-            <option value="project">项目过程</option>
-            <option value="challenge">目标挑战</option>
-            <option value="lifecycle">成长陪伴</option>
-            <option value="series">主题系列</option>
-            <option value="life-period">生活阶段</option>
-            <option value="other">其他</option>
-          </select></label
-        >
+        <div class="story-filter__heading">
+          <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 6h16M7 12h10M10 18h4" />
+          </svg>
+          <div><strong>筛选故事线</strong><small>可按状态、日期范围和分类组合筛选</small></div>
+        </div>
+        <div class="story-filter__controls">
+          <label class="filter-field"
+            ><span>进度</span
+            ><select v-model="status" @change="load">
+              <option value="">全部</option>
+              <option :value="StorylineStatus.Ongoing">进行中</option>
+              <option :value="StorylineStatus.Completed">已完成</option>
+            </select></label
+          >
+          <fieldset class="date-range">
+            <legend>日期范围</legend>
+            <label
+              ><span class="sr-only">开始日期</span
+              ><input v-model="from" type="date" aria-label="开始日期" @change="load"
+            /></label>
+            <span aria-hidden="true">至</span>
+            <label
+              ><span class="sr-only">结束日期</span
+              ><input v-model="to" type="date" aria-label="结束日期" @change="load"
+            /></label>
+          </fieldset>
+          <label class="filter-field"
+            ><span>分类</span
+            ><select v-model="category" @change="load">
+              <option value="">全部</option>
+              <option value="trip">行程旅行</option>
+              <option value="activity">活动纪实</option>
+              <option value="project">项目过程</option>
+              <option value="challenge">目标挑战</option>
+              <option value="lifecycle">成长陪伴</option>
+              <option value="series">主题系列</option>
+              <option value="life-period">生活阶段</option>
+              <option value="other">其他</option>
+            </select></label
+          >
+          <button
+            v-if="status !== '' || category || from || to"
+            class="clear-filter"
+            type="button"
+            @click="clearFilters"
+          >
+            清除筛选
+          </button>
+        </div>
       </section>
       <p v-if="error" class="error-banner">{{ error }}</p>
       <div v-if="loading" class="story-empty">
@@ -201,37 +234,119 @@ watch(
   margin-bottom: 28px;
 }
 .story-list-heading h1 {
-  max-width: 680px;
+  max-width: 48rem;
   margin: 0;
   font-size: clamp(34px, 5vw, 58px);
   line-height: 1.05;
   letter-spacing: -0.055em;
+  text-wrap: balance;
 }
 .story-list-heading p:last-child {
   color: var(--ink-secondary);
 }
 .story-filter {
-  padding: 14px 16px;
-  display: flex;
-  gap: 18px;
+  padding: 18px 20px;
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
   background: var(--surface);
 }
-.story-filter label {
+.story-filter__heading {
+  margin-bottom: 16px;
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 10px;
+}
+.story-filter__heading .ui-icon {
+  width: 20px;
+  height: 20px;
+  color: var(--primary);
+}
+.story-filter__heading strong,
+.story-filter__heading small {
+  display: block;
+}
+.story-filter__heading strong {
+  font-size: 14px;
+}
+.story-filter__heading small {
+  margin-top: 2px;
   color: var(--ink-tertiary);
-  font-size: 12px;
+  font-size: 10px;
+}
+.story-filter__controls {
+  display: grid;
+  grid-template-columns: minmax(8rem, 0.7fr) minmax(20rem, 2fr) minmax(10rem, 1fr) auto;
+  align-items: end;
+  gap: clamp(8px, 1vw, 16px);
+}
+.filter-field {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+  color: var(--ink-secondary);
+  font-size: 11px;
+  font-weight: 700;
+}
+.date-range {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: end;
+  border: 0;
+}
+.date-range legend {
+  grid-column: 1 / -1;
+  margin-bottom: 6px;
+  color: var(--ink-secondary);
+  font-size: 11px;
+  font-weight: 700;
+}
+.date-range > label,
+.date-range > span {
+  display: flex;
+  align-items: center;
+}
+.date-range > label {
+  min-width: 0;
+}
+.date-range > span {
+  width: clamp(28px, 3vw, 40px);
+  justify-content: center;
+  color: var(--ink-tertiary);
+  font-size: 11px;
 }
 .story-filter select,
 .story-filter input {
-  min-height: 40px;
-  padding: 0 34px 0 12px;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 12px;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
+  color: var(--ink);
   background: var(--surface-soft);
+}
+.story-filter input[type='date'] {
+  padding-right: 9px;
+  font-variant-numeric: tabular-nums;
+}
+.story-filter input[type='date']::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.64;
+}
+.clear-filter {
+  min-height: 44px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--primary-strong);
+  background: transparent;
+  white-space: nowrap;
+}
+.clear-filter:hover {
+  background: var(--primary-soft);
 }
 .story-groups > div {
   margin-top: 42px;
@@ -363,12 +478,21 @@ watch(
   .story-card {
     grid-template-columns: 110px 1fr;
   }
-  .story-filter {
-    align-items: stretch;
-    flex-direction: column;
+  .story-filter__controls {
+    grid-template-columns: 1fr;
   }
-  .story-filter label {
-    justify-content: space-between;
+  .clear-filter {
+    justify-self: start;
   }
+}
+.sr-only {
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  position: absolute;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 </style>

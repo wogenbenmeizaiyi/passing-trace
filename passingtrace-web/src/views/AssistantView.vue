@@ -140,6 +140,7 @@ watch(
             :key="conversation.id"
             class="conversation"
             :class="{ active: currentId === conversation.id }"
+            :title="conversation.title"
             :aria-pressed="currentId === conversation.id"
             @click="open(conversation.id)"
           >
@@ -271,12 +272,11 @@ watch(
   min-height: 100dvh;
 }
 .assistant-page {
-  width: min(1280px, 100%);
+  width: min(1440px, 100%);
   min-height: calc(100dvh - 72px);
   margin: 0 auto;
   display: grid;
-  grid-template-columns: 260px minmax(0, 840px);
-  justify-content: center;
+  grid-template-columns: minmax(16rem, 22%) minmax(0, 1fr);
   background: var(--surface);
 }
 .conversation-panel {
@@ -328,11 +328,14 @@ watch(
   background: var(--primary-soft);
 }
 .conversation span {
+  display: -webkit-box;
   overflow: hidden;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 .conversation small {
   color: var(--ink-tertiary);
@@ -347,10 +350,15 @@ watch(
 .chat {
   min-width: 0;
   min-height: calc(100dvh - 72px);
-  padding: 36px 42px 24px;
+  padding: 36px clamp(28px, 5vw, 72px) 24px;
   display: flex;
   flex-direction: column;
   background: var(--surface);
+}
+.chat > * {
+  width: min(900px, 100%);
+  margin-right: auto;
+  margin-left: auto;
 }
 .chat-heading {
   padding-bottom: 24px;

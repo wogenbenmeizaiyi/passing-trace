@@ -9,6 +9,8 @@ vi.mock('@/auth/oidc', () => ({
 import { storylinesApi } from '@/api/storylines'
 import { StorylineStatus, type SaveStorylineRequest } from '@/api/storylines-types'
 import { useAuthStore } from '@/stores/auth'
+import StorylinesListView from '@/views/StorylinesListView.vue'
+import { mount } from '@vue/test-utils'
 
 const body: SaveStorylineRequest = {
   title: '黄山旅行',
@@ -76,5 +78,24 @@ describe('storylinesApi', () => {
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
     expect(url).toBe('https://api.test/api/v1/storylines/story-2/changes')
     expect(JSON.parse(init.body as string)).toEqual({ operation: 'sync-node', nodeKey: 'node-1' })
+  })
+})
+
+describe('故事线筛选界面', () => {
+  it('日期区间有明确标签并提供统一筛选分组', () => {
+    const wrapper = mount(StorylinesListView, {
+      global: {
+        plugins: [createPinia()],
+        stubs: {
+          WebAppHeader: true,
+          RouterLink: { template: '<a><slot /></a>' },
+        },
+      },
+    })
+
+    expect(wrapper.get('.story-filter__heading').text()).toContain('筛选故事线')
+    expect(wrapper.get('.date-range').text()).toContain('日期范围')
+    expect(wrapper.get('input[aria-label="开始日期"]').attributes('type')).toBe('date')
+    expect(wrapper.get('input[aria-label="结束日期"]').attributes('type')).toBe('date')
   })
 })
