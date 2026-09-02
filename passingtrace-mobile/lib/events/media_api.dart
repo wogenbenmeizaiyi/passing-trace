@@ -26,7 +26,14 @@ class PendingMediaUpload {
   final MediaKind kind;
 }
 
-/// 私有附件上传客户端。API 只负责签名；文件内容直接 PUT 到 MinIO/S3。
+class MediaAccessTarget {
+  const MediaAccessTarget({required this.url, required this.headers});
+
+  final Uri url;
+  final Map<String, String> headers;
+}
+
+/// 私有附件客户端。字节流统一经过已认证的 Events API，客户端无需直接访问 MinIO/S3。
 class MediaApiClient {
   MediaApiClient({
     required this.auth,
@@ -90,11 +97,15 @@ class MediaApiClient {
     final id = create['id'] as String;
     final mode = (create['mode'] as num).toInt();
     final kind = MediaKind.fromValue((create['kind'] as num).toInt());
+    final uploadHeaders = await _headers(session)
+      ..remove('Accept')
+      ..remove('Content-Type');
     if (mode == 1 && size < _multipartThreshold) {
       await _putWithRetry(
-        Uri.parse(create['uploadUrl'] as String),
+        _resolve('/api/v1/media/$id/content'),
         file.readAsByteStream(),
         size,
+        headers: uploadHeaders,
         contentType: contentType,
         onProgress: onProgress,
       );
@@ -107,18 +118,12 @@ class MediaApiClient {
       var sent = 0;
       await for (final bytes in chunks) {
         partNumber++;
-        final signed = _json(
-          await _http.post(
-            _resolve('/api/v1/media/$id/parts'),
-            headers: await _headers(session),
-            body: jsonEncode({'partNumber': partNumber}),
-          ),
-          const {200},
-        );
         final response = await _putWithRetry(
-          Uri.parse(signed['uploadUrl'] as String),
+          _resolve('/api/v1/media/$id/parts/$partNumber/content'),
           Stream<Uint8List>.value(bytes),
           bytes.length,
+          headers: uploadHeaders,
+          contentType: 'application/octet-stream',
           onProgress: (partProgress) {
             onProgress?.call((sent + bytes.length * partProgress) / size);
           },
@@ -161,7 +166,17 @@ class MediaApiClient {
     );
   }
 
-  Future<Uri> access(AuthSession session, String id) async {
+  Future<MediaAccessTarget> access(AuthSession session, String id) async {
+    final headers = await _headers(session)
+      ..remove('Accept')
+      ..remove('Content-Type');
+    return MediaAccessTarget(
+      url: _resolve('/api/v1/media/$id/content'),
+      headers: headers,
+    );
+  }
+
+  Future<Uri> externalAccess(AuthSession session, String id) async {
     final raw = _json(
       await _http.get(
         _resolve('/api/v1/media/$id/access'),
@@ -186,6 +201,7 @@ class MediaApiClient {
     Uri uri,
     Stream<Uint8List> source,
     int length, {
+    Map<String, String> headers = const {},
     String? contentType,
     UploadProgress? onProgress,
   }) async {
@@ -198,6 +214,7 @@ class MediaApiClient {
       var sent = 0;
       final stream = bytes == null ? source : Stream<Uint8List>.value(bytes);
       final request = http.StreamedRequest('PUT', uri)..contentLength = length;
+      request.headers.addAll(headers);
       if (contentType != null) request.headers['Content-Type'] = contentType;
       final forwarding = stream.map((chunk) {
         sent += chunk.length;

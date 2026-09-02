@@ -46,7 +46,7 @@ class _EventDetailViewState extends State<EventDetailView> {
   bool _loading = true;
   bool _deleting = false;
   bool _showAiAnalysis = false;
-  final Map<String, Future<Uri>> _mediaUrls = {};
+  final Map<String, Future<MediaAccessTarget>> _mediaUrls = {};
 
   @override
   void initState() {
@@ -490,21 +490,19 @@ class _EventDetailViewState extends State<EventDetailView> {
     );
   }
 
-  Future<Uri> _mediaUrl(MediaAssetModel media) => _mediaUrls.putIfAbsent(
-    media.id,
-    () => _mediaApi.access(widget.session, media.id),
-  );
+  Future<MediaAccessTarget> _mediaUrl(MediaAssetModel media) => _mediaUrls
+      .putIfAbsent(media.id, () => _mediaApi.access(widget.session, media.id));
 
   Widget _buildImageMedia(MediaAssetModel media) {
     final colors = context.traceColors;
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
-      child: FutureBuilder<Uri>(
+      child: FutureBuilder<MediaAccessTarget>(
         future: _mediaUrl(media),
         builder: (context, snapshot) {
           if (snapshot.hasError) return _buildImageError(media);
-          final url = snapshot.data;
-          if (url == null) return _buildImagePlaceholder();
+          final access = snapshot.data;
+          if (access == null) return _buildImagePlaceholder();
           return Semantics(
             button: true,
             image: true,
@@ -520,7 +518,8 @@ class _EventDetailViewState extends State<EventDetailView> {
                     AspectRatio(
                       aspectRatio: 4 / 3,
                       child: Image.network(
-                        '$url',
+                        access.url.toString(),
+                        headers: access.headers,
                         fit: BoxFit.cover,
                         filterQuality: FilterQuality.medium,
                         loadingBuilder: (context, child, progress) =>
@@ -647,7 +646,7 @@ class _EventDetailViewState extends State<EventDetailView> {
 
   Future<void> _openMedia(MediaAssetModel media) async {
     try {
-      final url = await _mediaUrl(media);
+      final access = await _mediaUrl(media);
       if (!mounted) return;
       if (media.kind == MediaKind.image) {
         await showDialog<void>(
@@ -661,7 +660,8 @@ class _EventDetailViewState extends State<EventDetailView> {
                     minScale: 0.8,
                     maxScale: 5,
                     child: Image.network(
-                      '$url',
+                      access.url.toString(),
+                      headers: access.headers,
                       fit: BoxFit.contain,
                       loadingBuilder: (_, child, progress) => progress == null
                           ? child
@@ -693,9 +693,12 @@ class _EventDetailViewState extends State<EventDetailView> {
       } else if (media.kind == MediaKind.video) {
         await showDialog<void>(
           context: context,
-          builder: (_) => _VideoDialog(url: url),
+          builder: (_) => _VideoDialog(access: access),
         );
-      } else if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
+      } else if (!await launchUrl(
+        await _mediaApi.externalAccess(widget.session, media.id),
+        mode: LaunchMode.externalApplication,
+      )) {
         throw StateError('系统中没有可处理该文件的应用。');
       }
     } catch (error) {
@@ -719,8 +722,8 @@ class _EventDetailViewState extends State<EventDetailView> {
 }
 
 class _VideoDialog extends StatefulWidget {
-  const _VideoDialog({required this.url});
-  final Uri url;
+  const _VideoDialog({required this.access});
+  final MediaAccessTarget access;
 
   @override
   State<_VideoDialog> createState() => _VideoDialogState();
@@ -733,7 +736,10 @@ class _VideoDialogState extends State<_VideoDialog> {
   @override
   void initState() {
     super.initState();
-    _controller = VideoPlayerController.networkUrl(widget.url);
+    _controller = VideoPlayerController.networkUrl(
+      widget.access.url,
+      httpHeaders: widget.access.headers,
+    );
     _ready = _controller.initialize().then((_) => _controller.play());
   }
 

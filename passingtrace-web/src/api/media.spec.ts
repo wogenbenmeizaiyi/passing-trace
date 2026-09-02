@@ -69,6 +69,10 @@ describe('mediaApi', () => {
 
   it('单次上传先申请签名、直传对象，再确认媒体', async () => {
     const post = vi.spyOn(httpClient, 'post')
+    const upload = vi.spyOn(httpClient, 'upload').mockImplementation(async (_path, body, opts) => {
+      opts?.onProgress?.(body.size)
+      return ''
+    })
     post.mockResolvedValueOnce({
       id: 'media-1',
       kind: 1,
@@ -105,16 +109,20 @@ describe('mediaApi', () => {
       },
     })
     expect(post.mock.calls[1]).toEqual(['/api/v1/media/media-1/confirm', { body: { parts: null } }])
-    expect(FakeXmlHttpRequest.requests[0]).toMatchObject({
-      method: 'PUT',
-      url: 'https://s3.test/object',
-      headers: { 'Content-Type': 'image/png' },
-    })
+    expect(upload).toHaveBeenCalledWith(
+      '/api/v1/media/media-1/content',
+      expect.any(File),
+      expect.objectContaining({ contentType: 'image/png' }),
+    )
     expect(progress.at(-1)).toBe(100)
   })
 
   it('分片上传按服务端 partSize 排序回传 ETag', async () => {
     const post = vi.spyOn(httpClient, 'post')
+    const upload = vi
+      .spyOn(httpClient, 'upload')
+      .mockResolvedValueOnce('"part-1"')
+      .mockResolvedValueOnce('"part-2"')
     post
       .mockResolvedValueOnce({
         id: 'media-2',
@@ -125,8 +133,6 @@ describe('mediaApi', () => {
         partCount: 2,
         expiresAt: '2026-08-30T12:00:00Z',
       })
-      .mockResolvedValueOnce({ partNumber: 1, uploadUrl: 'https://s3.test/part-1' })
-      .mockResolvedValueOnce({ partNumber: 2, uploadUrl: 'https://s3.test/part-2' })
       .mockResolvedValueOnce({
         id: 'media-2',
         fileName: 'note.txt',
@@ -139,8 +145,12 @@ describe('mediaApi', () => {
 
     await mediaApi.upload(file('note.txt', 'text/plain', [1, 2, 3, 4, 5]))
 
-    expect(FakeXmlHttpRequest.requests.map((request) => request.body?.size)).toEqual([3, 2])
-    expect(post.mock.calls[3]).toEqual([
+    expect(upload.mock.calls.map((call) => call[1].size)).toEqual([3, 2])
+    expect(upload.mock.calls.map((call) => call[0])).toEqual([
+      '/api/v1/media/media-2/parts/1/content',
+      '/api/v1/media/media-2/parts/2/content',
+    ])
+    expect(post.mock.calls[1]).toEqual([
       '/api/v1/media/media-2/confirm',
       {
         body: {

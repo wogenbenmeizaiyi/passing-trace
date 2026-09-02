@@ -52,7 +52,7 @@ AuthSession _session() => AuthSession(
 );
 
 void main() {
-  test('single upload 计算 SHA-256、直传对象并兼容旧服务端 200', () async {
+  test('single upload 计算 SHA-256、通过认证 API 上传并兼容旧服务端 200', () async {
     final source = _MemoryPlatformFile('photo.png', [1, 2, 3, 4]);
     final requests = <http.Request>[];
     final client = MockClient((request) async {
@@ -72,8 +72,10 @@ void main() {
         );
       }
       if (request.method == 'PUT') {
+        expect(request.url.path, '/api/v1/media/media-1/content');
         expect(request.bodyBytes, [1, 2, 3, 4]);
         expect(request.headers['Content-Type'], 'image/png');
+        expect(request.headers['Authorization'], 'Bearer access-token');
         return http.Response('', 200, headers: {'etag': 'single-etag'});
       }
       if (request.url.path == '/api/v1/media/media-1/confirm') {
@@ -99,7 +101,6 @@ void main() {
 
   test('multipart upload 按顺序上传并确认所有 ETag', () async {
     final source = _MemoryPlatformFile('note.txt', [1, 2, 3, 4, 5]);
-    var nextPart = 0;
     Map<String, dynamic>? confirmBody;
     final client = MockClient((request) async {
       if (request.url.path == '/api/v1/media/uploads') {
@@ -116,21 +117,10 @@ void main() {
           201,
         );
       }
-      if (request.url.path == '/api/v1/media/media-2/parts') {
-        nextPart =
-            (jsonDecode(request.body) as Map<String, dynamic>)['partNumber']
-                as int;
-        return http.Response(
-          jsonEncode({
-            'partNumber': nextPart,
-            'uploadUrl': 'https://storage.test/part-$nextPart',
-          }),
-          200,
-        );
-      }
       if (request.method == 'PUT') {
-        final part = int.parse(request.url.pathSegments.last.split('-').last);
+        final part = int.parse(request.url.pathSegments[5]);
         expect(request.bodyBytes.length, part == 1 ? 3 : 2);
+        expect(request.headers['Authorization'], 'Bearer access-token');
         return http.Response('', 200, headers: {'etag': 'etag-$part'});
       }
       if (request.url.path == '/api/v1/media/media-2/confirm') {

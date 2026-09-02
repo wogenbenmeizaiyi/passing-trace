@@ -132,6 +132,26 @@ public sealed class S3ObjectStorage : IObjectStorage, IDisposable
         return NormalizePublicUrl(url);
     }
 
+    public async Task<string> UploadPartAsync(
+        string objectKey,
+        string uploadId,
+        int partNumber,
+        Stream content,
+        long contentLength,
+        CancellationToken cancellationToken)
+    {
+        var response = await _internalClient.UploadPartAsync(new UploadPartRequest
+        {
+            BucketName = _options.Bucket,
+            Key = objectKey,
+            UploadId = uploadId,
+            PartNumber = partNumber,
+            InputStream = content,
+            PartSize = contentLength,
+        }, cancellationToken);
+        return response.ETag;
+    }
+
     public async Task CompleteMultipartUploadAsync(string objectKey, string uploadId, IReadOnlyList<CompletedPart> parts, CancellationToken cancellationToken)
     {
         await _internalClient.CompleteMultipartUploadAsync(new CompleteMultipartUploadRequest

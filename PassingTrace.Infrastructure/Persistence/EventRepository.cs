@@ -91,9 +91,38 @@ public sealed class EventRepository(TraceDbContext dbContext) : IEventRepository
                 (e.EventKind == EventKind.Trace && (e.HappenedAt ?? e.CreatedAt) <= query.To));
         }
 
+        // 列表展示按业务时间（发生/计划时间）组织，因此分页也必须使用同一个排序键。
+        // 旧实现按 CreatedAt 排序、仅用 Id 过滤游标；导入或补录的旧记录会挤占首页，
+        // 同时造成跨页遗漏/重复。游标仍保持 Event Id，以兼容现有客户端，但服务端会
+        // 解析该 Event 对应的业务时间并执行 (businessTime, id) 复合游标过滤。
         if (query.Cursor is not null)
         {
-            events = events.Where(e => e.Id < query.Cursor);
+            var cursor = await dbContext.Events
+                .Where(e => e.UserId == query.UserId && e.Id == query.Cursor.Value)
+                .Select(e => new
+                {
+                    e.Id,
+                    SortAt = e.EventKind == EventKind.Plan
+                        ? e.PlannedAt ?? e.CreatedAt
+                        : e.HappenedAt ?? e.CreatedAt,
+                })
+                .SingleOrDefaultAsync(cancellationToken);
+
+            if (cursor is not null)
+            {
+                events = events.Where(e =>
+                    (e.EventKind == EventKind.Plan
+                        ? e.PlannedAt ?? e.CreatedAt
+                        : e.HappenedAt ?? e.CreatedAt) < cursor.SortAt ||
+                    ((e.EventKind == EventKind.Plan
+                        ? e.PlannedAt ?? e.CreatedAt
+                        : e.HappenedAt ?? e.CreatedAt) == cursor.SortAt && e.Id < cursor.Id));
+            }
+            else
+            {
+                // 无效游标不应让用户跨越到其他用户的数据；保留旧的安全退化行为。
+                events = events.Where(e => e.Id < query.Cursor.Value);
+            }
         }
 
         if (!string.IsNullOrWhiteSpace(query.CategoryKey))
@@ -118,7 +147,9 @@ public sealed class EventRepository(TraceDbContext dbContext) : IEventRepository
         }
 
         return await events
-            .OrderByDescending(e => e.CreatedAt)
+            .OrderByDescending(e => e.EventKind == EventKind.Plan
+                ? e.PlannedAt ?? e.CreatedAt
+                : e.HappenedAt ?? e.CreatedAt)
             .ThenByDescending(e => e.Id)
             .Take(query.Limit)
             .ToListAsync(cancellationToken);

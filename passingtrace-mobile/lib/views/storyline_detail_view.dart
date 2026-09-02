@@ -43,7 +43,7 @@ class _StorylineDetailViewState extends State<StorylineDetailView> {
   bool _changing = false;
   String? _error;
   StorylineDetailModel? _story;
-  final Map<String, Future<Uri>> _imageUrls = {};
+  final Map<String, Future<MediaAccessTarget>> _imageUrls = {};
 
   @override
   void initState() {
@@ -619,7 +619,7 @@ class _StageTimeline extends StatelessWidget {
   final StorylineStageModel stage;
   final List<StorylineOutlineNode> entries;
   final StorylineDetailModel story;
-  final Map<String, Future<Uri>> imageUrls;
+  final Map<String, Future<MediaAccessTarget>> imageUrls;
   final ValueChanged<StorylineNodeModel> onOpen;
   final Future<void> Function(StorylineNodeModel, StorylineOutlineNode)
   onActions;
@@ -659,7 +659,7 @@ class _StageTimeline extends StatelessWidget {
     ),
   );
 
-  Future<Uri>? nodeImage(StorylineOutlineNode outline) {
+  Future<MediaAccessTarget>? nodeImage(StorylineOutlineNode outline) {
     final mediaId = story.node(outline.nodeKey).imageMediaAssetId;
     return mediaId == null ? null : imageUrls[mediaId];
   }
@@ -675,7 +675,7 @@ class _TimelineNode extends StatelessWidget {
   });
   final StorylineNodeModel node;
   final StorylineOutlineNode outline;
-  final Future<Uri>? imageUrl;
+  final Future<MediaAccessTarget>? imageUrl;
   final ValueChanged<StorylineNodeModel> onOpen;
   final Future<void> Function(StorylineNodeModel, StorylineOutlineNode)
   onActions;
@@ -741,7 +741,7 @@ class _TimelineNode extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         if (imageUrl != null) ...[
-                          FutureBuilder<Uri>(
+                          FutureBuilder<MediaAccessTarget>(
                             future: imageUrl,
                             builder: (context, snapshot) {
                               if (!snapshot.hasData) {
@@ -764,7 +764,8 @@ class _TimelineNode extends StatelessWidget {
                                 height: 150,
                                 width: double.infinity,
                                 child: Image.network(
-                                  snapshot.data.toString(),
+                                  snapshot.data!.url.toString(),
+                                  headers: snapshot.data!.headers,
                                   fit: BoxFit.cover,
                                   errorBuilder: (_, _, _) => Container(
                                     color: context.traceColors.surfaceSoft,

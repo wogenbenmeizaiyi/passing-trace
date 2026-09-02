@@ -133,6 +133,7 @@ public sealed class AppUpdateServiceTests
         public Task<string> CreateMultipartUploadAsync(string objectKey, string contentType, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<Uri> CreateUploadUrlAsync(string objectKey, string contentType, DateTimeOffset expiresAt, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<Uri> CreatePartUploadUrlAsync(string objectKey, string uploadId, int partNumber, DateTimeOffset expiresAt, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<string> UploadPartAsync(string objectKey, string uploadId, int partNumber, Stream content, long contentLength, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task CompleteMultipartUploadAsync(string objectKey, string uploadId, IReadOnlyList<CompletedPart> parts, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task AbortMultipartUploadAsync(string objectKey, string uploadId, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<StoredObjectInfo> GetInfoAsync(string objectKey, CancellationToken cancellationToken) => throw new NotSupportedException();
@@ -149,6 +150,7 @@ public sealed class AppUpdateServiceTests
         public Task<string> CreateMultipartUploadAsync(string objectKey, string contentType, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<Uri> CreateUploadUrlAsync(string objectKey, string contentType, DateTimeOffset expiresAt, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<Uri> CreatePartUploadUrlAsync(string objectKey, string uploadId, int partNumber, DateTimeOffset expiresAt, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<string> UploadPartAsync(string objectKey, string uploadId, int partNumber, Stream content, long contentLength, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task CompleteMultipartUploadAsync(string objectKey, string uploadId, IReadOnlyList<CompletedPart> parts, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task AbortMultipartUploadAsync(string objectKey, string uploadId, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<StoredObjectInfo> GetInfoAsync(string objectKey, CancellationToken cancellationToken) => throw new NotSupportedException();

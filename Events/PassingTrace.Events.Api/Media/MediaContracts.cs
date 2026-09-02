@@ -32,3 +32,4 @@ public sealed record MediaResponse(
     int SortOrder);
 
 public sealed record MediaAccessResponse(Uri Url, DateTimeOffset ExpiresAt, bool Inline);
+public sealed record MediaContent(Stream Stream, string FileName, string ContentType, bool Inline);

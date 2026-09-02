@@ -17,6 +17,9 @@ TestResults/
 coverage/
 coverage.*
 
+# Locally generated resume artifact
+/output/pdf/韦有宁-.NET_两页优化版_PassingTrace优化.pdf
+
 # Local tooling and temporary review artifacts
 .codex-tmp/
 .agents/

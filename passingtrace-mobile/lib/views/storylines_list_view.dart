@@ -43,7 +43,7 @@ class _StorylinesListViewState extends State<StorylinesListView> {
   String? _category;
   DateTime? _from;
   DateTime? _to;
-  final Map<String, Future<Uri>> _coverUrls = {};
+  final Map<String, Future<MediaAccessTarget>> _coverUrls = {};
 
   @override
   void initState() {
@@ -378,11 +378,12 @@ class _StorylinesListViewState extends State<StorylinesListView> {
                           color: context.traceColors.primaryStrong,
                         ),
                       )
-                    : FutureBuilder<Uri>(
+                    : FutureBuilder<MediaAccessTarget>(
                         future: _coverUrls[item.coverMediaAssetId!],
                         builder: (context, snapshot) => snapshot.hasData
                             ? Image.network(
-                                snapshot.data.toString(),
+                                snapshot.data!.url.toString(),
+                                headers: snapshot.data!.headers,
                                 fit: BoxFit.cover,
                                 errorBuilder: (_, _, _) => const Center(
                                   child: TraceIcon(TraceGlyph.storyline),

@@ -100,7 +100,6 @@ void main() {
   });
 
   testWidgets('图片附件进入详情页后自动请求预览且不显示文件名卡片', (tester) async {
-    var accessRequested = false;
     final responseBody = jsonEncode({
       'id': 43,
       'kind': 0,
@@ -156,17 +155,7 @@ void main() {
     final mediaApi = MediaApiClient(
       auth: auth,
       baseUrl: 'http://events.test',
-      httpClient: MockClient((request) async {
-        accessRequested = request.url.path.endsWith('/access');
-        return http.Response(
-          jsonEncode({
-            'url': 'http://127.0.0.1:1/private-image.jpg',
-            'expiresAt': '2026-08-31T19:00:00Z',
-            'inline': true,
-          }),
-          200,
-        );
-      }),
+      httpClient: MockClient((_) async => http.Response('{}', 200)),
     );
     final session = AuthSession(
       identityBaseUrl: 'http://identity.test',
@@ -198,12 +187,18 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(accessRequested, isTrue);
     expect(find.text('Chinese-food-in-Harbin.jpg'), findsNothing);
     expect(
       find.bySemanticsLabel('查看图片 Chinese-food-in-Harbin.jpg'),
       findsOneWidget,
     );
+    final image = tester.widget<Image>(find.byType(Image).first);
+    final provider = image.image as NetworkImage;
+    expect(
+      provider.url,
+      'http://events.test/api/v1/media/d0bc30f4-ee5a-4ded-8bed-7b34bf3e8d09/content',
+    );
+    expect(provider.headers?['Authorization'], 'Bearer token');
   });
 }
 

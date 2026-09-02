@@ -28,6 +28,7 @@ const confirmDelete = ref(false)
 const deleting = ref(false)
 const editMode = ref(false)
 const mediaUrls = ref<Record<string, string>>({})
+const mediaErrors = ref<Record<string, string>>({})
 const semantic = ref<SemanticResult | null>(null)
 const showSemantic = ref(false)
 const semanticLoading = ref(false)
@@ -55,15 +56,28 @@ async function load() {
   semantic.value = null
   showSemantic.value = false
   semanticError.value = null
+  for (const url of Object.values(mediaUrls.value)) URL.revokeObjectURL(url)
+  mediaUrls.value = {}
+  mediaErrors.value = {}
   try {
     item.value = await eventsApi.get(eventId.value, { signal: controller.signal })
     const accesses = await Promise.all(
       item.value.media.map(async (media) => {
-        const access = await mediaApi.access(media.id, { signal: controller.signal })
-        return [media.id, access.url] as const
+        try {
+          const access = await mediaApi.access(media.id, { signal: controller.signal })
+          return [media.id, access.url] as const
+        } catch (reason) {
+          if (!controller.signal.aborted) {
+            mediaErrors.value = {
+              ...mediaErrors.value,
+              [media.id]: reason instanceof Error ? reason.message : '附件暂时无法读取。',
+            }
+          }
+          return null
+        }
       }),
     )
-    mediaUrls.value = Object.fromEntries(accesses)
+    mediaUrls.value = Object.fromEntries(accesses.filter((entry) => entry !== null))
   } catch (reason) {
     if (controller.signal.aborted) return
     if (reason instanceof HttpError && reason.status === 404) {
@@ -172,6 +186,7 @@ watch(
 )
 onUnmounted(() => {
   if (activeController) activeController.abort()
+  for (const url of Object.values(mediaUrls.value)) URL.revokeObjectURL(url)
 })
 </script>
 
@@ -311,16 +326,30 @@ onUnmounted(() => {
           <p class="section-label">附件</p>
           <div class="media-grid">
             <figure v-for="media in item.media" :key="media.id" :class="{ file: media.kind === 3 }">
-              <img v-if="media.kind === 1" :src="mediaUrls[media.id]" :alt="media.fileName" />
+              <img
+                v-if="media.kind === 1 && mediaUrls[media.id]"
+                :src="mediaUrls[media.id]"
+                :alt="media.fileName"
+              />
               <video
-                v-else-if="media.kind === 2"
+                v-else-if="media.kind === 2 && mediaUrls[media.id]"
                 :src="mediaUrls[media.id]"
                 controls
                 preload="metadata"
               />
-              <a v-else :href="mediaUrls[media.id]" target="_blank" rel="noopener">下载文件</a>
+              <a
+                v-else-if="mediaUrls[media.id]"
+                :href="mediaUrls[media.id]"
+                :download="media.fileName"
+                >下载文件</a
+              >
+              <div v-else class="media-unavailable" role="status">
+                <span>附件暂时无法加载</span>
+                <button type="button" @click="load">重试</button>
+              </div>
               <figcaption>
                 {{ media.fileName }} · {{ (media.size / 1024 / 1024).toFixed(1) }}MB
+                <small v-if="mediaErrors[media.id]">{{ mediaErrors[media.id] }}</small>
               </figcaption>
             </figure>
           </div>
@@ -541,6 +570,25 @@ onUnmounted(() => {
   object-fit: contain;
   background: #171713;
 }
+.media-unavailable {
+  min-height: 180px;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 10px;
+  padding: 24px;
+  color: var(--ink-secondary);
+  background: var(--surface-soft);
+}
+.media-unavailable button {
+  min-height: 40px;
+  padding: 0 16px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  color: var(--primary-strong);
+  background: var(--surface);
+  cursor: pointer;
+}
 .media-grid figure.file {
   display: flex;
   align-items: center;
@@ -554,6 +602,12 @@ onUnmounted(() => {
   padding: 8px 10px;
   color: var(--ink-tertiary);
   font-size: 11px;
+}
+.media-grid figcaption small {
+  display: block;
+  margin-top: 4px;
+  color: var(--danger);
+  overflow-wrap: anywhere;
 }
 .semantic-card {
   display: flex;

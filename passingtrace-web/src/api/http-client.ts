@@ -40,6 +40,13 @@ interface RequestOptions {
   retryOn401?: boolean
 }
 
+interface BinaryUploadOptions {
+  contentType?: string
+  signal?: AbortSignal
+  onProgress?: (loaded: number) => void
+  retryOn401?: boolean
+}
+
 function buildUrl(path: string, query: RequestOptions['query']): string {
   const base = (import.meta.env.VITE_EVENTS_API_BASE_URL ?? '').replace(/\/$/, '')
   if (!path.startsWith('/')) path = `/${path}`
@@ -159,6 +166,101 @@ async function send<T>(method: string, path: string, opts: RequestOptions): Prom
   return parseResponse<T>(res)
 }
 
+function uploadOnce(
+  url: string,
+  token: string,
+  body: Blob,
+  opts: BinaryUploadOptions,
+): Promise<{ status: number; eTag: string | null; responseText: string }> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open('PUT', url)
+    xhr.setRequestHeader('Authorization', `Bearer ${token}`)
+    xhr.setRequestHeader('Content-Type', opts.contentType || 'application/octet-stream')
+    xhr.upload.onprogress = (event) => opts.onProgress?.(event.loaded)
+    xhr.onerror = () => reject(new Error('上传网络中断，请重试。'))
+    xhr.onabort = () => reject(new DOMException('上传已取消。', 'AbortError'))
+    xhr.onload = () =>
+      resolve({
+        status: xhr.status,
+        eTag: xhr.getResponseHeader('ETag'),
+        responseText: xhr.responseText,
+      })
+    if (opts.signal) {
+      if (opts.signal.aborted) xhr.abort()
+      else opts.signal.addEventListener('abort', () => xhr.abort(), { once: true })
+    }
+    xhr.send(body)
+  })
+}
+
+function xhrProblem(responseText: string): ProblemDetails | null {
+  if (!responseText) return null
+  try {
+    return JSON.parse(responseText) as ProblemDetails
+  } catch {
+    return null
+  }
+}
+
+async function uploadBinary(
+  path: string,
+  body: Blob,
+  opts: BinaryUploadOptions = {},
+): Promise<string> {
+  const url = buildUrl(path, undefined)
+  let token = await readAccessToken()
+  if (!token) throw new HttpError(401, '未登录或会话已失效，请重新登录。')
+  let result = await uploadOnce(url, token, body, opts)
+  if (result.status === 401 && opts.retryOn401 !== false) {
+    try {
+      const renewed = await oidc.signinSilent()
+      if (renewed?.access_token) {
+        useAuthStore().user = renewed
+        token = renewed.access_token
+        result = await uploadOnce(url, token, body, { ...opts, retryOn401: false })
+      }
+    } catch {
+      // 续期失败后按原始 401 处理。
+    }
+  }
+  if (result.status < 200 || result.status >= 300) {
+    const problem = xhrProblem(result.responseText)
+    throw new HttpError(result.status, describe(problem, `上传失败 (${result.status})`), problem)
+  }
+  return result.eTag ?? ''
+}
+
+async function downloadBlob(path: string, opts: RequestOptions = {}): Promise<Blob> {
+  const url = buildUrl(path, opts.query)
+  let token = await readAccessToken()
+  if (!token) throw new HttpError(401, '未登录或会话已失效，请重新登录。')
+  const init: RequestInit = {
+    method: 'GET',
+    headers: { ...authHeader(token), ...opts.headers },
+    signal: opts.signal ?? null,
+    credentials: 'omit',
+  }
+  let res = await fetch(url, init)
+  if (res.status === 401 && opts.retryOn401 !== false) {
+    try {
+      const renewed = await oidc.signinSilent()
+      if (renewed?.access_token) {
+        useAuthStore().user = renewed
+        token = renewed.access_token
+        res = await fetch(url, { ...init, headers: { ...authHeader(token), ...opts.headers } })
+      }
+    } catch {
+      // 续期失败后按原始 401 处理。
+    }
+  }
+  if (!res.ok) {
+    const problem = await readProblem(res)
+    throw new HttpError(res.status, describe(problem, `下载失败 (${res.status})`), problem)
+  }
+  return res.blob()
+}
+
 export const httpClient = {
   get<T>(path: string, opts: RequestOptions = {}): Promise<T> {
     return send<T>('GET', path, opts)
@@ -175,6 +277,12 @@ export const httpClient = {
   delete<T = void>(path: string, opts: RequestOptions = {}): Promise<T> {
     return send<T>('DELETE', path, opts)
   },
+  upload(path: string, body: Blob, opts: BinaryUploadOptions = {}): Promise<string> {
+    return uploadBinary(path, body, opts)
+  },
+  blob(path: string, opts: RequestOptions = {}): Promise<Blob> {
+    return downloadBlob(path, opts)
+  },
 }
 
-export type { RequestOptions }
+export type { BinaryUploadOptions, RequestOptions }

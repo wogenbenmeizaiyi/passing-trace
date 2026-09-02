@@ -11,12 +11,6 @@ interface MediaUploadResponse {
   expiresAt: string
 }
 
-interface PartUploadResponse {
-  partNumber: number
-  uploadUrl: string
-  expiresAt: string
-}
-
 export interface UploadProgress {
   loaded: number
   total: number
@@ -34,29 +28,6 @@ async function sha256(file: File): Promise<string> {
   return [...new Uint8Array(digest)].map((value) => value.toString(16).padStart(2, '0')).join('')
 }
 
-function put(
-  url: string,
-  body: Blob,
-  contentType: string | null,
-  onProgress?: (loaded: number) => void,
-) {
-  return new Promise<string>((resolve, reject) => {
-    const xhr = new XMLHttpRequest()
-    xhr.open('PUT', url)
-    if (contentType) xhr.setRequestHeader('Content-Type', contentType)
-    xhr.upload.onprogress = (event) => onProgress?.(event.loaded)
-    xhr.onerror = () => reject(new Error('上传网络中断，请重试。'))
-    xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        resolve(xhr.getResponseHeader('ETag') ?? '')
-      } else {
-        reject(new Error(`对象上传失败 (${xhr.status})`))
-      }
-    }
-    xhr.send(body)
-  })
-}
-
 export const mediaApi = {
   async upload(file: File, onProgress?: (value: UploadProgress) => void): Promise<MediaResponse> {
     const hash = await sha256(file)
@@ -69,10 +40,15 @@ export const mediaApi = {
       },
     })
     if (session.mode === 1) {
-      if (!session.uploadUrl) throw new Error('服务端没有返回上传地址。')
-      await put(session.uploadUrl, file, file.type || 'application/octet-stream', (loaded) =>
-        onProgress?.({ loaded, total: file.size, percent: Math.round((loaded / file.size) * 100) }),
-      )
+      await httpClient.upload(`/api/v1/media/${session.id}/content`, file, {
+        contentType: file.type || 'application/octet-stream',
+        onProgress: (loaded) =>
+          onProgress?.({
+            loaded,
+            total: file.size,
+            percent: Math.round((loaded / file.size) * 100),
+          }),
+      })
       return httpClient.post<MediaResponse>(`/api/v1/media/${session.id}/confirm`, {
         body: { parts: null },
       })
@@ -85,15 +61,18 @@ export const mediaApi = {
     for (let partNumber = 1; partNumber <= partCount; partNumber += 1) {
       const start = (partNumber - 1) * partSize
       const chunk = file.slice(start, Math.min(file.size, start + partSize))
-      const part = await httpClient.post<PartUploadResponse>(`/api/v1/media/${session.id}/parts`, {
-        body: { partNumber },
-      })
-      const eTag = await put(part.uploadUrl, chunk, null, (loaded) =>
-        onProgress?.({
-          loaded: completed + loaded,
-          total: file.size,
-          percent: Math.round(((completed + loaded) / file.size) * 100),
-        }),
+      const eTag = await httpClient.upload(
+        `/api/v1/media/${session.id}/parts/${partNumber}/content`,
+        chunk,
+        {
+          contentType: 'application/octet-stream',
+          onProgress: (loaded) =>
+            onProgress?.({
+              loaded: completed + loaded,
+              total: file.size,
+              percent: Math.round(((completed + loaded) / file.size) * 100),
+            }),
+        },
       )
       parts.push({ partNumber, eTag })
       completed += chunk.size
@@ -103,8 +82,13 @@ export const mediaApi = {
     })
   },
 
-  access(id: string, opts: RequestOptions = {}): Promise<MediaAccessResponse> {
-    return httpClient.get<MediaAccessResponse>(`/api/v1/media/${id}/access`, opts)
+  async access(id: string, opts: RequestOptions = {}): Promise<MediaAccessResponse> {
+    const blob = await httpClient.blob(`/api/v1/media/${id}/content`, opts)
+    return {
+      url: URL.createObjectURL(blob),
+      expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+      inline: blob.type.startsWith('image/') || blob.type.startsWith('video/'),
+    }
   },
 
   remove(id: string): Promise<void> {

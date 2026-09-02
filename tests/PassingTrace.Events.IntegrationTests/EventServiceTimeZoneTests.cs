@@ -352,6 +352,60 @@ public sealed class EventServiceTimeZoneTests : IDisposable
         Assert.Collection(august, item => Assert.Equal("八月散步", item.Title));
     }
 
+    [Fact]
+    public async Task ListAsync_OrdersAndPaginatesByBusinessTime_NotImportTime()
+    {
+        var importedAt = new DateTimeOffset(2026, 9, 2, 8, 0, 0, TimeSpan.Zero);
+        var septemberFirst = Event.Create(71, EventKind.Trace, "九月一日", null,
+            new DateTimeOffset(2026, 9, 1, 8, 0, 0, TimeSpan.Zero), null,
+            "Asia/Shanghai", "business-time-sep-1", importedAt.AddDays(-5));
+        var augustImportedLater = Event.Create(71, EventKind.Trace, "八月补录", null,
+            new DateTimeOffset(2026, 8, 31, 20, 0, 0, TimeSpan.Zero), null,
+            "Asia/Shanghai", "business-time-aug", importedAt);
+        var septemberLatest = Event.Create(71, EventKind.Plan, "九月计划", null, null,
+            new DateTimeOffset(2026, 9, 5, 8, 0, 0, TimeSpan.Zero),
+            "Asia/Shanghai", "business-time-sep-5", importedAt.AddDays(-10));
+        _db.Events.AddRange(septemberFirst, augustImportedLater, septemberLatest);
+        await _db.SaveChangesAsync();
+
+        var repository = new EventRepository(_db);
+        var firstPage = await repository.ListAsync(
+            new EventListQuery(71, Limit: 2), CancellationToken.None);
+        var secondPage = await repository.ListAsync(
+            new EventListQuery(71, Limit: 2, Cursor: firstPage[^1].Id), CancellationToken.None);
+
+        Assert.Collection(firstPage,
+            item => Assert.Equal("九月计划", item.Title),
+            item => Assert.Equal("九月一日", item.Title));
+        Assert.Collection(secondPage, item => Assert.Equal("八月补录", item.Title));
+    }
+
+    [Fact]
+    public async Task UploadContentAsync_StreamsThroughAuthenticatedApiStorage()
+    {
+        var bytes = new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 1, 2, 3 };
+        var now = DateTimeOffset.UtcNow;
+        var asset = new MediaAsset
+        {
+            Id = Guid.NewGuid(), UserId = 72, ObjectKey = "tests/proxy.png", OriginalFileName = "proxy.png",
+            Kind = MediaKind.Image, DeclaredMimeType = "image/png", ExpectedSize = bytes.Length,
+            ExpectedSha256 = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant(),
+            Status = MediaAssetStatus.PendingUpload, UploadMode = MediaUploadMode.Single,
+            UploadExpiresAt = now.AddHours(1), CreatedAt = now, UpdatedAt = now,
+        };
+        _db.MediaAssets.Add(asset);
+        await _db.SaveChangesAsync();
+        var storage = new MemoryObjectStorage([]);
+        var service = new MediaService(_db, storage, new AnalysisOutbox(_db), TimeProvider.System);
+
+        await using var input = new MemoryStream(bytes, writable: false);
+        await service.UploadContentAsync(72, asset.Id, input, bytes.Length, "image/png", CancellationToken.None);
+        var confirmed = await service.ConfirmAsync(72, asset.Id, new ConfirmMediaUploadRequest(null), CancellationToken.None);
+
+        Assert.Equal(bytes, storage.Content);
+        Assert.Equal(MediaAssetStatus.Uploaded, confirmed.Status);
+    }
+
     private static TraceDbContext CreateDbContext() =>
         throw new InvalidOperationException("请使用带连接的构造器。");
 
@@ -416,6 +470,7 @@ public sealed class EventServiceTimeZoneTests : IDisposable
         public Task<string> CreateMultipartUploadAsync(string objectKey, string contentType, CancellationToken cancellationToken) => throw Unused();
         public Task<Uri> CreateUploadUrlAsync(string objectKey, string contentType, DateTimeOffset expiresAt, CancellationToken cancellationToken) => throw Unused();
         public Task<Uri> CreatePartUploadUrlAsync(string objectKey, string uploadId, int partNumber, DateTimeOffset expiresAt, CancellationToken cancellationToken) => throw Unused();
+        public Task<string> UploadPartAsync(string objectKey, string uploadId, int partNumber, Stream content, long contentLength, CancellationToken cancellationToken) => throw Unused();
         public Task CompleteMultipartUploadAsync(string objectKey, string uploadId, IReadOnlyList<CompletedPart> parts, CancellationToken cancellationToken) => throw Unused();
         public Task AbortMultipartUploadAsync(string objectKey, string uploadId, CancellationToken cancellationToken) => throw Unused();
         public Task<StoredObjectInfo> GetInfoAsync(string objectKey, CancellationToken cancellationToken) => throw Unused();
@@ -427,19 +482,27 @@ public sealed class EventServiceTimeZoneTests : IDisposable
 
     private sealed class MemoryObjectStorage(byte[] content) : IObjectStorage
     {
+        private byte[] _content = content;
         private static Exception Unused() => new InvalidOperationException("对象存储方法不应在此测试中被调用。");
         public bool Deleted { get; private set; }
+        public byte[] Content => _content;
         public Task EnsureBucketAsync(CancellationToken cancellationToken) => Task.CompletedTask;
         public Task<string> CreateMultipartUploadAsync(string objectKey, string contentType, CancellationToken cancellationToken) => throw Unused();
         public Task<Uri> CreateUploadUrlAsync(string objectKey, string contentType, DateTimeOffset expiresAt, CancellationToken cancellationToken) => throw Unused();
         public Task<Uri> CreatePartUploadUrlAsync(string objectKey, string uploadId, int partNumber, DateTimeOffset expiresAt, CancellationToken cancellationToken) => throw Unused();
+        public Task<string> UploadPartAsync(string objectKey, string uploadId, int partNumber, Stream content, long contentLength, CancellationToken cancellationToken) => throw Unused();
         public Task CompleteMultipartUploadAsync(string objectKey, string uploadId, IReadOnlyList<CompletedPart> parts, CancellationToken cancellationToken) => throw Unused();
         public Task AbortMultipartUploadAsync(string objectKey, string uploadId, CancellationToken cancellationToken) => throw Unused();
         public Task<StoredObjectInfo> GetInfoAsync(string objectKey, CancellationToken cancellationToken) =>
-            Task.FromResult(new StoredObjectInfo(content.Length, "image/png"));
+            Task.FromResult(new StoredObjectInfo(_content.Length, "image/png"));
         public Task<Stream> OpenReadAsync(string objectKey, CancellationToken cancellationToken) =>
-            Task.FromResult<Stream>(new MemoryStream(content, writable: false));
-        public Task PutAsync(string objectKey, Stream stream, string contentType, CancellationToken cancellationToken) => throw Unused();
+            Task.FromResult<Stream>(new MemoryStream(_content, writable: false));
+        public async Task PutAsync(string objectKey, Stream stream, string contentType, CancellationToken cancellationToken)
+        {
+            await using var output = new MemoryStream();
+            await stream.CopyToAsync(output, cancellationToken);
+            _content = output.ToArray();
+        }
         public Task<Uri> CreateDownloadUrlAsync(string objectKey, string fileName, string contentType, bool inline, DateTimeOffset expiresAt, CancellationToken cancellationToken) =>
             Task.FromResult(new Uri($"https://objects.test/{fileName}"));
         public Task DeleteAsync(string objectKey, CancellationToken cancellationToken)

@@ -9,6 +9,7 @@ public interface IObjectStorage
     Task<string> CreateMultipartUploadAsync(string objectKey, string contentType, CancellationToken cancellationToken);
     Task<Uri> CreateUploadUrlAsync(string objectKey, string contentType, DateTimeOffset expiresAt, CancellationToken cancellationToken);
     Task<Uri> CreatePartUploadUrlAsync(string objectKey, string uploadId, int partNumber, DateTimeOffset expiresAt, CancellationToken cancellationToken);
+    Task<string> UploadPartAsync(string objectKey, string uploadId, int partNumber, Stream content, long contentLength, CancellationToken cancellationToken);
     Task CompleteMultipartUploadAsync(string objectKey, string uploadId, IReadOnlyList<CompletedPart> parts, CancellationToken cancellationToken);
     Task AbortMultipartUploadAsync(string objectKey, string uploadId, CancellationToken cancellationToken);
     Task<StoredObjectInfo> GetInfoAsync(string objectKey, CancellationToken cancellationToken);

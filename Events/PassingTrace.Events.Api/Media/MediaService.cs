@@ -135,6 +135,65 @@ public sealed class MediaService(
         return new PartUploadResponse(partNumber, url, expires);
     }
 
+    public async Task UploadContentAsync(
+        long userId,
+        Guid mediaId,
+        Stream content,
+        long? contentLength,
+        string? contentType,
+        CancellationToken cancellationToken)
+    {
+        var asset = await FindOwnedAsync(userId, mediaId, cancellationToken);
+        EnsurePending(asset);
+        if (asset.UploadMode != MediaUploadMode.Single)
+        {
+            throw new DomainValidationException("该附件需要分片上传。");
+        }
+        if (contentLength != asset.ExpectedSize)
+        {
+            throw new DomainValidationException($"上传内容长度不符，期望 {asset.ExpectedSize}，实际 {contentLength?.ToString() ?? "未知"}。");
+        }
+        var normalizedType = NormalizeMime(contentType);
+        if (!string.Equals(normalizedType, asset.DeclaredMimeType, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new DomainValidationException("上传 Content-Type 与申请时不一致。");
+        }
+
+        await storage.PutAsync(asset.ObjectKey, content, asset.DeclaredMimeType, cancellationToken);
+    }
+
+    public async Task<string> UploadPartContentAsync(
+        long userId,
+        Guid mediaId,
+        int partNumber,
+        Stream content,
+        long? contentLength,
+        CancellationToken cancellationToken)
+    {
+        var asset = await FindOwnedAsync(userId, mediaId, cancellationToken);
+        EnsurePending(asset);
+        if (asset.UploadMode != MediaUploadMode.Multipart || string.IsNullOrWhiteSpace(asset.MultipartUploadId))
+        {
+            throw new DomainValidationException("该附件不是分片上传。");
+        }
+
+        var partCount = checked((int)Math.Ceiling(asset.ExpectedSize / (double)MultipartPartSize));
+        if (partNumber < 1 || partNumber > partCount)
+        {
+            throw new DomainValidationException($"分片序号必须在 1 到 {partCount} 之间。");
+        }
+        var expectedLength = partNumber == partCount
+            ? asset.ExpectedSize - (long)(partCount - 1) * MultipartPartSize
+            : MultipartPartSize;
+        if (contentLength != expectedLength)
+        {
+            throw new DomainValidationException($"分片长度不符，期望 {expectedLength}，实际 {contentLength?.ToString() ?? "未知"}。");
+        }
+
+        return await storage.UploadPartAsync(
+            asset.ObjectKey, asset.MultipartUploadId, partNumber, content, expectedLength, cancellationToken);
+    }
+
     public async Task<MediaAsset> ConfirmAsync(long userId, Guid mediaId, ConfirmMediaUploadRequest request, CancellationToken cancellationToken)
     {
         var asset = await FindOwnedAsync(userId, mediaId, cancellationToken);
@@ -233,6 +292,17 @@ public sealed class MediaService(
         return new MediaAccessResponse(url, expires, inline);
     }
 
+    public async Task<MediaContent> OpenContentAsync(long userId, Guid mediaId, CancellationToken cancellationToken)
+    {
+        var asset = await FindReadableAsync(userId, mediaId, cancellationToken);
+        var stream = await storage.OpenReadAsync(asset.ObjectKey, cancellationToken);
+        return new MediaContent(
+            stream,
+            asset.OriginalFileName,
+            asset.VerifiedMimeType ?? asset.DeclaredMimeType,
+            asset.Kind is MediaKind.Image or MediaKind.Video);
+    }
+
     public async Task DeleteAsync(long userId, Guid mediaId, CancellationToken cancellationToken)
     {
         var asset = await dbContext.MediaAssets
@@ -311,6 +381,20 @@ public sealed class MediaService(
         await dbContext.MediaAssets.FirstOrDefaultAsync(
             x => x.Id == mediaId && x.UserId == userId && x.DeletedAt == null,
             cancellationToken) ?? throw new MediaAssetNotFoundException(mediaId);
+
+    private async Task<MediaAsset> FindReadableAsync(long userId, Guid mediaId, CancellationToken cancellationToken)
+    {
+        var asset = await dbContext.MediaAssets.FirstOrDefaultAsync(
+            x => x.Id == mediaId && x.DeletedAt == null &&
+                 (x.UserId == userId || x.EventLinks.Any(link =>
+                     link.Event.UserId == userId && link.Event.DeletedAt == null)),
+            cancellationToken) ?? throw new MediaAssetNotFoundException(mediaId);
+        if (asset.Status is not (MediaAssetStatus.Uploaded or MediaAssetStatus.Processing or MediaAssetStatus.Ready))
+        {
+            throw new MediaAssetNotFoundException(mediaId);
+        }
+        return asset;
+    }
 
     private void EnsurePending(MediaAsset asset)
     {

@@ -6,6 +6,8 @@ import type { User } from 'oidc-client-ts'
 
 import { aiApi, type SemanticResult } from '@/api/ai'
 import { eventsApi } from '@/api/events'
+import { HttpError } from '@/api/http-client'
+import { mediaApi } from '@/api/media'
 import { EventKind, EventStatus, EventVisibility, type EventResponse } from '@/api/events-types'
 import { useAuthStore } from '@/stores/auth'
 import EventDetailView from '@/views/EventDetailView.vue'
@@ -106,6 +108,51 @@ describe('记录详情 AI 分析', () => {
 
     expect(wrapper.find('#event-semantic-panel').exists()).toBe(false)
     expect(toggle.attributes('aria-expanded')).toBe('false')
+    wrapper.unmount()
+  })
+
+  it('附件读取失败时仍展示记录，而不是误报记录不存在', async () => {
+    vi.spyOn(eventsApi, 'get').mockResolvedValue({
+      ...event,
+      media: [
+        {
+          id: 'missing-media',
+          fileName: '西湖.jpg',
+          kind: 1,
+          contentType: 'image/jpeg',
+          size: 1024,
+          status: 4,
+          sortOrder: 0,
+        },
+      ],
+    })
+    vi.spyOn(mediaApi, 'access').mockRejectedValue(new HttpError(404, '附件不存在'))
+
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    useAuthStore().user = {
+      expired: false,
+      access_token: 'test-token',
+      profile: { sub: 'user-1' },
+    } as unknown as User
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        { path: '/events/:id', component: EventDetailView },
+        { path: '/events', component: { template: '<div>记录列表</div>' } },
+      ],
+    })
+    await router.push('/events/42')
+    await router.isReady()
+
+    const wrapper = mount(EventDetailView, {
+      global: { plugins: [pinia, router], stubs: { WebAppHeader: true } },
+    })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('西湖散步')
+    expect(wrapper.text()).toContain('附件暂时无法加载')
+    expect(wrapper.text()).not.toContain('记录不存在或已被删除')
     wrapper.unmount()
   })
 })
