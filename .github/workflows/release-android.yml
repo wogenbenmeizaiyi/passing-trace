@@ -125,7 +125,7 @@ jobs:
             verify --print-certs "$apk" 2>&1)"
           printf '%s\n' "$signer_output"
           actual="$(printf '%s\n' "$signer_output" \
-            | awk -F ': ' '/certificate SHA-256 digest/ {print toupper($2); exit}' \
+            | awk -F ': ' '/certificate SHA-256 digest/ {print toupper($NF); exit}' \
             | tr -d '\r')"
           if [ "$actual" != "$ANDROID_SIGNING_SHA256" ]; then
             echo "::error::Unexpected Android signing certificate: $actual"
