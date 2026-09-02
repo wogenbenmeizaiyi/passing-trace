@@ -179,8 +179,13 @@ public sealed class StorylineService(TraceDbContext db, IAnalysisOutbox outbox, 
         if (cursor is not null) query = query.Where(x => x.Id.CompareTo(cursor.Value) < 0);
         var rows = await query.OrderByDescending(x => x.UpdatedAt).ThenByDescending(x => x.Id).Take(limit).ToListAsync(cancellationToken);
         var ids = rows.Select(x => x.Id).ToArray();
-        var revisions = await db.StorylineRevisions.AsNoTracking().Include(x => x.Nodes).Include(x => x.Tags)
-            .Where(x => ids.Contains(x.StorylineId)).ToListAsync(cancellationToken);
+        var revisions = await db.StorylineRevisions.AsNoTracking()
+            .Include(x => x.Nodes).ThenInclude(x => x.Event).ThenInclude(x => x.SourceRevisions)
+                .ThenInclude(x => x.MediaAssets).ThenInclude(x => x.MediaAsset)
+            .Include(x => x.Tags)
+            .AsSplitQuery()
+            .Where(x => ids.Contains(x.StorylineId) && x.Revision == x.Storyline.CurrentRevision)
+            .ToListAsync(cancellationToken);
         return rows.Select(x =>
         {
             var revision = revisions.Single(r => r.StorylineId == x.Id && r.Revision == x.CurrentRevision);
@@ -512,14 +517,30 @@ public sealed class StorylineService(TraceDbContext db, IAnalysisOutbox outbox, 
 
     private static Guid? ResolveCover(Guid? requested, IReadOnlyList<ResolvedNode> nodes)
     {
-        var images = nodes.SelectMany(x => x.Source.MediaAssets)
-            .Where(x => x.MediaAsset.Kind == MediaKind.Image && x.MediaAsset.Status == MediaAssetStatus.Ready)
-            .Select(x => x.MediaAssetId).ToHashSet();
+        var images = nodes.OrderBy(x => x.Input.SemanticOrder).SelectMany(x => x.Source.MediaAssets.OrderBy(m => m.SortOrder))
+            .Where(IsUsableImage)
+            .Select(x => x.MediaAssetId).Distinct().ToArray();
         if (requested.HasValue && !images.Contains(requested.Value))
             throw new DomainValidationException("封面必须来自当前故事线节点的图片附件。");
         if (requested.HasValue) return requested;
         var first = images.FirstOrDefault();
         return first == Guid.Empty ? null : first;
+    }
+
+    private static bool IsUsableImage(SourceRevisionMedia link) =>
+        link.MediaAsset.Kind == MediaKind.Image &&
+        (link.MediaAsset.Status is MediaAssetStatus.Uploaded or MediaAssetStatus.Processing or MediaAssetStatus.Ready ||
+         link.MediaAsset.Status == MediaAssetStatus.Failed && link.MediaAsset.ConfirmedAt is not null);
+
+    private static Guid? EffectiveCover(StorylineRevision revision)
+    {
+        if (revision.CoverMediaAssetId is not null) return revision.CoverMediaAssetId;
+        return revision.Nodes.OrderBy(x => x.SemanticOrder)
+            .Select(x => x.Event.SourceRevisions.Single(r => r.Revision == x.SourceRevision))
+            .SelectMany(x => x.MediaAssets.OrderBy(m => m.SortOrder))
+            .Where(IsUsableImage)
+            .Select(x => (Guid?)x.MediaAssetId)
+            .FirstOrDefault();
     }
 
     private static StorylineWebLayout BuildLayout(StorylineWebLayoutInput input, HashSet<Guid> nodeKeys, HashSet<Guid> stageKeys)
@@ -561,7 +582,7 @@ public sealed class StorylineService(TraceDbContext db, IAnalysisOutbox outbox, 
             var source = x.Event.SourceRevisions.Single(r => r.Revision == x.SourceRevision);
             var currentLabels = x.Event.LabelIndexes.Where(l => l.IsCurrent).OrderBy(l => l.Type).Select(l => l.DisplayName).Take(3).ToArray();
             var place = x.Event.Locations.FirstOrDefault(l => l.SourceRevision == x.SourceRevision)?.Name;
-            var image = source.MediaAssets.FirstOrDefault(m => m.MediaAsset.Kind == MediaKind.Image)?.MediaAssetId;
+            var image = source.MediaAssets.OrderBy(m => m.SortOrder).FirstOrDefault(IsUsableImage)?.MediaAssetId;
             var state = x.Event.DeletedAt is not null ? "deleted" : x.Event.CurrentSourceRevision == x.SourceRevision ? "upToDate" : "updated";
             return new StorylineNodeResponse(x.Key, x.EventId, x.SourceRevision, x.Event.CurrentSourceRevision, state,
                 x.Event.EventKind, x.Event.Status, source.Title ?? "无标题记录", source.RawContent,
@@ -574,7 +595,7 @@ public sealed class StorylineService(TraceDbContext db, IAnalysisOutbox outbox, 
             revision.Edges.Count(x => x.TargetNodeKey == key) > 1)).ToArray();
         return new StorylineRevisionResponse(storyline.Id, revision.Title, revision.Description, revision.CategoryKey,
             StorylineTaxonomy.Label(revision.CategoryKey), revision.Status, revision.Revision, storyline.RowVersion,
-            revision.CoverMediaAssetId, revision.RangeStart, revision.RangeEnd, revision.LayoutState,
+            EffectiveCover(revision), revision.RangeStart, revision.RangeEnd, revision.LayoutState,
             revision.Tags.OrderBy(x => x.SortOrder).Select(x => x.DisplayName).ToArray(),
             revision.Stages.OrderBy(x => x.SemanticOrder).Select(x => new StorylineStageInput(x.Key, x.Title, x.SemanticOrder)).ToArray(),
             nodes, edges, outline, CopyLayout(revision), storyline.UpdatedAt);
@@ -582,7 +603,7 @@ public sealed class StorylineService(TraceDbContext db, IAnalysisOutbox outbox, 
 
     private static StorylineSummaryResponse ToSummary(Storyline storyline, StorylineRevision revision) => new(
         storyline.Id, storyline.Title, storyline.Description, storyline.CategoryKey, StorylineTaxonomy.Label(storyline.CategoryKey),
-        storyline.Status, storyline.CurrentRevision, storyline.RowVersion, storyline.CoverMediaAssetId,
+        storyline.Status, storyline.CurrentRevision, storyline.RowVersion, EffectiveCover(revision),
         storyline.RangeStart, storyline.RangeEnd, revision.Nodes.Count,
         revision.Tags.OrderBy(x => x.SortOrder).Select(x => x.DisplayName).Take(4).ToArray(), revision.LayoutState, storyline.UpdatedAt);
 

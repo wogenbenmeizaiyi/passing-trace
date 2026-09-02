@@ -20,8 +20,16 @@ import '@vue-flow/minimap/dist/style.css'
 import WebAppHeader from '@/components/WebAppHeader.vue'
 import StorylineFlowNode from '@/components/StorylineFlowNode.vue'
 import { eventsApi } from '@/api/events'
-import type { EventResponse } from '@/api/events-types'
-import { EventKind } from '@/api/events-types'
+import {
+  EventKind,
+  EventKindLabel,
+  EventStatus,
+  EventStatusLabel,
+  type EventKind as EventKindValue,
+  type EventResponse,
+  type EventStatus as EventStatusValue,
+  type EventTaxonomyResponse,
+} from '@/api/events-types'
 import { mediaApi } from '@/api/media'
 import { storylinesApi } from '@/api/storylines'
 import {
@@ -83,6 +91,13 @@ const selectedId = ref<string | null>(null),
   query = ref(''),
   recordBank = ref<EventResponse[]>([]),
   bankLoading = ref(false)
+const bankFiltersOpen = ref(false),
+  bankKind = ref<EventKindValue | ''>(''),
+  bankStatus = ref<EventStatusValue | ''>(''),
+  bankFrom = ref(''),
+  bankTo = ref(''),
+  bankCategory = ref(''),
+  eventTaxonomy = ref<EventTaxonomyResponse | null>(null)
 const planOpen = ref(false),
   planTitle = ref(''),
   planDate = ref(''),
@@ -182,11 +197,26 @@ async function loadBank() {
   bankLoading.value = true
   try {
     recordBank.value = (
-      await eventsApi.list({ limit: 40, query: query.value || undefined })
+      await eventsApi.list({
+        limit: 60,
+        query: query.value || undefined,
+        kind: bankKind.value === '' ? undefined : bankKind.value,
+        status: bankStatus.value === '' ? undefined : bankStatus.value,
+        from: bankFrom.value ? new Date(`${bankFrom.value}T00:00:00`).toISOString() : undefined,
+        to: bankTo.value ? new Date(`${bankTo.value}T23:59:59.999`).toISOString() : undefined,
+        categoryKey: bankCategory.value || undefined,
+      })
     ).items.filter((e) => !flowNodes.value.some((n) => n.data.eventId === e.id))
   } finally {
     bankLoading.value = false
   }
+}
+function clearBankFilters() {
+  bankKind.value = ''
+  bankStatus.value = ''
+  bankFrom.value = ''
+  bankTo.value = ''
+  bankCategory.value = ''
 }
 function addEvent(item: EventResponse) {
   checkpoint()
@@ -508,6 +538,7 @@ async function load() {
       }
       dirty.value = false
     }
+    if (!eventTaxonomy.value) eventTaxonomy.value = await eventsApi.taxonomy()
     await loadBank()
   } catch (reason) {
     error.value = reason instanceof Error ? reason.message : '加载编辑器失败。'
@@ -550,7 +581,7 @@ async function restoreRevision(targetRevision: number) {
     saving.value = false
   }
 }
-watch(query, () => {
+watch([query, bankKind, bankStatus, bankFrom, bankTo, bankCategory], () => {
   window.clearTimeout(queryTimer)
   queryTimer = window.setTimeout(() => void loadBank(), 260)
 })
@@ -619,9 +650,81 @@ onUnmounted(() => window.removeEventListener('beforeunload', beforeUnload))
             <div><span>记录库</span><small>拖入或点击添加</small></div>
             <button title="创建轻量计划" @click="planOpen = !planOpen">＋ 计划</button>
           </div>
-          <label class="bank-search"
-            ><span aria-hidden="true">⌕</span><input v-model="query" placeholder="搜索标题或正文"
-          /></label>
+          <div class="bank-tools">
+            <label class="bank-search"
+              ><span aria-hidden="true">⌕</span><input v-model="query" placeholder="搜索标题或正文"
+            /></label>
+            <button
+              class="bank-filter-toggle"
+              type="button"
+              :aria-expanded="bankFiltersOpen"
+              aria-controls="record-bank-filters"
+              aria-label="筛选记录库"
+              @click="bankFiltersOpen = !bankFiltersOpen"
+            >
+              <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 6h16M7 12h10M10 18h4" />
+              </svg>
+            </button>
+          </div>
+          <section v-if="bankFiltersOpen" id="record-bank-filters" class="bank-filters">
+            <div class="bank-filter-grid">
+              <label
+                ><span>类型</span
+                ><select v-model="bankKind">
+                  <option value="">全部</option>
+                  <option :value="EventKind.Trace">{{ EventKindLabel[EventKind.Trace] }}</option>
+                  <option :value="EventKind.Plan">{{ EventKindLabel[EventKind.Plan] }}</option>
+                </select></label
+              >
+              <label
+                ><span>状态</span
+                ><select v-model="bankStatus">
+                  <option value="">全部</option>
+                  <option :value="EventStatus.Planned">
+                    {{ EventStatusLabel[EventStatus.Planned] }}
+                  </option>
+                  <option :value="EventStatus.Completed">
+                    {{ EventStatusLabel[EventStatus.Completed] }}
+                  </option>
+                  <option :value="EventStatus.Cancelled">
+                    {{ EventStatusLabel[EventStatus.Cancelled] }}
+                  </option>
+                </select></label
+              >
+            </div>
+            <label class="bank-filter-wide"
+              ><span>发生时间</span>
+              <span class="bank-date-range"
+                ><span
+                  class="bank-date-input"
+                  :class="{ 'has-value': bankFrom }"
+                  data-placeholder="开始"
+                  ><input v-model="bankFrom" type="date" aria-label="记录开始日期" /></span
+                ><i>至</i
+                ><span
+                  class="bank-date-input"
+                  :class="{ 'has-value': bankTo }"
+                  data-placeholder="结束"
+                  ><input v-model="bankTo" type="date" aria-label="记录结束日期" /></span></span
+            ></label>
+            <label class="bank-filter-wide"
+              ><span>主分类</span
+              ><select v-model="bankCategory">
+                <option value="">全部</option>
+                <option
+                  v-for="item in eventTaxonomy?.categories ?? []"
+                  :key="item.key"
+                  :value="item.key"
+                >
+                  {{ item.label }}
+                </option>
+              </select></label
+            >
+            <button class="bank-filter-clear" type="button" @click="clearBankFilters">
+              清除筛选
+            </button>
+          </section>
           <form v-if="planOpen" class="inline-plan" @submit.prevent="addPlan">
             <strong>直接添加计划</strong
             ><input v-model="planTitle" placeholder="计划标题" required /><input
@@ -664,7 +767,11 @@ onUnmounted(() => window.removeEventListener('beforeunload', beforeUnload))
             @node-click="({ node }) => (selectedId = node.id)"
             @node-drag-start="checkpoint"
             @node-drag-stop="markDirty"
-            ><Background :gap="24" color="var(--line)" /><MiniMap pannable zoomable /><Controls
+            ><Background :gap="24" color="var(--line)" /><MiniMap
+              pannable
+              zoomable
+              node-color="var(--primary)"
+              mask-color="color-mix(in srgb, var(--canvas) 76%, transparent)" /><Controls
           /></VueFlow>
           <div v-if="!flowNodes.length" class="canvas-empty">
             <strong>从左侧添加第一条记录</strong><span>也可以先创建一个轻量计划</span>
@@ -684,7 +791,7 @@ onUnmounted(() => window.removeEventListener('beforeunload', beforeUnload))
                   v-model="title"
                   type="text"
                   maxlength="120"
-                  placeholder="例如：黄山旅行"
+                  placeholder="输入故事线名称"
                   required
                   :aria-invalid="Boolean(titleError)"
                   :aria-describedby="titleError ? 'storyline-title-error' : 'storyline-title-hint'"
@@ -695,7 +802,7 @@ onUnmounted(() => window.removeEventListener('beforeunload', beforeUnload))
                   {{ titleError }}
                 </p>
                 <p v-else id="storyline-title-hint" class="field-hint">
-                  用一个容易辨认的名字概括这段经历
+                  填写一个便于以后查找和辨认的名称
                 </p>
               </div>
               <label
@@ -938,8 +1045,10 @@ onUnmounted(() => window.removeEventListener('beforeunload', beforeUnload))
   font-size: 11px;
 }
 .bank-search {
-  height: 48px;
-  margin: 12px 12px 4px;
+  height: 44px;
+  min-width: 0;
+  flex: 1;
+  margin: 0;
   padding: 0 11px;
   display: flex;
   align-items: center;
@@ -947,6 +1056,107 @@ onUnmounted(() => window.removeEventListener('beforeunload', beforeUnload))
   border: 1px solid var(--line);
   border-radius: 11px;
   background: var(--surface-soft);
+}
+.bank-tools {
+  margin: 12px 12px 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.bank-filter-toggle {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  color: var(--primary-strong);
+  background: var(--surface-soft);
+}
+.bank-filter-toggle[aria-expanded='true'] {
+  border-color: var(--primary);
+  color: var(--on-primary);
+  background: var(--primary);
+}
+.bank-filter-toggle .ui-icon {
+  width: 18px;
+  height: 18px;
+}
+.bank-filters {
+  margin: 4px 12px 8px;
+  padding: 10px;
+  display: grid;
+  gap: 9px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--surface-soft);
+}
+.bank-filter-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
+}
+.bank-filters label {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+  color: var(--ink-tertiary);
+  font-size: 9px;
+}
+.bank-filters select,
+.bank-filters input {
+  width: 100%;
+  min-width: 0;
+  min-height: 36px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  background: var(--surface);
+  font-size: 10px;
+}
+.bank-date-range {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 16px minmax(0, 1fr);
+  align-items: center;
+}
+.bank-date-range i {
+  color: var(--ink-tertiary);
+  font-size: 9px;
+  font-style: normal;
+  text-align: center;
+}
+.bank-date-input {
+  min-width: 0;
+  position: relative;
+}
+.bank-date-input::before {
+  content: attr(data-placeholder);
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  left: 8px;
+  transform: translateY(-50%);
+  pointer-events: none;
+  color: var(--ink-tertiary);
+  font-size: 10px;
+}
+.bank-date-input.has-value::before,
+.bank-date-input:focus-within::before {
+  content: none;
+}
+.bank-date-input:not(.has-value):not(:focus-within) input::-webkit-datetime-edit {
+  color: transparent;
+}
+.bank-filter-clear {
+  min-height: 34px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--primary-strong);
+  background: var(--primary-soft);
+  font-size: 10px;
 }
 .bank-search input {
   width: 100%;
@@ -1042,6 +1252,34 @@ onUnmounted(() => window.removeEventListener('beforeunload', beforeUnload))
 .flow-canvas :deep(.vue-flow__node) {
   border: 0;
   background: transparent;
+}
+.flow-canvas :deep(.vue-flow__controls) {
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  box-shadow: var(--shadow-1);
+}
+.flow-canvas :deep(.vue-flow__controls-button) {
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  color: var(--primary-strong);
+  background: var(--surface);
+}
+.flow-canvas :deep(.vue-flow__controls-button:hover) {
+  color: var(--on-primary);
+  background: var(--primary);
+}
+.flow-canvas :deep(.vue-flow__controls-button svg) {
+  fill: currentColor;
+}
+.flow-canvas :deep(.vue-flow__minimap) {
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--surface) !important;
+  box-shadow: var(--shadow-1);
 }
 .canvas-empty {
   position: absolute;

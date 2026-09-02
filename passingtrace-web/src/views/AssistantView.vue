@@ -2,6 +2,7 @@
 import { onMounted, ref, watch } from 'vue'
 import { aiApi, type ConversationSummary, type EvidenceBundle, type UserMemory } from '@/api/ai'
 import BrandMark from '@/components/BrandMark.vue'
+import AssistantMessageContent from '@/components/AssistantMessageContent'
 import EvidenceDisclosure from '@/components/EvidenceDisclosure.vue'
 import WebAppHeader from '@/components/WebAppHeader.vue'
 import { useAuthStore } from '@/stores/auth'
@@ -193,7 +194,10 @@ watch(
             <span v-if="message.role === 'Assistant'" class="message-mark"><BrandMark /></span>
             <div class="message-body">
               <strong>{{ message.role === 'User' ? '你' : '星期八' }}</strong>
-              <p>{{ message.content || '正在检索你的记录…' }}</p>
+              <AssistantMessageContent
+                :content="message.content || '正在检索你的记录…'"
+                :records="message.evidence?.records ?? []"
+              />
               <EvidenceDisclosure
                 v-if="message.evidence?.records?.length"
                 :records="message.evidence.records"
@@ -491,12 +495,80 @@ watch(
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
-.message-body > p {
+.message-body :deep(.assistant-markdown) {
   margin: 7px 0 0;
   overflow-wrap: anywhere;
   font-size: 14px;
   line-height: 1.75;
-  white-space: pre-wrap;
+}
+.message-body :deep(.assistant-markdown > :first-child) {
+  margin-top: 0;
+}
+.message-body :deep(.assistant-markdown > :last-child) {
+  margin-bottom: 0;
+}
+.message-body :deep(.assistant-markdown p) {
+  margin: 0.75em 0;
+}
+.message-body :deep(.assistant-markdown h1),
+.message-body :deep(.assistant-markdown h2),
+.message-body :deep(.assistant-markdown h3) {
+  margin: 1.1em 0 0.45em;
+  line-height: 1.4;
+  letter-spacing: -0.02em;
+}
+.message-body :deep(.assistant-markdown h1) {
+  font-size: 20px;
+}
+.message-body :deep(.assistant-markdown h2) {
+  font-size: 18px;
+}
+.message-body :deep(.assistant-markdown h3) {
+  font-size: 16px;
+}
+.message-body :deep(.assistant-markdown ul),
+.message-body :deep(.assistant-markdown ol) {
+  margin: 0.7em 0;
+  padding-left: 1.6em;
+}
+.message-body :deep(.assistant-markdown li) {
+  margin: 0.35em 0;
+  padding-left: 0.2em;
+}
+.message-body :deep(.assistant-markdown li::marker) {
+  color: var(--accent);
+  font-weight: 700;
+}
+.message-body :deep(.assistant-markdown hr) {
+  margin: 1.25em 0;
+  border: 0;
+  border-top: 1px solid var(--line-strong);
+}
+.message-body :deep(.assistant-markdown blockquote) {
+  margin: 0.8em 0;
+  padding: 0.5em 0.8em;
+  border-left: 3px solid var(--accent);
+  background: var(--surface);
+}
+.message-body :deep(.assistant-markdown code) {
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+  background: var(--surface);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.92em;
+}
+.message-body :deep(.record-citation) {
+  margin: 0 0.12em;
+  padding: 0.08em 0.28em;
+  border-bottom: 1px solid color-mix(in srgb, var(--primary) 58%, transparent);
+  color: var(--primary-strong);
+  background: color-mix(in srgb, var(--primary-soft) 72%, transparent);
+  font-weight: 700;
+  text-decoration: none;
+}
+.message-body :deep(.record-citation:hover) {
+  color: var(--on-primary);
+  background: var(--primary);
 }
 .composer {
   min-height: 64px;

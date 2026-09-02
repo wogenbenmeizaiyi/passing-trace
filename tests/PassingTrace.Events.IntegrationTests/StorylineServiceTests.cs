@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using PassingTrace.Core.Ai;
 using PassingTrace.Core.Events;
+using PassingTrace.Core.Media;
 using PassingTrace.Core.Storylines;
 using PassingTrace.Events.Api.Ai;
 using PassingTrace.Events.Api.Storylines;
@@ -146,6 +147,50 @@ public sealed class StorylineServiceTests : IClassFixture<StorylinePostgresFixtu
 
         await Assert.ThrowsAsync<DomainValidationException>(() =>
             _service.CreateAsync(1, request, "cross-user", default));
+    }
+
+    [Fact]
+    public async Task Automatic_cover_uses_confirmed_original_when_ai_processing_failed()
+    {
+        var evt = AddEvent(31, "有照片的记录");
+        var now = DateTimeOffset.UtcNow;
+        var image = new MediaAsset
+        {
+            Id = Guid.NewGuid(),
+            UserId = 31,
+            ObjectKey = "users/31/photo.jpg",
+            OriginalFileName = "photo.jpg",
+            Kind = MediaKind.Image,
+            DeclaredMimeType = "image/jpeg",
+            VerifiedMimeType = "image/jpeg",
+            ExpectedSize = 128,
+            ActualSize = 128,
+            ExpectedSha256 = new string('a', 64),
+            ActualSha256 = new string('a', 64),
+            Status = MediaAssetStatus.Failed,
+            UploadMode = MediaUploadMode.Single,
+            UploadExpiresAt = now.AddHours(1),
+            ConfirmedAt = now,
+            ProcessingError = "thumbnail generation failed",
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+        evt.SourceRevisions.Single().MediaAssets.Add(new SourceRevisionMedia
+        {
+            MediaAsset = image,
+            MediaAssetId = image.Id,
+            SortOrder = 0,
+        });
+        await _db.SaveChangesAsync();
+
+        var result = await _service.CreateAsync(31, new SaveStorylineRequest(
+            "照片故事", null, "activity", StorylineStatus.Ongoing, null, [], [],
+            [Existing(Guid.NewGuid(), evt.Id, 1, null, 0)], [], null), "failed-image-cover", default);
+
+        Assert.Equal(image.Id, result.Storyline.CoverMediaAssetId);
+        _db.ChangeTracker.Clear();
+        var summaries = await _service.ListAsync(31, null, null, null, null, 20, null, default);
+        Assert.Equal(image.Id, Assert.Single(summaries).CoverMediaAssetId);
     }
 
     [Fact]

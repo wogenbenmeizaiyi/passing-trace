@@ -105,15 +105,19 @@ watch(
           >
           <fieldset class="date-range">
             <legend>日期范围</legend>
-            <label
-              ><span class="sr-only">开始日期</span
-              ><input v-model="from" type="date" aria-label="开始日期" @change="load"
-            /></label>
+            <label>
+              <span class="sr-only">开始日期</span>
+              <span class="date-input" :class="{ 'has-value': from }" data-placeholder="开始日期">
+                <input v-model="from" type="date" aria-label="开始日期" @change="load" />
+              </span>
+            </label>
             <span aria-hidden="true">至</span>
-            <label
-              ><span class="sr-only">结束日期</span
-              ><input v-model="to" type="date" aria-label="结束日期" @change="load"
-            /></label>
+            <label>
+              <span class="sr-only">结束日期</span>
+              <span class="date-input" :class="{ 'has-value': to }" data-placeholder="结束日期">
+                <input v-model="to" type="date" aria-label="结束日期" @change="load" />
+              </span>
+            </label>
           </fieldset>
           <label class="filter-field"
             ><span>分类</span
@@ -332,9 +336,33 @@ watch(
   padding-right: 9px;
   font-variant-numeric: tabular-nums;
 }
+.date-input {
+  width: 100%;
+  min-width: 0;
+  position: relative;
+}
+.date-input::before {
+  content: attr(data-placeholder);
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  left: 13px;
+  transform: translateY(-50%);
+  pointer-events: none;
+  color: var(--ink-tertiary);
+  font-size: 12px;
+}
+.date-input.has-value::before,
+.date-input:focus-within::before {
+  content: none;
+}
+.date-input:not(.has-value):not(:focus-within) input::-webkit-datetime-edit {
+  color: transparent;
+}
 .story-filter input[type='date']::-webkit-calendar-picker-indicator {
   cursor: pointer;
-  opacity: 0.64;
+  opacity: 0.72;
+  filter: var(--calendar-icon-filter, none);
 }
 .clear-filter {
   min-height: 44px;
