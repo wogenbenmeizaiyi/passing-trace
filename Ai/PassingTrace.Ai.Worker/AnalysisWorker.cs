@@ -150,6 +150,12 @@ public sealed class AnalysisWorker(
                 case "event.deleted":
                     await pipeline.RemoveEventFromSearchAsync(message, cancellationToken);
                     break;
+                case "storyline.index":
+                    await pipeline.IndexStorylineAsync(message, cancellationToken);
+                    break;
+                case "storyline.removed":
+                    await pipeline.RemoveStorylineFromSearchAsync(message, cancellationToken);
+                    break;
                 default:
                     throw new InvalidOperationException($"未知 Outbox 类型：{message.MessageType}");
             }

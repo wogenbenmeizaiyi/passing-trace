@@ -447,5 +447,9 @@ public sealed class EventService
         }
 
         public Task IncrementWatermarkAsync(long userId, DateTimeOffset now, CancellationToken cancellationToken) => Task.CompletedTask;
+        public void EnqueueStoryline(long userId, Guid storylineId, int revision, DateTimeOffset now,
+            string messageType = "storyline.index", int priority = 110)
+        {
+        }
     }
 }

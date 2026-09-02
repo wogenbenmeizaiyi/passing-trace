@@ -43,6 +43,7 @@ function download(event: MouseEvent) {
       </nav>
       <nav v-else class="site-nav site-nav--app" aria-label="应用导航">
         <RouterLink to="/events">我的记录</RouterLink
+        ><RouterLink to="/storylines">故事线</RouterLink
         ><RouterLink to="/assistant">问问 AI</RouterLink>
       </nav>
 

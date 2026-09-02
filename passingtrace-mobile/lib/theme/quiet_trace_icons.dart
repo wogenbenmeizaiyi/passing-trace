@@ -8,6 +8,7 @@ enum TraceGlyph {
   journal,
   sparkle,
   history,
+  newChat,
   chevronRight,
   chevronLeft,
   chevronDown,
@@ -40,6 +41,7 @@ enum TraceGlyph {
   externalLink,
   play,
   pause,
+  storyline,
 }
 
 class TraceIcon extends StatelessWidget {
@@ -103,11 +105,8 @@ class _TraceIconPainter extends CustomPainter {
     void draw(Path value) => canvas.drawPath(value, paint);
     void circle(double x, double y, double radius) =>
         canvas.drawCircle(Offset(x, y), radius, paint);
-    void line(double x1, double y1, double x2, double y2) => canvas.drawLine(
-      Offset(x1, y1),
-      Offset(x2, y2),
-      paint,
-    );
+    void line(double x1, double y1, double x2, double y2) =>
+        canvas.drawLine(Offset(x1, y1), Offset(x2, y2), paint);
 
     switch (glyph) {
       case TraceGlyph.menu:
@@ -169,14 +168,52 @@ class _TraceIconPainter extends CustomPainter {
         );
         line(12, 8, 12, 12);
         line(12, 12, 14.7, 13.7);
+      case TraceGlyph.newChat:
+        draw(
+          path()
+            ..moveTo(5, 5)
+            ..quadraticBezierTo(5, 3.5, 6.5, 3.5)
+            ..lineTo(17.5, 3.5)
+            ..quadraticBezierTo(19, 3.5, 19, 5)
+            ..lineTo(19, 14)
+            ..quadraticBezierTo(19, 15.5, 17.5, 15.5)
+            ..lineTo(10, 15.5)
+            ..lineTo(6, 19)
+            ..lineTo(6.8, 15.5)
+            ..lineTo(6.5, 15.5)
+            ..quadraticBezierTo(5, 15.5, 5, 14)
+            ..close(),
+        );
+        line(12, 6.5, 12, 12.5);
+        line(9, 9.5, 15, 9.5);
       case TraceGlyph.chevronRight:
-        draw(path()..moveTo(9, 6)..lineTo(15, 12)..lineTo(9, 18));
+        draw(
+          path()
+            ..moveTo(9, 6)
+            ..lineTo(15, 12)
+            ..lineTo(9, 18),
+        );
       case TraceGlyph.chevronLeft:
-        draw(path()..moveTo(15, 6)..lineTo(9, 12)..lineTo(15, 18));
+        draw(
+          path()
+            ..moveTo(15, 6)
+            ..lineTo(9, 12)
+            ..lineTo(15, 18),
+        );
       case TraceGlyph.chevronDown:
-        draw(path()..moveTo(6, 9)..lineTo(12, 15)..lineTo(18, 9));
+        draw(
+          path()
+            ..moveTo(6, 9)
+            ..lineTo(12, 15)
+            ..lineTo(18, 9),
+        );
       case TraceGlyph.chevronUp:
-        draw(path()..moveTo(6, 15)..lineTo(12, 9)..lineTo(18, 15));
+        draw(
+          path()
+            ..moveTo(6, 15)
+            ..lineTo(12, 9)
+            ..lineTo(18, 15),
+        );
       case TraceGlyph.send:
         draw(
           path()
@@ -268,12 +305,36 @@ class _TraceIconPainter extends CustomPainter {
           );
         }
       case TraceGlyph.logout:
-        draw(path()..moveTo(10, 5)..lineTo(5, 5)..lineTo(5, 19)..lineTo(10, 19));
-        draw(path()..moveTo(14, 8)..lineTo(18, 12)..lineTo(14, 16));
+        draw(
+          path()
+            ..moveTo(10, 5)
+            ..lineTo(5, 5)
+            ..lineTo(5, 19)
+            ..lineTo(10, 19),
+        );
+        draw(
+          path()
+            ..moveTo(14, 8)
+            ..lineTo(18, 12)
+            ..lineTo(14, 16),
+        );
         line(9, 12, 18, 12);
       case TraceGlyph.note:
-        draw(path()..moveTo(5, 3)..lineTo(16, 3)..lineTo(19, 6)..lineTo(19, 21)..lineTo(5, 21)..close());
-        draw(path()..moveTo(15, 3)..lineTo(15, 7)..lineTo(19, 7));
+        draw(
+          path()
+            ..moveTo(5, 3)
+            ..lineTo(16, 3)
+            ..lineTo(19, 6)
+            ..lineTo(19, 21)
+            ..lineTo(5, 21)
+            ..close(),
+        );
+        draw(
+          path()
+            ..moveTo(15, 3)
+            ..lineTo(15, 7)
+            ..lineTo(19, 7),
+        );
         line(8, 11, 16, 11);
         line(8, 15, 14, 15);
       case TraceGlyph.search:
@@ -291,7 +352,10 @@ class _TraceIconPainter extends CustomPainter {
         line(19, 12, 22, 12);
       case TraceGlyph.calendar:
         canvas.drawRRect(
-          RRect.fromRectAndRadius(const Rect.fromLTWH(3, 5, 18, 16), const Radius.circular(2)),
+          RRect.fromRectAndRadius(
+            const Rect.fromLTWH(3, 5, 18, 16),
+            const Radius.circular(2),
+          ),
           paint,
         );
         line(8, 3, 8, 7);
@@ -301,7 +365,12 @@ class _TraceIconPainter extends CustomPainter {
         draw(
           path()
             ..moveTo(12, 3)
-            ..arcTo(const Rect.fromLTWH(3, 3, 18, 18), -math.pi / 2, math.pi * 1.75, false)
+            ..arcTo(
+              const Rect.fromLTWH(3, 3, 18, 18),
+              -math.pi / 2,
+              math.pi * 1.75,
+              false,
+            )
             ..cubicTo(13.5, 21, 15, 19.2, 13.8, 18)
             ..cubicTo(12.6, 16.8, 13.4, 15, 15.5, 15)
             ..lineTo(18, 15)
@@ -313,7 +382,10 @@ class _TraceIconPainter extends CustomPainter {
         canvas.drawCircle(const Offset(14.5, 7.5), 1, fill);
       case TraceGlyph.monitor:
         canvas.drawRRect(
-          RRect.fromRectAndRadius(const Rect.fromLTWH(3, 4, 18, 13), const Radius.circular(2)),
+          RRect.fromRectAndRadius(
+            const Rect.fromLTWH(3, 4, 18, 13),
+            const Radius.circular(2),
+          ),
           paint,
         );
         line(8, 21, 16, 21);
@@ -339,48 +411,168 @@ class _TraceIconPainter extends CustomPainter {
             ..close(),
         );
       case TraceGlyph.check:
-        draw(path()..moveTo(5, 12.5)..lineTo(9.2, 16.7)..lineTo(19, 7));
+        draw(
+          path()
+            ..moveTo(5, 12.5)
+            ..lineTo(9.2, 16.7)
+            ..lineTo(19, 7),
+        );
       case TraceGlyph.filter:
         line(4, 6, 20, 6);
         line(7, 12, 17, 12);
         line(10, 18, 14, 18);
       case TraceGlyph.image:
         canvas.drawRRect(
-          RRect.fromRectAndRadius(const Rect.fromLTWH(3, 4, 18, 16), const Radius.circular(2)),
+          RRect.fromRectAndRadius(
+            const Rect.fromLTWH(3, 4, 18, 16),
+            const Radius.circular(2),
+          ),
           paint,
         );
         circle(16, 9, 2);
-        draw(path()..moveTo(5, 18)..lineTo(10, 12)..lineTo(13, 15)..lineTo(16, 12)..lineTo(21, 18));
+        draw(
+          path()
+            ..moveTo(5, 18)
+            ..lineTo(10, 12)
+            ..lineTo(13, 15)
+            ..lineTo(16, 12)
+            ..lineTo(21, 18),
+        );
       case TraceGlyph.video:
         canvas.drawRRect(
-          RRect.fromRectAndRadius(const Rect.fromLTWH(3, 5, 14, 14), const Radius.circular(2)),
+          RRect.fromRectAndRadius(
+            const Rect.fromLTWH(3, 5, 14, 14),
+            const Radius.circular(2),
+          ),
           paint,
         );
-        draw(path()..moveTo(17, 10)..lineTo(21, 7.5)..lineTo(21, 16.5)..lineTo(17, 14));
+        draw(
+          path()
+            ..moveTo(17, 10)
+            ..lineTo(21, 7.5)
+            ..lineTo(21, 16.5)
+            ..lineTo(17, 14),
+        );
       case TraceGlyph.file:
-        draw(path()..moveTo(6, 3)..lineTo(15, 3)..lineTo(19, 7)..lineTo(19, 21)..lineTo(6, 21)..close());
-        draw(path()..moveTo(15, 3)..lineTo(15, 7)..lineTo(19, 7));
+        draw(
+          path()
+            ..moveTo(6, 3)
+            ..lineTo(15, 3)
+            ..lineTo(19, 7)
+            ..lineTo(19, 21)
+            ..lineTo(6, 21)
+            ..close(),
+        );
+        draw(
+          path()
+            ..moveTo(15, 3)
+            ..lineTo(15, 7)
+            ..lineTo(19, 7),
+        );
       case TraceGlyph.refresh:
-        draw(path()..moveTo(19, 8)..lineTo(19, 4)..lineTo(15, 4));
-        draw(path()..moveTo(19, 4)..arcTo(const Rect.fromLTWH(4, 4, 16, 16), -math.pi / 2, math.pi * 1.65, false));
+        draw(
+          path()
+            ..moveTo(19, 8)
+            ..lineTo(19, 4)
+            ..lineTo(15, 4),
+        );
+        draw(
+          path()
+            ..moveTo(19, 4)
+            ..arcTo(
+              const Rect.fromLTWH(4, 4, 16, 16),
+              -math.pi / 2,
+              math.pi * 1.65,
+              false,
+            ),
+        );
       case TraceGlyph.edit:
-        draw(path()..moveTo(4, 20)..lineTo(8, 19)..lineTo(19, 8)..lineTo(16, 5)..lineTo(5, 16)..close());
+        draw(
+          path()
+            ..moveTo(4, 20)
+            ..lineTo(8, 19)
+            ..lineTo(19, 8)
+            ..lineTo(16, 5)
+            ..lineTo(5, 16)
+            ..close(),
+        );
         line(14.5, 6.5, 17.5, 9.5);
       case TraceGlyph.delete:
-        draw(path()..moveTo(5, 7)..lineTo(19, 7)..moveTo(9, 7)..lineTo(9, 4)..lineTo(15, 4)..lineTo(15, 7)..moveTo(7, 7)..lineTo(8, 21)..lineTo(16, 21)..lineTo(17, 7));
+        draw(
+          path()
+            ..moveTo(5, 7)
+            ..lineTo(19, 7)
+            ..moveTo(9, 7)
+            ..lineTo(9, 4)
+            ..lineTo(15, 4)
+            ..lineTo(15, 7)
+            ..moveTo(7, 7)
+            ..lineTo(8, 21)
+            ..lineTo(16, 21)
+            ..lineTo(17, 7),
+        );
         line(11, 11, 11, 17);
         line(14, 11, 14, 17);
       case TraceGlyph.directions:
-        draw(path()..moveTo(12, 3)..lineTo(21, 12)..lineTo(12, 21)..lineTo(3, 12)..close());
-        draw(path()..moveTo(9, 13)..lineTo(9, 10)..lineTo(15, 10)..moveTo(13, 8)..lineTo(15, 10)..lineTo(13, 12));
+        draw(
+          path()
+            ..moveTo(12, 3)
+            ..lineTo(21, 12)
+            ..lineTo(12, 21)
+            ..lineTo(3, 12)
+            ..close(),
+        );
+        draw(
+          path()
+            ..moveTo(9, 13)
+            ..lineTo(9, 10)
+            ..lineTo(15, 10)
+            ..moveTo(13, 8)
+            ..lineTo(15, 10)
+            ..lineTo(13, 12),
+        );
       case TraceGlyph.externalLink:
-        draw(path()..moveTo(13, 4)..lineTo(20, 4)..lineTo(20, 11)..moveTo(20, 4)..lineTo(11, 13));
-        draw(path()..moveTo(18, 14)..lineTo(18, 20)..lineTo(4, 20)..lineTo(4, 6)..lineTo(10, 6));
+        draw(
+          path()
+            ..moveTo(13, 4)
+            ..lineTo(20, 4)
+            ..lineTo(20, 11)
+            ..moveTo(20, 4)
+            ..lineTo(11, 13),
+        );
+        draw(
+          path()
+            ..moveTo(18, 14)
+            ..lineTo(18, 20)
+            ..lineTo(4, 20)
+            ..lineTo(4, 6)
+            ..lineTo(10, 6),
+        );
       case TraceGlyph.play:
-        draw(path()..moveTo(8, 5)..lineTo(19, 12)..lineTo(8, 19)..close());
+        draw(
+          path()
+            ..moveTo(8, 5)
+            ..lineTo(19, 12)
+            ..lineTo(8, 19)
+            ..close(),
+        );
       case TraceGlyph.pause:
         line(9, 6, 9, 18);
         line(15, 6, 15, 18);
+      case TraceGlyph.storyline:
+        circle(6, 6, 2);
+        circle(18, 12, 2);
+        circle(6, 18, 2);
+        draw(
+          path()
+            ..moveTo(8, 6)
+            ..cubicTo(13, 6, 12, 12, 16, 12),
+        );
+        draw(
+          path()
+            ..moveTo(8, 18)
+            ..cubicTo(13, 18, 12, 12, 16, 12),
+        );
     }
     canvas.restore();
   }

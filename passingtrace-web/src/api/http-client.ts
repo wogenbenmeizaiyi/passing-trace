@@ -169,6 +169,9 @@ export const httpClient = {
   patch<T>(path: string, opts: RequestOptions = {}): Promise<T> {
     return send<T>('PATCH', path, opts)
   },
+  put<T>(path: string, opts: RequestOptions = {}): Promise<T> {
+    return send<T>('PUT', path, opts)
+  },
   delete<T = void>(path: string, opts: RequestOptions = {}): Promise<T> {
     return send<T>('DELETE', path, opts)
   },

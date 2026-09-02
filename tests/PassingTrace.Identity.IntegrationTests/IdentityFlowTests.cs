@@ -28,6 +28,19 @@ public sealed class IdentityFlowTests(IdentityWebApplicationFactory factory)
     }
 
     [Fact]
+    public async Task IdentityPages_UseTheSameThemeTokensAsTheWebClient()
+    {
+        using var client = CreateBrowserClient();
+
+        var css = await client.GetStringAsync("/css/identity.css");
+
+        Assert.Contains("--canvas: #e9ede8", css, StringComparison.Ordinal);
+        Assert.Contains("--primary: #2f6b57", css, StringComparison.Ordinal);
+        Assert.Contains(".qr-login__visual", css, StringComparison.Ordinal);
+        Assert.DoesNotContain("#cf4a36", css, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task MobileRegistration_IssuesValidJwt_AndRefreshes()
     {
         using var client = CreateBrowserClient();
@@ -83,6 +96,10 @@ public sealed class IdentityFlowTests(IdentityWebApplicationFactory factory)
         qrPage.EnsureSuccessStatusCode();
         var qrHtml = await qrPage.Content.ReadAsStringAsync();
         Assert.Contains("<svg", qrHtml, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("class=\"brand-mark\"", qrHtml, StringComparison.Ordinal);
+        Assert.Contains("class=\"qr-login__visual\"", qrHtml, StringComparison.Ordinal);
+        Assert.Contains("data-state=\"waiting\"", qrHtml, StringComparison.Ordinal);
+        Assert.Contains("role=\"status\"", qrHtml, StringComparison.Ordinal);
         var antiforgery = ExtractAntiforgeryToken(qrHtml);
         var parsedQr = ParseQrLocation(qrLocation);
 

@@ -109,6 +109,14 @@ public sealed class EventRepository(TraceDbContext dbContext) : IEventRepository
                 x.Type == EventLabelType.BehaviorTag && x.TaxonomyKey == key));
         }
 
+        if (!string.IsNullOrWhiteSpace(query.Query))
+        {
+            var text = query.Query.Trim();
+            events = events.Where(e =>
+                (e.Title != null && EF.Functions.Like(e.Title, $"%{text}%")) ||
+                (e.RawContent != null && EF.Functions.Like(e.RawContent, $"%{text}%")));
+        }
+
         return await events
             .OrderByDescending(e => e.CreatedAt)
             .ThenByDescending(e => e.Id)

@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 using PassingTrace.Core.Ai;
 using PassingTrace.Core.Events;
+using PassingTrace.Core.Storylines;
 using PassingTrace.Infrastructure;
 using Pgvector;
 using Pgvector.EntityFrameworkCore;
@@ -24,12 +25,121 @@ public sealed class PersonalRecordTools(
     private readonly List<PlaceEvidence> _placeEvidence = [];
     private readonly HashSet<long> _retrievedLocationIds = [];
     private object? _navigationTarget;
+    private readonly List<StorylineEvidence> _storylineEvidence = [];
+    private readonly HashSet<Guid> _retrievedStorylineIds = [];
 
     public EvidenceBundle Snapshot => new(
         _recordEvidence.GroupBy(x => x.EventId).Select(x => x.First()).ToArray(),
         _memoryEvidence.GroupBy(x => x.MemoryId).Select(x => x.First()).ToArray(),
         _aggregateEvidence, Places: _placeEvidence.GroupBy(x => x.LocationId).Select(x => x.First()).ToArray(),
-        NavigationTarget: _navigationTarget);
+        NavigationTarget: _navigationTarget,
+        Storylines: _storylineEvidence.GroupBy(x => x.StorylineId).Select(x => x.First()).ToArray());
+
+    [Description("搜索当前登录用户自己的故事线，适合旅行过程、项目阶段、活动纪实和生命周期问题；不接受 userId。")]
+    public async Task<IReadOnlyList<StorylineEvidence>> SearchMyStorylinesAsync(
+        [Description("自然语言关键词或问题")] string query,
+        [Description("故事线主分类 key，可空")] string? category = null,
+        [Description("Ongoing 或 Completed，可空")] string? status = null,
+        [Description("最多返回 1-10 条")] int limit = 5,
+        CancellationToken cancellationToken = default)
+    {
+        limit = Math.Clamp(limit, 1, 10);
+        var userId = currentUser.UserId;
+        var indexes = db.StorylineSearchIndexes.AsNoTracking()
+            .Where(x => x.UserId == userId && x.IsCurrent &&
+                db.Storylines.Any(s => s.Id == x.StorylineId && s.UserId == userId && s.DeletedAt == null));
+        if (!string.IsNullOrWhiteSpace(category))
+        {
+            var key = category.Trim().ToLowerInvariant();
+            indexes = indexes.Where(x => db.Storylines.Any(s => s.Id == x.StorylineId && s.UserId == userId && s.CategoryKey == key));
+        }
+        if (Enum.TryParse<StorylineStatus>(status, true, out var parsedStatus))
+            indexes = indexes.Where(x => db.Storylines.Any(s => s.Id == x.StorylineId && s.UserId == userId && s.Status == parsedStatus));
+        query = query?.Trim() ?? string.Empty;
+        var scores = new Dictionary<Guid, double>();
+        var recent = await indexes.OrderByDescending(x => x.UpdatedAt).Take(30).Select(x => x.StorylineId).ToListAsync(cancellationToken);
+        AddRanking(scores, recent);
+        if (query.Length > 0)
+        {
+            var text = await indexes.OrderByDescending(x => EF.Functions.TrigramsSimilarity(x.RetrievalText, query))
+                .Take(30).Select(x => x.StorylineId).ToListAsync(cancellationToken);
+            AddRanking(scores, text);
+            try
+            {
+                var generated = await embeddingGenerator.GenerateAsync([query], cancellationToken: cancellationToken);
+                var vector = new Vector(generated[0].Vector);
+                var semantic = await indexes.Where(x => EF.Property<Vector?>(x, "Embedding") != null)
+                    .OrderBy(x => EF.Property<Vector>(x, "Embedding").CosineDistance(vector)).Take(30)
+                    .Select(x => x.StorylineId).ToListAsync(cancellationToken);
+                AddRanking(scores, semantic);
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException) { }
+        }
+        var ids = scores.OrderByDescending(x => x.Value).Take(limit).Select(x => x.Key).ToArray();
+        var storylines = await db.Storylines.AsNoTracking().Where(x => x.UserId == userId && ids.Contains(x.Id) && x.DeletedAt == null)
+            .ToListAsync(cancellationToken);
+        var revisions = await db.StorylineRevisions.AsNoTracking().Include(x => x.Stages)
+            .Include(x => x.Nodes).ThenInclude(x => x.Event).ThenInclude(x => x.SourceRevisions)
+            .Include(x => x.Edges).Where(x => ids.Contains(x.StorylineId)).AsSplitQuery().ToListAsync(cancellationToken);
+        var indexRows = await indexes.Where(x => ids.Contains(x.StorylineId)).ToListAsync(cancellationToken);
+        var evidence = ids.Select(id =>
+        {
+            var story = storylines.Single(x => x.Id == id);
+            var revision = revisions.Single(x => x.StorylineId == id && x.Revision == story.CurrentRevision);
+            var index = indexRows.Single(x => x.StorylineId == id && x.Revision == story.CurrentRevision);
+            var stages = revision.Stages.OrderBy(x => x.SemanticOrder).Select(stage => new StorylineStageEvidence(
+                stage.Key, stage.Title, revision.Nodes.Where(x => x.StageKey == stage.Key).OrderBy(x => x.SemanticOrder)
+                    .Select(x => PinnedSource(x).Title ?? "无标题记录").ToArray())).ToArray();
+            return new StorylineEvidence(id, revision.Revision, story.Title, StorylineTaxonomy.Label(story.CategoryKey),
+                story.Status.ToString(), Snippet(index.RetrievalText, query), story.RangeStart, story.RangeEnd, stages,
+                revision.Nodes.Where(x => x.Event.DeletedAt == null).Select(x => x.EventId).Distinct().ToArray(), scores[id]);
+        }).ToArray();
+        foreach (var item in evidence) { _storylineEvidence.Add(item); _retrievedStorylineIds.Add(item.StorylineId); }
+        return evidence;
+    }
+
+    [Description("读取本轮已经检索到的故事线阶段、拓扑关系和固定记录修订证据。")]
+    public async Task<object?> GetMyStorylineEvidenceAsync(Guid storylineId, CancellationToken cancellationToken = default)
+    {
+        if (!_retrievedStorylineIds.Contains(storylineId)) return null;
+        var userId = currentUser.UserId;
+        var story = await db.Storylines.AsNoTracking().FirstOrDefaultAsync(
+            x => x.Id == storylineId && x.UserId == userId && x.DeletedAt == null, cancellationToken);
+        if (story is null) return null;
+        var revision = await db.StorylineRevisions.AsNoTracking().Include(x => x.Stages)
+            .Include(x => x.Nodes).ThenInclude(x => x.Event).ThenInclude(x => x.SourceRevisions)
+            .Include(x => x.Edges).FirstAsync(x => x.StorylineId == storylineId && x.Revision == story.CurrentRevision, cancellationToken);
+        return new
+        {
+            storylineId,
+            revision = revision.Revision,
+            story.Title,
+            stages = revision.Stages.OrderBy(x => x.SemanticOrder).Select(x => new { x.Key, x.Title, x.SemanticOrder }),
+            nodes = revision.Nodes.OrderBy(x => x.SemanticOrder).Where(x => x.Event.DeletedAt == null)
+                .Select(x => new
+                {
+                    x.Key,
+                    x.EventId,
+                    x.SourceRevision,
+                    title = PinnedSource(x).Title,
+                    rawContent = PinnedSource(x).RawContent,
+                    occurredAt = PinnedSource(x).HappenedAt ?? PinnedSource(x).PlannedAt,
+                    kind = x.Event.EventKind.ToString(),
+                    status = x.Event.Status.ToString(),
+                    x.StageKey,
+                }),
+            edges = revision.Edges.Select(x => new { x.SourceNodeKey, x.TargetNodeKey, relation = x.RelationType.ToString(), x.Label }),
+        };
+    }
+
+    private static SourceRevision PinnedSource(StorylineNode node) =>
+        node.Event.SourceRevisions.Single(x => x.Revision == node.SourceRevision);
+
+    private static void AddRanking(Dictionary<Guid, double> scores, IReadOnlyList<Guid> ranking)
+    {
+        for (var rank = 0; rank < ranking.Count; rank++)
+            scores[ranking[rank]] = scores.GetValueOrDefault(ranking[rank]) + 1d / (61 + rank);
+    }
 
     [Description("搜索当前登录用户自己的记录。支持关键词、时间、记录类型、状态、语义类别和地点；返回已排序的证据，不接受 userId。")]
     public async Task<EvidenceBundle> SearchMyRecordsAsync(

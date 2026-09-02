@@ -14,4 +14,5 @@ public sealed record EventListQuery(
     int Limit = 50,
     long? Cursor = null,
     string? CategoryKey = null,
-    IReadOnlyList<string>? TagKeys = null);
+    IReadOnlyList<string>? TagKeys = null,
+    string? Query = null);

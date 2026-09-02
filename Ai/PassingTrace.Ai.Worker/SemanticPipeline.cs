@@ -7,6 +7,7 @@ using Microsoft.Extensions.Options;
 using PassingTrace.Core.Ai;
 using PassingTrace.Core.Events;
 using PassingTrace.Core.Media;
+using PassingTrace.Core.Storylines;
 using PassingTrace.Events.Api.Ai;
 using PassingTrace.Events.Api.Media;
 using PassingTrace.Infrastructure;
@@ -42,6 +43,34 @@ public sealed class SemanticPipeline(
         expenses 仅在金额和币种足够明确时输出；memories 只输出可由本记录证据支持、以后有稳定价值的偏好/背景/习惯/目标/约束。
         每条 memory 的 evidence 必须说明来自正文或哪个 mediaId。图片描述写入 images，不能把图片里看不清的内容当事实。
         """;
+
+    public async Task IndexStorylineAsync(OutboxMessage message, CancellationToken cancellationToken)
+    {
+        using var payload = JsonDocument.Parse(message.PayloadJson);
+        var storylineId = payload.RootElement.GetProperty("storylineId").GetGuid();
+        var revision = payload.RootElement.GetProperty("revision").GetInt32();
+        var storyline = await db.Storylines.AsNoTracking().FirstOrDefaultAsync(
+            x => x.Id == storylineId && x.UserId == message.UserId, cancellationToken);
+        if (storyline is null || storyline.DeletedAt is not null || storyline.CurrentRevision != revision) return;
+        var index = await db.StorylineSearchIndexes.FirstOrDefaultAsync(
+            x => x.StorylineId == storylineId && x.UserId == message.UserId && x.Revision == revision && x.IsCurrent,
+            cancellationToken);
+        if (index is null || string.IsNullOrWhiteSpace(index.RetrievalText)) return;
+        var generated = await embeddingGenerator.GenerateAsync([index.RetrievalText], cancellationToken: cancellationToken);
+        db.Entry(index).Property<Vector?>("Embedding").CurrentValue = new Vector(generated[0].Vector);
+        index.UpdatedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task RemoveStorylineFromSearchAsync(OutboxMessage message, CancellationToken cancellationToken)
+    {
+        using var payload = JsonDocument.Parse(message.PayloadJson);
+        var storylineId = payload.RootElement.GetProperty("storylineId").GetGuid();
+        var indexes = await db.StorylineSearchIndexes.Where(x => x.StorylineId == storylineId && x.UserId == message.UserId)
+            .ToListAsync(cancellationToken);
+        foreach (var index in indexes) index.IsCurrent = false;
+        await db.SaveChangesAsync(cancellationToken);
+    }
 
     public async Task ProcessMediaAsync(OutboxMessage message, CancellationToken cancellationToken)
     {

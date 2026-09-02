@@ -10,8 +10,9 @@
 > `PassingTrace_多媒体与AI记忆运行说明_v1.0.md`。Event 创建/修改现在支持
 > `mediaIds`，标题、正文与附件至少存在一种即可。
 >
-> 计划中的 Event 地点、按地点 AI 检索和历史地点导航契约见仓库根目录的
-> `PassingTrace_高德定位与历史地点导航技术方案_v0.1.md`；该部分尚未实现，不属于当前 v1.0 接口。
+> Event 地点、按地点 AI 检索和历史地点导航契约见仓库根目录的
+> `PassingTrace_高德定位与历史地点导航技术方案_v0.1.md`。故事线接口与跨端语义图约束见
+> `PassingTrace_故事线跨端技术方案_v1.0.md`。
 
 本文档描述 `PassingTrace.Events.Api` 暴露的 HTTP 接口，以及客户端从登录、获取令牌到完成「记录 / 查看 / 修改 / 删除」的完整交互链路。实现界面时只需遵循本文契约，无需了解后端内部实现。
 
@@ -435,6 +436,17 @@ App 启动
 - `GET /api/v1/app-updates/android/latest/download`：产品首页下载入口，无需登录。后端读取私有 S3 中的 `releases/android/latest.json`，为清单指向的 APK 生成短效预签名 URL，并返回 `302` 重定向。
 - APK 与发布清单位于私有桶的 `releases/android/` 前缀。客户端不持有 S3 凭据，也不把对象 Key 当作公开地址。
 - 发布顺序必须是先上传 APK、确认成功后再覆盖 `latest.json`，避免下载按钮指向尚未完成的对象。
+
+### 6.9 故事线
+
+- `GET /api/v1/storyline-taxonomy`：故事线主分类与关系类型词表。
+- `GET/POST /api/v1/storylines`：分页筛选与创建；列表支持 `status`、`categoryKey`、`from`、`to`。
+- `GET/PUT/DELETE /api/v1/storylines/{id}`：读取当前修订、完整图保存和软删除。
+- `GET /api/v1/storylines/{id}/revisions` 与 `GET .../{revision}`：历史列表和不可变修订详情。
+- `POST /api/v1/storylines/{id}/revisions/{revision}/restore`：恢复历史修订。
+- `POST /api/v1/storylines/{id}/changes`：手机白名单增量操作。
+
+故事线写请求需要 `Idempotency-Key`；修改、删除、恢复和增量操作还需要 `If-Match`。节点固定引用 `eventId + sourceRevision`，响应另外返回当前最新修订和 `revisionState`。手机按 `outline[]` 阅读拓扑结构，Web 才使用可选 `webCanvasLayout`，坐标不参与业务校验、统计或 AI。
 
 ---
 

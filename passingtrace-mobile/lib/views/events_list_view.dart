@@ -42,6 +42,10 @@ class _EventsListViewState extends State<EventsListView> {
   String? _error;
   EventTaxonomyModel? _taxonomy;
   EventFilterSelection _filters = EventFilterSelection();
+  final Set<int> _collapsedYears = {};
+  final Set<String> _collapsedMonths = {};
+  final Set<int> _knownYears = {};
+  final Set<String> _knownMonths = {};
   bool _ownsApi = false;
   bool _apiInitialized = false;
 
@@ -108,6 +112,7 @@ class _EventsListViewState extends State<EventsListView> {
           ..clear()
           ..addAll(page.items);
         _nextCursor = page.nextCursor;
+        _syncArchiveState(reset: true);
       });
     } on EventApiException catch (error) {
       if (!mounted) return;
@@ -146,6 +151,7 @@ class _EventsListViewState extends State<EventsListView> {
       setState(() {
         _items.addAll(page.items);
         _nextCursor = page.nextCursor;
+        _syncArchiveState();
       });
     } on EventApiException catch (error) {
       if (!mounted) return;
@@ -294,25 +300,64 @@ class _EventsListViewState extends State<EventsListView> {
   List<_TimelineEntry> _timelineEntries() {
     final sorted = [..._items]
       ..sort((a, b) => _eventTime(b).compareTo(_eventTime(a)));
-    final groups = <DateTime, List<EventModel>>{};
+    final years = <int, Map<int, Map<DateTime, List<EventModel>>>>{};
     for (final event in sorted) {
       final time = _eventTime(event);
       final day = DateTime(time.year, time.month, time.day);
-      groups.putIfAbsent(day, () => []).add(event);
+      years
+          .putIfAbsent(time.year, () => {})
+          .putIfAbsent(time.month, () => {})
+          .putIfAbsent(day, () => [])
+          .add(event);
     }
 
     final entries = <_TimelineEntry>[
       _IntroEntry(hasFilters: _hasActiveFilters),
     ];
-    for (final entry in groups.entries) {
-      entries.add(_DayEntry(entry.key, entry.value.length));
-      for (var index = 0; index < entry.value.length; index++) {
+    for (final yearEntry in years.entries) {
+      final yearCount = yearEntry.value.values.fold<int>(
+        0,
+        (sum, days) =>
+            sum +
+            days.values.fold<int>(
+              0,
+              (daySum, events) => daySum + events.length,
+            ),
+      );
+      entries.add(
+        _YearEntry(
+          yearEntry.key,
+          yearCount,
+          collapsed: _collapsedYears.contains(yearEntry.key),
+        ),
+      );
+      if (_collapsedYears.contains(yearEntry.key)) continue;
+      for (final monthEntry in yearEntry.value.entries) {
+        final monthKey = _monthKey(yearEntry.key, monthEntry.key);
+        final monthCount = monthEntry.value.values.fold<int>(
+          0,
+          (sum, events) => sum + events.length,
+        );
         entries.add(
-          _EventEntry(
-            entry.value[index],
-            isLastInDay: index == entry.value.length - 1,
+          _MonthEntry(
+            yearEntry.key,
+            monthEntry.key,
+            monthCount,
+            collapsed: _collapsedMonths.contains(monthKey),
           ),
         );
+        if (_collapsedMonths.contains(monthKey)) continue;
+        for (final dayEntry in monthEntry.value.entries) {
+          entries.add(_DayEntry(dayEntry.key, dayEntry.value.length));
+          for (var index = 0; index < dayEntry.value.length; index++) {
+            entries.add(
+              _EventEntry(
+                dayEntry.value[index],
+                isLastInDay: index == dayEntry.value.length - 1,
+              ),
+            );
+          }
+        }
       }
     }
     entries.add(const _FooterEntry());
@@ -321,6 +366,8 @@ class _EventsListViewState extends State<EventsListView> {
 
   Widget _buildEntry(_TimelineEntry entry) => switch (entry) {
     _IntroEntry() => _buildIntro(entry),
+    _YearEntry() => _buildYearHeader(entry),
+    _MonthEntry() => _buildMonthHeader(entry),
     _DayEntry() => _buildDayHeader(entry),
     _EventEntry() => _buildTimelineEvent(entry),
     _FooterEntry() => _buildFooter(),
@@ -328,14 +375,13 @@ class _EventsListViewState extends State<EventsListView> {
 
   Widget _buildIntro(_IntroEntry entry) {
     final colors = context.traceColors;
-    final now = DateTime.now();
     return Padding(
       padding: const EdgeInsets.only(bottom: 26),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '${_monthLabel(now.month)}月的生活',
+            '时间里的生活',
             style: TextStyle(
               color: colors.ink,
               fontSize: 26,
@@ -346,10 +392,137 @@ class _EventsListViewState extends State<EventsListView> {
           ),
           const SizedBox(height: 4),
           Text(
-            entry.hasFilters ? '正在显示筛选后的经历' : '你的经历按发生时间自然排列',
+            entry.hasFilters ? '正在显示筛选后的经历' : '按年份和月份展开，回看每一段生活',
             style: TextStyle(color: colors.inkSecondary, fontSize: 13),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildYearHeader(_YearEntry entry) {
+    final colors = context.traceColors;
+    final motionDuration =
+        MediaQuery.maybeOf(context)?.disableAnimations ?? false
+        ? Duration.zero
+        : const Duration(milliseconds: 140);
+    return Padding(
+      key: ValueKey('events-year-${entry.year}'),
+      padding: const EdgeInsets.only(top: 2, bottom: 8),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(12),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => setState(() {
+            if (!_collapsedYears.remove(entry.year)) {
+              _collapsedYears.add(entry.year);
+            }
+          }),
+          child: Semantics(
+            button: true,
+            expanded: !entry.collapsed,
+            label: '${entry.year} 年，共 ${entry.count} 条记录',
+            excludeSemantics: true,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 52),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '${entry.year} 年',
+                      style: TextStyle(
+                        color: colors.ink,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.6,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    '${entry.count} 条',
+                    style: TextStyle(color: colors.inkMuted, fontSize: 12),
+                  ),
+                  const SizedBox(width: 8),
+                  AnimatedRotation(
+                    turns: entry.collapsed ? 0 : 0.5,
+                    duration: motionDuration,
+                    child: TraceIcon(
+                      TraceGlyph.chevronDown,
+                      size: 18,
+                      color: colors.inkMuted,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMonthHeader(_MonthEntry entry) {
+    final colors = context.traceColors;
+    final key = _monthKey(entry.year, entry.month);
+    final motionDuration =
+        MediaQuery.maybeOf(context)?.disableAnimations ?? false
+        ? Duration.zero
+        : const Duration(milliseconds: 140);
+    return Padding(
+      key: ValueKey('events-month-$key'),
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Material(
+        color: colors.surfaceSoft,
+        borderRadius: BorderRadius.circular(12),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => setState(() {
+            if (!_collapsedMonths.remove(key)) _collapsedMonths.add(key);
+          }),
+          child: Semantics(
+            button: true,
+            expanded: !entry.collapsed,
+            label: '${entry.year} 年 ${entry.month} 月，共 ${entry.count} 条记录',
+            excludeSemantics: true,
+            child: Container(
+              constraints: const BoxConstraints(minHeight: 48),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: BoxDecoration(
+                border: Border.all(color: colors.line),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '${_monthLabel(entry.month)}月',
+                      style: TextStyle(
+                        color: colors.ink,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    '${entry.count} 条',
+                    style: TextStyle(color: colors.inkMuted, fontSize: 11),
+                  ),
+                  const SizedBox(width: 8),
+                  AnimatedRotation(
+                    turns: entry.collapsed ? 0 : 0.5,
+                    duration: motionDuration,
+                    child: TraceIcon(
+                      TraceGlyph.chevronDown,
+                      size: 17,
+                      color: colors.inkMuted,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -462,6 +635,33 @@ class _EventsListViewState extends State<EventsListView> {
           ?.toLocal() ??
       event.createdAt.toLocal();
 
+  void _syncArchiveState({bool reset = false}) {
+    if (reset) {
+      _collapsedYears.clear();
+      _collapsedMonths.clear();
+      _knownYears.clear();
+      _knownMonths.clear();
+    }
+    if (_items.isEmpty) return;
+    final newest = _items
+        .map(_eventTime)
+        .reduce((a, b) => a.isAfter(b) ? a : b);
+    for (final item in _items) {
+      final time = _eventTime(item);
+      if (_knownYears.add(time.year) && time.year != newest.year) {
+        _collapsedYears.add(time.year);
+      }
+      final key = _monthKey(time.year, time.month);
+      if (_knownMonths.add(key) &&
+          (time.year != newest.year || time.month != newest.month)) {
+        _collapsedMonths.add(key);
+      }
+    }
+  }
+
+  static String _monthKey(int year, int month) =>
+      '$year-${month.toString().padLeft(2, '0')}';
+
   static String _monthLabel(int month) => const [
     '一',
     '二',
@@ -497,6 +697,26 @@ sealed class _TimelineEntry {
 class _IntroEntry extends _TimelineEntry {
   const _IntroEntry({required this.hasFilters});
   final bool hasFilters;
+}
+
+class _YearEntry extends _TimelineEntry {
+  const _YearEntry(this.year, this.count, {required this.collapsed});
+  final int year;
+  final int count;
+  final bool collapsed;
+}
+
+class _MonthEntry extends _TimelineEntry {
+  const _MonthEntry(
+    this.year,
+    this.month,
+    this.count, {
+    required this.collapsed,
+  });
+  final int year;
+  final int month;
+  final int count;
+  final bool collapsed;
 }
 
 class _DayEntry extends _TimelineEntry {

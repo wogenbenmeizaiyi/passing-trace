@@ -11,11 +11,11 @@ on:
       version_name:
         description: Android version name
         required: true
-        default: 1.0.4
+        default: 1.0.5
       version_code:
         description: Android version code (must always increase)
         required: true
-        default: "7"
+        default: "8"
       minimum_supported_version_code:
         description: Versions below this code must update
         required: true
@@ -23,7 +23,7 @@ on:
       notes:
         description: Chinese release notes
         required: true
-        default: 更新改为 App 内下载并校验安装包，不再跳转浏览器。
+        default: 修复高德地图正式版闪退，并更新界面与故事线体验。
 
 permissions:
   contents: read
@@ -33,10 +33,10 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     env:
-      RELEASE_VERSION_NAME: ${{ inputs.version_name || '1.0.4' }}
-      RELEASE_VERSION_CODE: ${{ inputs.version_code || '7' }}
+      RELEASE_VERSION_NAME: ${{ inputs.version_name || '1.0.5' }}
+      RELEASE_VERSION_CODE: ${{ inputs.version_code || '8' }}
       RELEASE_MINIMUM_SUPPORTED_VERSION_CODE: ${{ inputs.minimum_supported_version_code || '1' }}
-      RELEASE_NOTES: ${{ inputs.notes || '更新改为 App 内下载并校验安装包，不再跳转浏览器。' }}
+      RELEASE_NOTES: ${{ inputs.notes || '修复高德地图正式版闪退，并更新界面与故事线体验。' }}
       S3_ENDPOINT: ${{ vars.S3_ENDPOINT }}
       S3_BUCKET: ${{ vars.S3_BUCKET }}
       S3_REGION: ${{ vars.S3_REGION }}

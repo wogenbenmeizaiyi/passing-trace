@@ -24,26 +24,53 @@ const loadingMore = ref(false)
 const error = ref<string | null>(null)
 const filterKind = ref<EventKindT | ''>('')
 const filterStatus = ref<EventStatusT | ''>('')
+const collapsedYears = ref(new Set<number>())
+const collapsedMonths = ref(new Set<string>())
+const knownYears = new Set<number>()
+const knownMonths = new Set<string>()
 let activeController: AbortController | null = null
+
+interface DayGroup {
+  key: string
+  title: string
+  subtitle: string
+  items: EventResponse[]
+}
+
+interface MonthGroup {
+  key: string
+  year: number
+  month: number
+  title: string
+  count: number
+  days: DayGroup[]
+}
+
+interface YearGroup {
+  year: number
+  count: number
+  months: MonthGroup[]
+}
 
 const canLoadMore = computed(
   () => nextCursor.value !== null && !loading.value && !loadingMore.value,
 )
 const isEmpty = computed(() => !loading.value && items.value.length === 0)
-const monthLabel = computed(() => {
-  const first = items.value[0]
-  const date = first ? eventDate(first) : new Date()
-  return date.toLocaleDateString('zh-CN', { year: 'numeric', month: 'long' })
-})
-const groupedItems = computed(() => {
-  const groups = new Map<
-    string,
-    { key: string; title: string; subtitle: string; items: EventResponse[] }
-  >()
-  for (const item of items.value) {
+const archiveGroups = computed<YearGroup[]>(() => {
+  const years = new Map<number, Map<number, Map<string, DayGroup>>>()
+  const sorted = [...items.value].sort(
+    (left, right) => eventDate(right).getTime() - eventDate(left).getTime(),
+  )
+  for (const item of sorted) {
     const date = eventDate(item)
     const key = Number.isNaN(date.getTime()) ? 'unknown' : date.toLocaleDateString('en-CA')
-    let group = groups.get(key)
+    const year = Number.isNaN(date.getTime()) ? 0 : date.getFullYear()
+    const month = Number.isNaN(date.getTime()) ? 0 : date.getMonth() + 1
+    const months = years.get(year) ?? new Map<number, Map<string, DayGroup>>()
+    years.set(year, months)
+    const days = months.get(month) ?? new Map<string, DayGroup>()
+    months.set(month, days)
+    let group = days.get(key)
     if (!group) {
       group = {
         key,
@@ -53,11 +80,28 @@ const groupedItems = computed(() => {
           : date.toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'short' }),
         items: [],
       }
-      groups.set(key, group)
+      days.set(key, group)
     }
     group.items.push(item)
   }
-  return [...groups.values()]
+  return [...years.entries()].map(([year, months]) => {
+    const monthGroups = [...months.entries()].map(([month, days]) => {
+      const dayGroups = [...days.values()]
+      return {
+        key: monthKey(year, month),
+        year,
+        month,
+        title: month === 0 ? '时间未定' : `${month} 月`,
+        count: dayGroups.reduce((sum, day) => sum + day.items.length, 0),
+        days: dayGroups,
+      }
+    })
+    return {
+      year,
+      count: monthGroups.reduce((sum, month) => sum + month.count, 0),
+      months: monthGroups,
+    }
+  })
 })
 
 function buildQuery(cursor: number | null) {
@@ -80,6 +124,7 @@ async function reload() {
     if (controller.signal.aborted) return
     items.value = page.items
     nextCursor.value = page.nextCursor
+    syncArchiveState(true)
   } catch (reason) {
     if (controller.signal.aborted) return
     error.value =
@@ -106,6 +151,7 @@ async function loadMore() {
     if (controller.signal.aborted) return
     items.value = [...items.value, ...page.items]
     nextCursor.value = page.nextCursor
+    syncArchiveState(false)
   } catch (reason) {
     if (!controller.signal.aborted)
       error.value = reason instanceof Error ? reason.message : '加载更多失败。'
@@ -142,6 +188,53 @@ function summary(item: EventResponse) {
   return item.rawContent || '这条记录没有填写正文。'
 }
 
+function monthKey(year: number, month: number) {
+  return `${year}-${String(month).padStart(2, '0')}`
+}
+
+function syncArchiveState(reset: boolean) {
+  if (reset) {
+    knownYears.clear()
+    knownMonths.clear()
+    collapsedYears.value = new Set()
+    collapsedMonths.value = new Set()
+  }
+  if (items.value.length === 0) return
+  const newest = items.value
+    .map(eventDate)
+    .reduce((left, right) => (left.getTime() >= right.getTime() ? left : right))
+  const nextYears = new Set(collapsedYears.value)
+  const nextMonths = new Set(collapsedMonths.value)
+  for (const item of items.value) {
+    const date = eventDate(item)
+    const year = Number.isNaN(date.getTime()) ? 0 : date.getFullYear()
+    const month = Number.isNaN(date.getTime()) ? 0 : date.getMonth() + 1
+    if (!knownYears.has(year)) {
+      knownYears.add(year)
+      if (year !== newest.getFullYear()) nextYears.add(year)
+    }
+    const key = monthKey(year, month)
+    if (!knownMonths.has(key)) {
+      knownMonths.add(key)
+      if (year !== newest.getFullYear() || month !== newest.getMonth() + 1) nextMonths.add(key)
+    }
+  }
+  collapsedYears.value = nextYears
+  collapsedMonths.value = nextMonths
+}
+
+function toggleYear(year: number) {
+  const next = new Set(collapsedYears.value)
+  if (!next.delete(year)) next.add(year)
+  collapsedYears.value = next
+}
+
+function toggleMonth(key: string) {
+  const next = new Set(collapsedMonths.value)
+  if (!next.delete(key)) next.add(key)
+  collapsedMonths.value = next
+}
+
 onMounted(() => {
   if (auth.isAuthenticated) void reload()
 })
@@ -162,8 +255,8 @@ onUnmounted(() => activeController?.abort())
       <header class="records-heading">
         <div>
           <p class="eyebrow">YOUR TIMELINE</p>
-          <h1>{{ monthLabel }}</h1>
-          <p>按时间收好生活记录和未来安排。</p>
+          <h1>时间里的生活</h1>
+          <p>按年份和月份展开，回看记录与未来安排。</p>
         </div>
         <RouterLink v-if="auth.isAuthenticated" class="button button-primary" to="/events/new">
           <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -224,43 +317,76 @@ onUnmounted(() => activeController?.abort())
         <RouterLink class="button button-primary" to="/events/new">写下第一条</RouterLink>
       </section>
 
-      <div v-else class="day-groups">
-        <section v-for="group in groupedItems" :key="group.key" class="day-group">
-          <header class="day-heading">
-            <strong>{{ group.title }}</strong
-            ><span>{{ group.subtitle }}</span>
-          </header>
-          <ul class="record-timeline">
-            <li v-for="item in group.items" :key="item.id">
-              <RouterLink class="record-card" :to="`/events/${item.id}`">
-                <div class="record-card__meta">
-                  <span>{{ timeLabel(item) }}</span>
-                  <span>{{ EventKindLabel[item.kind] }} · {{ EventStatusLabel[item.status] }}</span>
-                </div>
-                <h2>{{ item.title || '未命名记录' }}</h2>
-                <p>{{ summary(item) }}</p>
-                <footer class="record-card__footer">
-                  <span class="record-tags">
-                    <span
-                      v-if="item.effectiveClassification.primaryCategory"
-                      class="record-tag record-tag--category"
-                      >{{ item.effectiveClassification.primaryCategory.displayName }}</span
-                    >
-                    <span
-                      v-for="tag in item.effectiveClassification.tags.slice(0, 2)"
-                      :key="tag.taxonomyKey ?? tag.displayName"
-                      class="record-tag"
-                      >{{ tag.origin === 'ai' ? '✦ ' : '' }}{{ tag.displayName }}</span
-                    >
-                  </span>
-                  <span class="record-context">
-                    <span v-if="item.locations[0]">{{ item.locations[0].name }}</span>
-                    <span v-if="item.media.length">{{ item.media.length }} 个附件</span>
-                  </span>
-                </footer>
-              </RouterLink>
-            </li>
-          </ul>
+      <div v-else class="archive-groups">
+        <section v-for="year in archiveGroups" :key="year.year" class="year-group">
+          <button
+            class="year-heading"
+            :aria-expanded="!collapsedYears.has(year.year)"
+            @click="toggleYear(year.year)"
+          >
+            <strong>{{ year.year || '时间未定' }}<template v-if="year.year"> 年</template></strong>
+            <span>{{ year.count }} 条记录</span>
+            <svg class="ui-icon archive-chevron" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="m6 9 6 6 6-6" />
+            </svg>
+          </button>
+          <div v-if="!collapsedYears.has(year.year)" class="month-groups">
+            <section v-for="month in year.months" :key="month.key" class="month-group">
+              <button
+                class="month-heading"
+                :aria-expanded="!collapsedMonths.has(month.key)"
+                @click="toggleMonth(month.key)"
+              >
+                <strong>{{ month.title }}</strong>
+                <span>{{ month.count }} 条</span>
+                <svg class="ui-icon archive-chevron" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="m6 9 6 6 6-6" />
+                </svg>
+              </button>
+              <div v-if="!collapsedMonths.has(month.key)" class="day-groups">
+                <section v-for="group in month.days" :key="group.key" class="day-group">
+                  <header class="day-heading">
+                    <strong>{{ group.title }}</strong
+                    ><span>{{ group.subtitle }}</span>
+                  </header>
+                  <ul class="record-timeline">
+                    <li v-for="item in group.items" :key="item.id">
+                      <RouterLink class="record-card" :to="`/events/${item.id}`">
+                        <div class="record-card__meta">
+                          <span>{{ timeLabel(item) }}</span>
+                          <span
+                            >{{ EventKindLabel[item.kind] }} ·
+                            {{ EventStatusLabel[item.status] }}</span
+                          >
+                        </div>
+                        <h2>{{ item.title || '未命名记录' }}</h2>
+                        <p>{{ summary(item) }}</p>
+                        <footer class="record-card__footer">
+                          <span class="record-tags">
+                            <span
+                              v-if="item.effectiveClassification.primaryCategory"
+                              class="record-tag record-tag--category"
+                              >{{ item.effectiveClassification.primaryCategory.displayName }}</span
+                            >
+                            <span
+                              v-for="tag in item.effectiveClassification.tags.slice(0, 2)"
+                              :key="tag.taxonomyKey ?? tag.displayName"
+                              class="record-tag"
+                              >{{ tag.origin === 'ai' ? '✦ ' : '' }}{{ tag.displayName }}</span
+                            >
+                          </span>
+                          <span class="record-context">
+                            <span v-if="item.locations[0]">{{ item.locations[0].name }}</span>
+                            <span v-if="item.media.length">{{ item.media.length }} 个附件</span>
+                          </span>
+                        </footer>
+                      </RouterLink>
+                    </li>
+                  </ul>
+                </section>
+              </div>
+            </section>
+          </div>
         </section>
       </div>
 
@@ -350,7 +476,69 @@ onUnmounted(() => activeController?.abort())
   width: 18px;
   height: 18px;
 }
+.archive-groups {
+  display: grid;
+  gap: 30px;
+}
+.year-heading,
+.month-heading {
+  width: 100%;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--ink);
+  cursor: pointer;
+  text-align: left;
+}
+.year-heading {
+  padding: 0 4px 10px;
+  border: 0;
+  border-bottom: 1px solid var(--line-strong);
+  background: transparent;
+}
+.year-heading strong {
+  flex: 1;
+  font-size: 26px;
+  letter-spacing: -0.04em;
+}
+.year-heading span,
+.month-heading span {
+  color: var(--ink-tertiary);
+  font-size: 11px;
+}
+.month-groups {
+  margin-top: 12px;
+  display: grid;
+  gap: 16px;
+}
+.month-heading {
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-soft);
+}
+.month-heading strong {
+  flex: 1;
+  font-size: 15px;
+}
+.archive-chevron {
+  width: 18px;
+  height: 18px;
+  color: var(--ink-tertiary);
+  transition: transform var(--motion-fast) var(--ease-out);
+}
+.year-heading[aria-expanded='true'] .archive-chevron,
+.month-heading[aria-expanded='true'] .archive-chevron {
+  transform: rotate(180deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .archive-chevron {
+    transition: none;
+  }
+}
 .day-groups {
+  margin-top: 22px;
   display: grid;
   gap: 42px;
 }

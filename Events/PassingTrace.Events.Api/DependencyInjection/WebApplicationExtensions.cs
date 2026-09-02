@@ -30,6 +30,9 @@ public static class WebApplicationExtensions
         }
 
         app.UseExceptionHandler();
+        // 浏览器开发客户端与 API 使用独立端口，CORS 必须先于认证处理预检请求。
+        // 生产环境默认不配置跨域来源，继续采用同域反向代理。
+        app.UseCors(ApplicationExtensions.WebClientCorsPolicy);
         app.UseAuthentication();
         app.UseAuthorization();
         app.MapControllers();

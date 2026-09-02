@@ -154,6 +154,7 @@ class EventApiClient {
     String? to,
     String? categoryKey,
     List<String> tagKeys = const [],
+    String? query,
   }) async {
     final uri = _resolve('/api/v1/events', {
       'limit': limit,
@@ -164,6 +165,7 @@ class EventApiClient {
       'to': to,
       'categoryKey': categoryKey,
       'tagKeys': tagKeys.isEmpty ? null : tagKeys.join(','),
+      'query': query,
     });
     final response = await _send(session, 'GET', uri);
     return _decode(response, const {

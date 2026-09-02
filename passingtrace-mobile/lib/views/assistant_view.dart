@@ -259,32 +259,13 @@ class _AssistantViewState extends State<AssistantView> {
                 ),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          '聊天记录',
-                          style: TextStyle(
-                            color: colors.ink,
-                            fontSize: 20,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                      TextButton(
-                        onPressed: _busy
-                            ? null
-                            : () {
-                                Navigator.of(sheetContext).pop();
-                                _newConversation();
-                              },
-                        style: TextButton.styleFrom(
-                          minimumSize: const Size(48, 48),
-                          foregroundColor: colors.primary,
-                        ),
-                        child: const Text('新对话'),
-                      ),
-                    ],
+                  child: Text(
+                    '聊天记录',
+                    style: TextStyle(
+                      color: colors.ink,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -422,10 +403,27 @@ class _AssistantViewState extends State<AssistantView> {
           onPressed: () => Scaffold.of(menuContext).openDrawer(),
         ),
       ),
-      trailing: TraceIconButton(
-        glyph: TraceGlyph.history,
-        tooltip: '聊天记录',
-        onPressed: _showConversations,
+      trailingWidth: 96,
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox.square(
+            dimension: 48,
+            child: TraceIconButton(
+              glyph: TraceGlyph.newChat,
+              tooltip: '新建会话',
+              onPressed: _busy ? null : _newConversation,
+            ),
+          ),
+          SizedBox.square(
+            dimension: 48,
+            child: TraceIconButton(
+              glyph: TraceGlyph.history,
+              tooltip: '聊天记录',
+              onPressed: _showConversations,
+            ),
+          ),
+        ],
       ),
     ),
     body: _buildChat(),
@@ -820,7 +818,7 @@ class _EvidenceCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.traceColors;
     return Material(
-      color: colors.accentSoft,
+      color: colors.surfaceSoft,
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         onTap: onTap,
@@ -829,12 +827,12 @@ class _EvidenceCard extends StatelessWidget {
           constraints: const BoxConstraints(minHeight: 54),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
-            border: Border.all(color: colors.accent.withValues(alpha: 0.32)),
+            border: Border.all(color: colors.lineStrong),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Row(
             children: [
-              TraceIcon(TraceGlyph.note, size: 20, color: colors.accent),
+              TraceIcon(TraceGlyph.note, size: 20, color: colors.primaryStrong),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
@@ -862,7 +860,7 @@ class _EvidenceCard extends StatelessWidget {
               TraceIcon(
                 TraceGlyph.chevronRight,
                 size: 16,
-                color: colors.accent,
+                color: colors.inkMuted,
               ),
             ],
           ),
@@ -1154,11 +1152,11 @@ class AssistantMessageContent extends StatelessWidget {
         ),
         listBullet: TextStyle(color: colors.accent, fontSize: 13, height: 1.7),
         a: TextStyle(
-          color: colors.accent,
-          backgroundColor: colors.accentSoft,
+          color: colors.primaryStrong,
           fontWeight: FontWeight.w700,
           decoration: TextDecoration.underline,
-          decorationColor: colors.accent,
+          decorationColor: colors.primary.withValues(alpha: 0.72),
+          decorationThickness: 1.2,
         ),
         blockquoteDecoration: BoxDecoration(
           color: colors.surfaceSoft,

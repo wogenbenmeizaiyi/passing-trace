@@ -479,6 +479,8 @@ public sealed class EventServiceTimeZoneTests : IDisposable
             modelBuilder.Entity<EventSearchIndex>().Ignore("SearchVector");
             modelBuilder.Entity<UserMemory>().Ignore("Embedding");
             modelBuilder.Entity<UserPlace>().Ignore("Embedding");
+            modelBuilder.Entity<PassingTrace.Core.Storylines.StorylineSearchIndex>().Ignore("Embedding");
+            modelBuilder.Entity<PassingTrace.Core.Storylines.StorylineSearchIndex>().Ignore("SearchVector");
         }
     }
 }

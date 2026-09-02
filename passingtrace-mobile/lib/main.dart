@@ -12,6 +12,7 @@ import 'update_service.dart';
 import 'views/assistant_view.dart';
 import 'views/events_list_view.dart';
 import 'views/settings_view.dart';
+import 'views/storylines_list_view.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -587,6 +588,14 @@ class _AccountHomeState extends State<AccountHome> {
           bottomNavigationBar: _buildPrimaryNavigation(),
           onSessionExpired: () => _restoreAfterSessionExpiry(true),
         )
+      else if (_section == 3)
+        StorylinesListView(
+          auth: widget.auth,
+          session: widget.session,
+          drawer: _buildDrawer(),
+          bottomNavigationBar: _buildPrimaryNavigation(),
+          onSessionExpired: () => _restoreAfterSessionExpiry(true),
+        )
       else
         MemoriesView(
           auth: widget.auth,
@@ -605,9 +614,17 @@ class _AccountHomeState extends State<AccountHome> {
   );
 
   Widget _buildPrimaryNavigation() => TraceBottomNavigation(
-    selectedIndex: _section == 1 ? 0 : 1,
+    selectedIndex: _section == 1
+        ? 0
+        : _section == 3
+        ? 1
+        : 2,
     onSelected: (index) {
-      final section = index == 0 ? 1 : 0;
+      final section = index == 0
+          ? 1
+          : index == 1
+          ? 3
+          : 0;
       if (_section != section) setState(() => _section = section);
     },
   );
@@ -677,6 +694,12 @@ class _AccountHomeState extends State<AccountHome> {
               label: '问问记录',
               selected: _section == 0,
               onTap: () => _selectSection(0),
+            ),
+            TraceDrawerItem(
+              glyph: TraceGlyph.storyline,
+              label: '故事线',
+              selected: _section == 3,
+              onTap: () => _selectSection(3),
             ),
             TraceDrawerItem(
               glyph: TraceGlyph.memory,

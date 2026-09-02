@@ -9,11 +9,28 @@ public interface IAnalysisOutbox
     void EnqueueEvent(Event evt, int sourceRevision, DateTimeOffset now, int priority = 100, string messageType = "event.analyze");
     void EnqueueMedia(long userId, Guid mediaAssetId, DateTimeOffset now, int priority = 100);
     Task IncrementWatermarkAsync(long userId, DateTimeOffset now, CancellationToken cancellationToken);
+    void EnqueueStoryline(long userId, Guid storylineId, int revision, DateTimeOffset now,
+        string messageType = "storyline.index", int priority = 110);
 }
 
 /// <summary>只向当前 EF 工作单元追加任务，提交由调用方统一完成。</summary>
 public sealed class AnalysisOutbox(TraceDbContext dbContext) : IAnalysisOutbox
 {
+    public void EnqueueStoryline(long userId, Guid storylineId, int revision, DateTimeOffset now,
+        string messageType = "storyline.index", int priority = 110)
+    {
+        dbContext.OutboxMessages.Add(new OutboxMessage
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            MessageType = messageType,
+            Priority = priority,
+            PayloadJson = System.Text.Json.JsonSerializer.Serialize(new { storylineId, revision }),
+            Status = OutboxStatus.Pending,
+            AvailableAt = now,
+            CreatedAt = now,
+        });
+    }
     public void EnqueueEvent(Event evt, int sourceRevision, DateTimeOffset now, int priority = 100, string messageType = "event.analyze")
     {
         dbContext.OutboxMessages.Add(new OutboxMessage

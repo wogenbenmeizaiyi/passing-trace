@@ -171,6 +171,7 @@ export interface ListEventsQuery {
   to?: string
   categoryKey?: string
   tagKeys?: string[]
+  query?: string
 }
 
 export interface ProblemDetails {

@@ -22,6 +22,31 @@ const router = createRouter({
     },
     { path: '/assistant', name: 'assistant', component: () => import('@/views/AssistantView.vue') },
     {
+      path: '/storylines',
+      name: 'storylines',
+      component: () => import('@/views/StorylinesListView.vue'),
+    },
+    {
+      path: '/storylines/new',
+      name: 'storylines-new',
+      component: () => import('@/views/StorylineEditorView.vue'),
+    },
+    {
+      path: '/storylines/:id',
+      name: 'storylines-detail',
+      component: () => import('@/views/StorylineDetailView.vue'),
+    },
+    {
+      path: '/storylines/:id/edit',
+      name: 'storylines-edit',
+      component: () => import('@/views/StorylineEditorView.vue'),
+    },
+    {
+      path: '/storylines/:id/revisions/:revision',
+      name: 'storylines-revision',
+      component: () => import('@/views/StorylineDetailView.vue'),
+    },
+    {
       path: '/auth/callback',
       name: 'auth-callback',
       component: () => import('@/views/AuthCallbackView.vue'),

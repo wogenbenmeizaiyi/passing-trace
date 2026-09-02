@@ -22,6 +22,7 @@ function listQuery(input: ListEventsQuery) {
     to: input.to,
     categoryKey: input.categoryKey,
     tagKeys: input.tagKeys?.join(','),
+    query: input.query,
   }
 }
 

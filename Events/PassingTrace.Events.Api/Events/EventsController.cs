@@ -50,11 +50,12 @@ public sealed class EventsController(EventService service) : ControllerBase
         [FromQuery] DateTimeOffset? to,
         [FromQuery] string? categoryKey,
         [FromQuery] string? tagKeys,
+        [FromQuery(Name = "query")] string? searchQuery,
         [FromQuery] int limit = 50,
         [FromQuery] long? cursor = null,
         CancellationToken cancellationToken = default)
     {
-        var query = new EventListQuery(
+        var listQuery = new EventListQuery(
             User.GetUserId(),
             kind,
             status,
@@ -64,9 +65,10 @@ public sealed class EventsController(EventService service) : ControllerBase
             limit,
             cursor,
             categoryKey,
-            tagKeys?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+            tagKeys?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
+            searchQuery);
 
-        var events = await service.ListAsync(query, cancellationToken);
+        var events = await service.ListAsync(listQuery, cancellationToken);
         var items = events.Select(ToResponse).ToList();
 
         long? nextCursor = events.Count == limit && events.Count > 0

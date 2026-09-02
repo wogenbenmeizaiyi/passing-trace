@@ -9,11 +9,13 @@ class TraceAppBar extends StatelessWidget implements PreferredSizeWidget {
     required this.title,
     this.leading,
     this.trailing,
+    this.trailingWidth = 48,
   });
 
   final String title;
   final Widget? leading;
   final Widget? trailing;
+  final double trailingWidth;
 
   @override
   Size get preferredSize => const Size.fromHeight(64);
@@ -35,7 +37,14 @@ class TraceAppBar extends StatelessWidget implements PreferredSizeWidget {
               padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Row(
                 children: [
-                  SizedBox.square(dimension: 48, child: leading),
+                  SizedBox(
+                    width: trailingWidth,
+                    height: 48,
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: leading,
+                    ),
+                  ),
                   Expanded(
                     child: Text(
                       title,
@@ -51,7 +60,14 @@ class TraceAppBar extends StatelessWidget implements PreferredSizeWidget {
                       ),
                     ),
                   ),
-                  SizedBox.square(dimension: 48, child: trailing),
+                  SizedBox(
+                    width: trailingWidth,
+                    height: 48,
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: trailing,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -140,7 +156,7 @@ class TraceBottomNavigation extends StatelessWidget {
           child: SizedBox(
             height: 72,
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(52, 6, 52, 8),
+              padding: const EdgeInsets.fromLTRB(18, 6, 18, 8),
               child: Row(
                 children: [
                   Expanded(
@@ -151,13 +167,22 @@ class TraceBottomNavigation extends StatelessWidget {
                       onTap: () => onSelected(0),
                     ),
                   ),
-                  const SizedBox(width: 32),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _TraceNavigationItem(
+                      glyph: TraceGlyph.storyline,
+                      label: '故事线',
+                      selected: selectedIndex == 1,
+                      onTap: () => onSelected(1),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: _TraceNavigationItem(
                       glyph: TraceGlyph.sparkle,
                       label: '问 AI',
-                      selected: selectedIndex == 1,
-                      onTap: () => onSelected(1),
+                      selected: selectedIndex == 2,
+                      onTap: () => onSelected(2),
                     ),
                   ),
                 ],

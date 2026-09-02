@@ -30,6 +30,24 @@ public sealed record MemoryEvidence(
     decimal Confidence,
     IReadOnlyList<long> EventIds);
 
+public sealed record StorylineEvidence(
+    Guid StorylineId,
+    int Revision,
+    string Title,
+    string Category,
+    string Status,
+    string Snippet,
+    DateTimeOffset? RangeStart,
+    DateTimeOffset? RangeEnd,
+    IReadOnlyList<StorylineStageEvidence> Stages,
+    IReadOnlyList<long> EventIds,
+    double Score);
+
+public sealed record StorylineStageEvidence(
+    Guid StageKey,
+    string Title,
+    IReadOnlyList<string> NodeTitles);
+
 public sealed record EvidenceBundle(
     IReadOnlyList<RecordEvidence> Records,
     IReadOnlyList<MemoryEvidence> Memories,
@@ -37,7 +55,8 @@ public sealed record EvidenceBundle(
     string? TimeRange = null,
     string? Assumptions = null,
     IReadOnlyList<PlaceEvidence>? Places = null,
-    object? NavigationTarget = null);
+    object? NavigationTarget = null,
+    IReadOnlyList<StorylineEvidence>? Storylines = null);
 
 public sealed record RecordEvidenceDetail(
     long EventId,

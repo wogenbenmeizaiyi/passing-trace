@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using PassingTrace.Core.Ai;
 using PassingTrace.Core.Events;
 using PassingTrace.Core.Media;
+using PassingTrace.Core.Storylines;
 
 namespace PassingTrace.Infrastructure;
 
@@ -34,6 +35,16 @@ public sealed class TraceDbContext(DbContextOptions<TraceDbContext> options)
     public DbSet<EventLabelIndex> EventLabelIndexes => Set<EventLabelIndex>();
     public DbSet<EventLocation> EventLocations => Set<EventLocation>();
     public DbSet<UserPlace> UserPlaces => Set<UserPlace>();
+    public DbSet<Storyline> Storylines => Set<Storyline>();
+    public DbSet<StorylineRevision> StorylineRevisions => Set<StorylineRevision>();
+    public DbSet<StorylineStage> StorylineStages => Set<StorylineStage>();
+    public DbSet<StorylineNode> StorylineNodes => Set<StorylineNode>();
+    public DbSet<StorylineEdge> StorylineEdges => Set<StorylineEdge>();
+    public DbSet<StorylineRevisionTag> StorylineRevisionTags => Set<StorylineRevisionTag>();
+    public DbSet<StorylineWebLayout> StorylineWebLayouts => Set<StorylineWebLayout>();
+    public DbSet<StorylineWebNodeLayout> StorylineWebNodeLayouts => Set<StorylineWebNodeLayout>();
+    public DbSet<StorylineWebStageLayout> StorylineWebStageLayouts => Set<StorylineWebStageLayout>();
+    public DbSet<StorylineSearchIndex> StorylineSearchIndexes => Set<StorylineSearchIndex>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {

@@ -2,6 +2,8 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:passingtrace_mobile/theme/passingtrace_theme.dart';
+import 'package:passingtrace_mobile/theme/quiet_trace_components.dart';
+import 'package:passingtrace_mobile/theme/quiet_trace_icons.dart';
 import 'package:passingtrace_mobile/views/assistant_view.dart';
 
 void main() {
@@ -58,6 +60,7 @@ void main() {
         );
     expect(richText.textSpan!.toPlainText(), isNot(contains('Event #13')));
     final link = _findTappableSpan(richText.textSpan!)!;
+    expect(link.style?.backgroundColor, isNull);
     (link.recognizer! as TapGestureRecognizer).onTap!.call();
     expect(openedEventId, 13);
   });
@@ -112,6 +115,43 @@ void main() {
     await tester.tap(find.bySemanticsLabel('收起相关记录，共 2 条'));
     await tester.pump();
     expect(find.text('整理项目下一阶段计划'), findsNothing);
+  });
+
+  testWidgets('AI 顶栏可并列放置新建会话与聊天记录操作', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: PassingTraceTheme.light(PassingTracePalette.pine),
+        home: Scaffold(
+          appBar: TraceAppBar(
+            title: '问问记录',
+            trailingWidth: 96,
+            trailing: Row(
+              children: [
+                SizedBox.square(
+                  dimension: 48,
+                  child: TraceIconButton(
+                    glyph: TraceGlyph.newChat,
+                    tooltip: '新建会话',
+                    onPressed: () {},
+                  ),
+                ),
+                SizedBox.square(
+                  dimension: 48,
+                  child: TraceIconButton(
+                    glyph: TraceGlyph.history,
+                    tooltip: '聊天记录',
+                    onPressed: () {},
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.bySemanticsLabel('新建会话'), findsOneWidget);
+    expect(find.bySemanticsLabel('聊天记录'), findsOneWidget);
   });
 }
 

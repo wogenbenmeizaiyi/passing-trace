@@ -1354,6 +1354,560 @@ namespace PassingTrace.Infrastructure.Persistence.Migrations
                     b.ToTable("event_source_revision_media", (string)null);
                 });
 
+            modelBuilder.Entity("PassingTrace.Core.Storylines.Storyline", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset?>("ArchivedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("archived_at");
+
+                    b.Property<string>("CategoryKey")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("category_key");
+
+                    b.Property<Guid?>("CoverMediaAssetId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("cover_media_asset_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreationIdempotencyKey")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("creation_idempotency_key");
+
+                    b.Property<int>("CurrentRevision")
+                        .HasColumnType("integer")
+                        .HasColumnName("current_revision");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("description");
+
+                    b.Property<DateTimeOffset?>("RangeEnd")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("range_end");
+
+                    b.Property<DateTimeOffset?>("RangeStart")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("range_start");
+
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer")
+                        .HasColumnName("status");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("title");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<long>("UserId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "CreationIdempotencyKey")
+                        .IsUnique()
+                        .HasDatabaseName("uk_storyline_user_creation_idempotency")
+                        .HasFilter("creation_idempotency_key IS NOT NULL");
+
+                    b.HasIndex("UserId", "CategoryKey", "Status")
+                        .HasDatabaseName("ix_storyline_user_category_status");
+
+                    b.HasIndex("UserId", "DeletedAt", "UpdatedAt")
+                        .HasDatabaseName("ix_storyline_user_updated");
+
+                    b.ToTable("storyline", (string)null);
+                });
+
+            modelBuilder.Entity("PassingTrace.Core.Storylines.StorylineEdge", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<Guid>("Key")
+                        .HasColumnType("uuid")
+                        .HasColumnName("edge_key");
+
+                    b.Property<string>("Label")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("label");
+
+                    b.Property<int>("RelationType")
+                        .HasColumnType("integer")
+                        .HasColumnName("relation_type");
+
+                    b.Property<Guid>("SourceNodeKey")
+                        .HasColumnType("uuid")
+                        .HasColumnName("source_node_key");
+
+                    b.Property<long>("StorylineRevisionId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("storyline_revision_id");
+
+                    b.Property<Guid>("TargetNodeKey")
+                        .HasColumnType("uuid")
+                        .HasColumnName("target_node_key");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StorylineRevisionId", "Key")
+                        .IsUnique()
+                        .HasDatabaseName("uk_storyline_edge_key");
+
+                    b.HasIndex("StorylineRevisionId", "SourceNodeKey", "TargetNodeKey", "RelationType")
+                        .IsUnique()
+                        .HasDatabaseName("uk_storyline_edge_relation");
+
+                    b.ToTable("storyline_edge", (string)null);
+                });
+
+            modelBuilder.Entity("PassingTrace.Core.Storylines.StorylineNode", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<int>("Emphasis")
+                        .HasColumnType("integer")
+                        .HasColumnName("emphasis");
+
+                    b.Property<long>("EventId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("event_id");
+
+                    b.Property<Guid>("Key")
+                        .HasColumnType("uuid")
+                        .HasColumnName("node_key");
+
+                    b.Property<int>("SemanticOrder")
+                        .HasColumnType("integer")
+                        .HasColumnName("semantic_order");
+
+                    b.Property<int>("SourceRevision")
+                        .HasColumnType("integer")
+                        .HasColumnName("source_revision");
+
+                    b.Property<Guid?>("StageKey")
+                        .HasColumnType("uuid")
+                        .HasColumnName("stage_key");
+
+                    b.Property<long>("StorylineRevisionId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("storyline_revision_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EventId");
+
+                    b.HasIndex("StorylineRevisionId", "EventId")
+                        .IsUnique()
+                        .HasDatabaseName("uk_storyline_node_event");
+
+                    b.HasIndex("StorylineRevisionId", "Key")
+                        .IsUnique()
+                        .HasDatabaseName("uk_storyline_node_key");
+
+                    b.ToTable("storyline_node", (string)null);
+                });
+
+            modelBuilder.Entity("PassingTrace.Core.Storylines.StorylineRevision", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("CategoryKey")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("category_key");
+
+                    b.Property<string>("ContentHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("content_hash");
+
+                    b.Property<Guid?>("CoverMediaAssetId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("cover_media_asset_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("description");
+
+                    b.Property<string>("IdempotencyKey")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("idempotency_key");
+
+                    b.Property<int>("LayoutState")
+                        .HasColumnType("integer")
+                        .HasColumnName("layout_state");
+
+                    b.Property<DateTimeOffset?>("RangeEnd")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("range_end");
+
+                    b.Property<DateTimeOffset?>("RangeStart")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("range_start");
+
+                    b.Property<int>("Revision")
+                        .HasColumnType("integer")
+                        .HasColumnName("revision");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("StorylineId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("storyline_id");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("title");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StorylineId", "IdempotencyKey")
+                        .IsUnique()
+                        .HasDatabaseName("uk_storyline_revision_idempotency")
+                        .HasFilter("idempotency_key IS NOT NULL");
+
+                    b.HasIndex("StorylineId", "Revision")
+                        .IsUnique()
+                        .HasDatabaseName("uk_storyline_revision_number");
+
+                    b.ToTable("storyline_revision", (string)null);
+                });
+
+            modelBuilder.Entity("PassingTrace.Core.Storylines.StorylineRevisionTag", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("DisplayName")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)")
+                        .HasColumnName("display_name");
+
+                    b.Property<string>("NormalizedValue")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("normalized_value");
+
+                    b.Property<int>("Origin")
+                        .HasColumnType("integer")
+                        .HasColumnName("origin");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer")
+                        .HasColumnName("sort_order");
+
+                    b.Property<long>("StorylineRevisionId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("storyline_revision_id");
+
+                    b.Property<string>("TaxonomyKey")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("taxonomy_key");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StorylineRevisionId", "NormalizedValue")
+                        .IsUnique()
+                        .HasDatabaseName("uk_storyline_revision_tag");
+
+                    b.ToTable("storyline_revision_tag", (string)null);
+                });
+
+            modelBuilder.Entity("PassingTrace.Core.Storylines.StorylineSearchIndex", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<Vector>("Embedding")
+                        .HasColumnType("vector(1024)")
+                        .HasColumnName("embedding");
+
+                    b.Property<bool>("IsCurrent")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_current");
+
+                    b.Property<string>("RetrievalText")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("retrieval_text");
+
+                    b.Property<int>("Revision")
+                        .HasColumnType("integer")
+                        .HasColumnName("revision");
+
+                    b.Property<NpgsqlTsVector>("SearchVector")
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("tsvector")
+                        .HasColumnName("search_vector")
+                        .HasComputedColumnSql("to_tsvector('simple', coalesce(retrieval_text, ''))", true);
+
+                    b.Property<Guid>("StorylineId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("storyline_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<long>("UserId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Embedding")
+                        .HasDatabaseName("ix_storyline_search_embedding");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("Embedding"), "hnsw");
+                    NpgsqlIndexBuilderExtensions.HasOperators(b.HasIndex("Embedding"), new[] { "vector_cosine_ops" });
+
+                    b.HasIndex("RetrievalText")
+                        .HasDatabaseName("ix_storyline_search_trgm");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("RetrievalText"), "GIN");
+                    NpgsqlIndexBuilderExtensions.HasOperators(b.HasIndex("RetrievalText"), new[] { "gin_trgm_ops" });
+
+                    b.HasIndex("SearchVector")
+                        .HasDatabaseName("ix_storyline_search_fts");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("SearchVector"), "GIN");
+
+                    b.HasIndex("StorylineId");
+
+                    b.HasIndex("UserId", "IsCurrent")
+                        .HasDatabaseName("ix_storyline_search_current");
+
+                    b.HasIndex("UserId", "StorylineId", "Revision")
+                        .IsUnique()
+                        .HasDatabaseName("uk_storyline_search_revision");
+
+                    b.ToTable("storyline_search_index", (string)null);
+                });
+
+            modelBuilder.Entity("PassingTrace.Core.Storylines.StorylineStage", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<Guid>("Key")
+                        .HasColumnType("uuid")
+                        .HasColumnName("stage_key");
+
+                    b.Property<int>("SemanticOrder")
+                        .HasColumnType("integer")
+                        .HasColumnName("semantic_order");
+
+                    b.Property<long>("StorylineRevisionId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("storyline_revision_id");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("title");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StorylineRevisionId", "Key")
+                        .IsUnique()
+                        .HasDatabaseName("uk_storyline_stage_key");
+
+                    b.ToTable("storyline_stage", (string)null);
+                });
+
+            modelBuilder.Entity("PassingTrace.Core.Storylines.StorylineWebLayout", b =>
+                {
+                    b.Property<long>("StorylineRevisionId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("storyline_revision_id");
+
+                    b.Property<string>("Direction")
+                        .IsRequired()
+                        .HasMaxLength(4)
+                        .HasColumnType("character varying(4)")
+                        .HasColumnName("direction");
+
+                    b.Property<decimal>("ViewportX")
+                        .HasPrecision(12, 3)
+                        .HasColumnType("numeric(12,3)")
+                        .HasColumnName("viewport_x");
+
+                    b.Property<decimal>("ViewportY")
+                        .HasPrecision(12, 3)
+                        .HasColumnType("numeric(12,3)")
+                        .HasColumnName("viewport_y");
+
+                    b.Property<decimal>("Zoom")
+                        .HasPrecision(8, 4)
+                        .HasColumnType("numeric(8,4)")
+                        .HasColumnName("zoom");
+
+                    b.HasKey("StorylineRevisionId");
+
+                    b.ToTable("storyline_web_layout", (string)null);
+                });
+
+            modelBuilder.Entity("PassingTrace.Core.Storylines.StorylineWebNodeLayout", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<decimal?>("Height")
+                        .HasPrecision(12, 3)
+                        .HasColumnType("numeric(12,3)")
+                        .HasColumnName("height");
+
+                    b.Property<Guid>("NodeKey")
+                        .HasColumnType("uuid")
+                        .HasColumnName("node_key");
+
+                    b.Property<long>("StorylineRevisionId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("storyline_revision_id");
+
+                    b.Property<decimal?>("Width")
+                        .HasPrecision(12, 3)
+                        .HasColumnType("numeric(12,3)")
+                        .HasColumnName("width");
+
+                    b.Property<decimal>("X")
+                        .HasPrecision(12, 3)
+                        .HasColumnType("numeric(12,3)")
+                        .HasColumnName("x");
+
+                    b.Property<decimal>("Y")
+                        .HasPrecision(12, 3)
+                        .HasColumnType("numeric(12,3)")
+                        .HasColumnName("y");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StorylineRevisionId", "NodeKey")
+                        .IsUnique()
+                        .HasDatabaseName("uk_storyline_web_node_layout");
+
+                    b.ToTable("storyline_web_node_layout", (string)null);
+                });
+
+            modelBuilder.Entity("PassingTrace.Core.Storylines.StorylineWebStageLayout", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<decimal>("Height")
+                        .HasPrecision(12, 3)
+                        .HasColumnType("numeric(12,3)")
+                        .HasColumnName("height");
+
+                    b.Property<Guid>("StageKey")
+                        .HasColumnType("uuid")
+                        .HasColumnName("stage_key");
+
+                    b.Property<long>("StorylineRevisionId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("storyline_revision_id");
+
+                    b.Property<decimal>("Width")
+                        .HasPrecision(12, 3)
+                        .HasColumnType("numeric(12,3)")
+                        .HasColumnName("width");
+
+                    b.Property<decimal>("X")
+                        .HasPrecision(12, 3)
+                        .HasColumnType("numeric(12,3)")
+                        .HasColumnName("x");
+
+                    b.Property<decimal>("Y")
+                        .HasPrecision(12, 3)
+                        .HasColumnType("numeric(12,3)")
+                        .HasColumnName("y");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StorylineRevisionId", "StageKey")
+                        .IsUnique()
+                        .HasDatabaseName("uk_storyline_web_stage_layout");
+
+                    b.ToTable("storyline_web_stage_layout", (string)null);
+                });
+
             modelBuilder.Entity("PassingTrace.Core.Ai.AiMessage", b =>
                 {
                     b.HasOne("PassingTrace.Core.Ai.AiConversation", "Conversation")
@@ -1531,6 +2085,113 @@ namespace PassingTrace.Infrastructure.Persistence.Migrations
                     b.Navigation("SourceRevision");
                 });
 
+            modelBuilder.Entity("PassingTrace.Core.Storylines.StorylineEdge", b =>
+                {
+                    b.HasOne("PassingTrace.Core.Storylines.StorylineRevision", "Revision")
+                        .WithMany("Edges")
+                        .HasForeignKey("StorylineRevisionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Revision");
+                });
+
+            modelBuilder.Entity("PassingTrace.Core.Storylines.StorylineNode", b =>
+                {
+                    b.HasOne("PassingTrace.Core.Events.Event", "Event")
+                        .WithMany()
+                        .HasForeignKey("EventId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("PassingTrace.Core.Storylines.StorylineRevision", "Revision")
+                        .WithMany("Nodes")
+                        .HasForeignKey("StorylineRevisionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Event");
+
+                    b.Navigation("Revision");
+                });
+
+            modelBuilder.Entity("PassingTrace.Core.Storylines.StorylineRevision", b =>
+                {
+                    b.HasOne("PassingTrace.Core.Storylines.Storyline", "Storyline")
+                        .WithMany("Revisions")
+                        .HasForeignKey("StorylineId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Storyline");
+                });
+
+            modelBuilder.Entity("PassingTrace.Core.Storylines.StorylineRevisionTag", b =>
+                {
+                    b.HasOne("PassingTrace.Core.Storylines.StorylineRevision", "Revision")
+                        .WithMany("Tags")
+                        .HasForeignKey("StorylineRevisionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Revision");
+                });
+
+            modelBuilder.Entity("PassingTrace.Core.Storylines.StorylineSearchIndex", b =>
+                {
+                    b.HasOne("PassingTrace.Core.Storylines.Storyline", "Storyline")
+                        .WithMany("SearchIndexes")
+                        .HasForeignKey("StorylineId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Storyline");
+                });
+
+            modelBuilder.Entity("PassingTrace.Core.Storylines.StorylineStage", b =>
+                {
+                    b.HasOne("PassingTrace.Core.Storylines.StorylineRevision", "Revision")
+                        .WithMany("Stages")
+                        .HasForeignKey("StorylineRevisionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Revision");
+                });
+
+            modelBuilder.Entity("PassingTrace.Core.Storylines.StorylineWebLayout", b =>
+                {
+                    b.HasOne("PassingTrace.Core.Storylines.StorylineRevision", "Revision")
+                        .WithOne("WebLayout")
+                        .HasForeignKey("PassingTrace.Core.Storylines.StorylineWebLayout", "StorylineRevisionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Revision");
+                });
+
+            modelBuilder.Entity("PassingTrace.Core.Storylines.StorylineWebNodeLayout", b =>
+                {
+                    b.HasOne("PassingTrace.Core.Storylines.StorylineWebLayout", "Layout")
+                        .WithMany("Nodes")
+                        .HasForeignKey("StorylineRevisionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Layout");
+                });
+
+            modelBuilder.Entity("PassingTrace.Core.Storylines.StorylineWebStageLayout", b =>
+                {
+                    b.HasOne("PassingTrace.Core.Storylines.StorylineWebLayout", "Layout")
+                        .WithMany("Stages")
+                        .HasForeignKey("StorylineRevisionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Layout");
+                });
+
             modelBuilder.Entity("PassingTrace.Core.Ai.AiConversation", b =>
                 {
                     b.Navigation("Messages");
@@ -1579,6 +2240,33 @@ namespace PassingTrace.Infrastructure.Persistence.Migrations
                     b.Navigation("EventLinks");
 
                     b.Navigation("RevisionLinks");
+                });
+
+            modelBuilder.Entity("PassingTrace.Core.Storylines.Storyline", b =>
+                {
+                    b.Navigation("Revisions");
+
+                    b.Navigation("SearchIndexes");
+                });
+
+            modelBuilder.Entity("PassingTrace.Core.Storylines.StorylineRevision", b =>
+                {
+                    b.Navigation("Edges");
+
+                    b.Navigation("Nodes");
+
+                    b.Navigation("Stages");
+
+                    b.Navigation("Tags");
+
+                    b.Navigation("WebLayout");
+                });
+
+            modelBuilder.Entity("PassingTrace.Core.Storylines.StorylineWebLayout", b =>
+                {
+                    b.Navigation("Nodes");
+
+                    b.Navigation("Stages");
                 });
 #pragma warning restore 612, 618
         }

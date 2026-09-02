@@ -7,9 +7,31 @@
     <link rel="stylesheet" href="~/css/identity.css" asp-append-version="true" />
 </head>
 <body>
+    <a class="skip-link" href="#main-content">跳到主要内容</a>
     <main class="shell">
-        <a class="brand" asp-page="/Index">星期八</a>
-        @RenderBody()
+        <a class="brand" asp-page="/Index" aria-label="星期八身份服务首页">
+            <span class="brand-mark" aria-hidden="true">
+                <svg viewBox="0 0 108 108" focusable="false">
+                    <rect x="3" y="3" width="102" height="102" rx="28" fill="currentColor" />
+                    <rect x="28" y="22" width="28" height="40" rx="5" fill="#fff6e8" transform="rotate(-8 42 42)" />
+                    <circle cx="40" cy="34" r="6" fill="#e28a62" />
+                    <path d="M31 51 39 42 46 48 53 40 57 58H31Z" fill="#a8ccba" transform="rotate(-8 44 49)" />
+                    <rect x="53" y="25" width="28" height="40" rx="5" fill="#e28a62" transform="rotate(7 67 45)" />
+                    <rect x="60" y="33" width="14" height="5" rx="2.5" fill="#fff6e8" transform="rotate(7 67 35)" />
+                    <rect x="60" y="43" width="11" height="5" rx="2.5" fill="#fff6e8" transform="rotate(7 65 45)" />
+                    <path d="M19 49H89L82 63H26Z" fill="#d97856" />
+                    <path d="M25 59H83L78 85H30Z" fill="#fff6e8" />
+                    <rect x="45" y="65" width="18" height="8" rx="4" fill="#e28a62" />
+                </svg>
+            </span>
+            <span class="brand-copy">
+                <strong>星期八</strong>
+                <small>把生活收进记忆盒</small>
+            </span>
+        </a>
+        <div id="main-content" class="identity-content" tabindex="-1">
+            @RenderBody()
+        </div>
     </main>
 </body>
 </html>
