@@ -37,7 +37,8 @@ function download(event: MouseEvent) {
       </RouterLink>
 
       <nav v-if="variant === 'marketing'" class="site-nav" aria-label="产品导航">
-        <a href="#features">能力</a><a href="#experience">使用方式</a><a href="#privacy">隐私</a>
+        <a href="#features">产品能力</a><a href="#storylines">故事线</a
+        ><a href="#assistant">问问 AI</a><a href="#privacy">隐私</a>
         <a v-if="downloadUrl" :href="downloadUrl" :aria-disabled="downloadBusy" @click="download">{{
           downloadBusy ? '正在准备…' : '下载'
         }}</a>

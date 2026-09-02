@@ -24,9 +24,22 @@ public sealed class PersonalRecordTools(
     private string? _aggregateEvidence;
     private readonly List<PlaceEvidence> _placeEvidence = [];
     private readonly HashSet<long> _retrievedLocationIds = [];
-    private object? _navigationTarget;
+    private AssistantAction? _navigationTarget;
     private readonly List<StorylineEvidence> _storylineEvidence = [];
     private readonly HashSet<Guid> _retrievedStorylineIds = [];
+
+    public long? ResolvePreferredNavigationLocationId(string answer)
+    {
+        foreach (var record in _recordEvidence)
+        {
+            if (!answer.Contains($"[Event #{record.EventId}]", StringComparison.OrdinalIgnoreCase)) continue;
+            var citedPlace = _placeEvidence.FirstOrDefault(place => place.EventId == record.EventId);
+            if (citedPlace is not null) return citedPlace.LocationId;
+        }
+
+        var distinctPlaces = _placeEvidence.DistinctBy(place => place.LocationId).Take(2).ToArray();
+        return distinctPlaces.Length == 1 ? distinctPlaces[0].LocationId : null;
+    }
 
     public EvidenceBundle Snapshot => new(
         _recordEvidence.GroupBy(x => x.EventId).Select(x => x.First()).ToArray(),
@@ -280,7 +293,22 @@ public sealed class PersonalRecordTools(
             _retrievedEventIds.Add(record.EventId);
             _recordEvidence.Add(record);
         }
-        return new EvidenceBundle(records, [], TimeRange: BuildTimeRange(from, to));
+        var places = locationRows
+            .Where(locationRow => locationRow.UserConfirmed && records.Any(record =>
+                record.EventId == locationRow.EventId && record.SourceRevision == locationRow.SourceRevision))
+            .Select(locationRow =>
+            {
+                var record = records.Single(record => record.EventId == locationRow.EventId);
+                return new PlaceEvidence(locationRow.Id, record.EventId, record.Title ?? "无标题", locationRow.Name,
+                    locationRow.Address, locationRow.AdCode, record.HappenedAt, 1);
+            })
+            .ToArray();
+        foreach (var place in places)
+        {
+            _retrievedLocationIds.Add(place.LocationId);
+            _placeEvidence.Add(place);
+        }
+        return new EvidenceBundle(records, [], TimeRange: BuildTimeRange(from, to), Places: places);
     }
 
     [Description("对当前用户记录执行白名单统计。metric 仅允许 count、expense_total、trend、plan_completion_rate；不执行模型生成的 SQL。")]
@@ -393,11 +421,13 @@ public sealed class PersonalRecordTools(
     {
         var userId = currentUser.UserId;
         limit = Math.Clamp(limit, 1, 20);
+        var retrievedEventIds = _recordEvidence.Select(x => x.EventId).Distinct().Take(limit).ToArray();
         var places = await (from location in db.EventLocations.AsNoTracking()
                             join evt in db.Events.AsNoTracking() on location.EventId equals evt.Id
                             where location.UserId == userId && evt.UserId == userId && evt.DeletedAt == null &&
                                   location.UserConfirmed && location.SourceRevision == evt.CurrentSourceRevision &&
-                                  (query == "" || EF.Functions.TrigramsSimilarity(location.Name + " " + location.Address, query) > 0.1)
+                                  (query == "" || retrievedEventIds.Contains(evt.Id) ||
+                                   EF.Functions.TrigramsSimilarity(location.Name + " " + location.Address, query) > 0.1)
                             orderby evt.HappenedAt ?? evt.CreatedAt descending
                             select new PlaceEvidence(location.Id, evt.Id, evt.Title ?? "无标题", location.Name, location.Address,
                                 location.AdCode, evt.HappenedAt, 1)).Take(limit).ToListAsync(cancellationToken);
@@ -412,17 +442,31 @@ public sealed class PersonalRecordTools(
             _placeEvidence.Where(x => locationIds.Contains(x.LocationId) && _retrievedLocationIds.Contains(x.LocationId)).ToArray());
 
     [Description("为本轮已检索且有可信坐标的地点生成结构化导航目标。")]
-    public async Task<object?> GetNavigationTargetAsync(long locationId, CancellationToken cancellationToken = default)
+    public async Task<AssistantAction?> GetNavigationTargetAsync(long locationId, CancellationToken cancellationToken = default)
     {
         if (!_retrievedLocationIds.Contains(locationId)) return null;
         var userId = currentUser.UserId;
-        _navigationTarget = await (from location in db.EventLocations.AsNoTracking()
-                                   join evt in db.Events.AsNoTracking() on location.EventId equals evt.Id
-                                   where location.Id == locationId && location.UserId == userId && evt.UserId == userId && evt.DeletedAt == null &&
-                                         location.SourceRevision == evt.CurrentSourceRevision && location.UserConfirmed && location.Latitude != null &&
-                                         location.Longitude != null && location.CoordinateSystem == "GCJ02"
-                                   select new { type = "navigation", eventId = evt.Id, locationId = location.Id, label = $"导航到{location.Name}" })
+        var target = await (from location in db.EventLocations.AsNoTracking()
+                            join evt in db.Events.AsNoTracking() on location.EventId equals evt.Id
+                            where location.Id == locationId && location.UserId == userId && evt.UserId == userId && evt.DeletedAt == null &&
+                                  location.SourceRevision == evt.CurrentSourceRevision && location.UserConfirmed && location.Latitude != null &&
+                                  location.Longitude != null && location.CoordinateSystem == "GCJ02"
+                            select new
+                            {
+                                EventId = evt.Id,
+                                LocationId = location.Id,
+                                location.Name,
+                                location.Address,
+                                Latitude = location.Latitude!.Value,
+                                Longitude = location.Longitude!.Value,
+                                location.ProviderPoiId,
+                            })
             .FirstOrDefaultAsync(cancellationToken);
+        if (target is null) return null;
+        _navigationTarget = new AssistantAction(
+            "amap-navigation", "amap", $"导航到{target.Name}", target.Name, target.Address,
+            target.Latitude, target.Longitude, "GCJ02", target.ProviderPoiId, "personal-record",
+            target.EventId, target.LocationId);
         return _navigationTarget;
     }
 

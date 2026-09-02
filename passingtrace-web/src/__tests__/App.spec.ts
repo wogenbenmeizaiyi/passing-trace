@@ -14,8 +14,11 @@ describe('星期八 Web 首页', () => {
     expect(wrapper.text()).toContain('星期八')
     expect(wrapper.text()).toContain('下载 Android 版')
     expect(wrapper.text()).toContain('在网页端登录')
-    expect(wrapper.text()).toContain('多媒体记录')
-    expect(wrapper.text()).toContain('AI 分类与理解')
+    expect(wrapper.text()).toContain('记录每个当下')
+    expect(wrapper.text()).toContain('拼成完整故事线')
+    expect(wrapper.text()).toContain('问回自己的生活')
+    expect(wrapper.text()).toContain('周末去看海')
+    expect(wrapper.text()).toContain('高德导航')
     expect(wrapper.text()).toContain('私有 S3 对象存储')
     expect(wrapper.find('a[href$="/api/v1/app-updates/android/latest/download"]').exists()).toBe(
       true,

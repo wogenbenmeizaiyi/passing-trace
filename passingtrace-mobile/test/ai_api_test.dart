@@ -140,4 +140,57 @@ void main() {
     expect(records.single.displayTitle, '整理项目下一阶段计划');
     api.close();
   });
+
+  test('恢复会话时只接受可信的高德地点与动作', () async {
+    final message = AiMessageModel.fromJson({
+      'role': 'Assistant',
+      'content': '为你找到一个地点。',
+      'evidence': {
+        'amapPlaces': [
+          {
+            'candidateId': 'p1',
+            'poiId': 'poi-1',
+            'name': '人民广场地铁站',
+            'address': '上海市黄浦区',
+            'latitude': 31.232,
+            'longitude': 121.475,
+          },
+          {
+            'candidateId': 'bad',
+            'name': '无效地点',
+            'latitude': 999,
+            'longitude': 999,
+          },
+        ],
+        'actions': [
+          {
+            'type': 'amap-navigation',
+            'provider': 'amap',
+            'label': '高德导航',
+            'placeName': '人民广场地铁站',
+            'latitude': 31.232,
+            'longitude': 121.475,
+            'coordinateSystem': 'GCJ02',
+            'source': 'amap-live',
+          },
+          {
+            'type': 'amap-trip-map',
+            'provider': 'amap',
+            'label': '打开地图',
+            'placeName': '伪造地图',
+            'latitude': 0,
+            'longitude': 0,
+            'coordinateSystem': 'GCJ02',
+            'source': 'amap-live',
+            'webUrl': 'https://evil.example/trip',
+          },
+        ],
+      },
+    });
+
+    expect(message.amapPlaces, hasLength(1));
+    expect(message.amapPlaces.single.name, '人民广场地铁站');
+    expect(message.actions, hasLength(1));
+    expect(message.actions.single.type, 'amap-navigation');
+  });
 }

@@ -1,6 +1,8 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
 using PassingTrace.Events.Api.Ai;
+using PassingTrace.Events.Api.Ai.Amap;
+using PassingTrace.Events.Api.Ai.Capabilities;
 using PassingTrace.Events.Api.Common;
 using PassingTrace.Events.Api.Events;
 using PassingTrace.Events.Api.Media;
@@ -41,18 +43,33 @@ public static class ApplicationExtensions
         services.AddSingleton(TimeProvider.System);
         services.Configure<ObjectStorageOptions>(configuration.GetSection(ObjectStorageOptions.SectionName));
         services.Configure<AiModelOptions>(configuration.GetSection(AiModelOptions.SectionName));
-        services.Configure<AmapOptions>(configuration.GetSection(AmapOptions.SectionName));
+        services.AddOptions<AmapOptions>()
+            .Bind(configuration.GetSection(AmapOptions.SectionName))
+            .PostConfigure(options =>
+            {
+                options.McpKey = FirstConfigured(configuration["AMAP_MCP_KEY"], options.McpKey);
+                options.WebServiceKey = FirstConfigured(configuration["AMAP_WEB_SERVICE_KEY"], options.WebServiceKey);
+            });
         services.AddHttpClient<AmapPlaceService>(client =>
         {
             client.BaseAddress = new Uri("https://restapi.amap.com");
             client.Timeout = TimeSpan.FromSeconds(8);
         }).RemoveAllLoggers();
+        services.AddHttpClient<AmapMcpGateway>(client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(12);
+        }).RemoveAllLoggers();
+        services.AddScoped<IAmapMcpGateway>(provider => provider.GetRequiredService<AmapMcpGateway>());
+        services.AddScoped<IAmapQuotaGuard, RedisAmapQuotaGuard>();
         services.AddSingleton<AiClientFactory>();
         services.AddSingleton(provider => provider.GetRequiredService<AiClientFactory>().AssistantChatClient);
         services.AddSingleton(provider => provider.GetRequiredService<AiClientFactory>().EmbeddingGenerator);
         services.AddHttpContextAccessor();
         services.AddScoped<CurrentUserContext>();
         services.AddScoped<PersonalRecordTools>();
+        services.AddScoped<AmapAiTools>();
+        services.AddScoped<IAiCapabilityPackage, PersonalRecordsCapabilityPackage>();
+        services.AddScoped<IAiCapabilityPackage, AmapCapabilityPackage>();
         services.AddScoped<AssistantService>();
         services.AddScoped<UserMemoryService>();
         services.AddSingleton<IObjectStorage, S3ObjectStorage>();
@@ -72,4 +89,7 @@ public static class ApplicationExtensions
 
         return services;
     }
+
+    private static string FirstConfigured(string? preferred, string fallback) =>
+        string.IsNullOrWhiteSpace(preferred) ? fallback : preferred.Trim();
 }

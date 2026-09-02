@@ -1,6 +1,7 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:passingtrace_mobile/events/ai_api.dart';
 import 'package:passingtrace_mobile/theme/passingtrace_theme.dart';
 import 'package:passingtrace_mobile/theme/quiet_trace_components.dart';
 import 'package:passingtrace_mobile/theme/quiet_trace_icons.dart';
@@ -152,6 +153,43 @@ void main() {
 
     expect(find.bySemanticsLabel('新建会话'), findsOneWidget);
     expect(find.bySemanticsLabel('聊天记录'), findsOneWidget);
+  });
+
+  testWidgets('高德动作卡明确区分外部结果和个人记录地点', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: PassingTraceTheme.light(PassingTracePalette.pine),
+        home: const Scaffold(
+          body: AmapActionCards(
+            places: [],
+            actions: [
+              AssistantActionModel(
+                type: 'amap-navigation',
+                provider: 'amap',
+                label: '导航到人民广场地铁站',
+                placeName: '人民广场地铁站',
+                address: '上海市黄浦区',
+                latitude: 31.232,
+                longitude: 121.475,
+                coordinateSystem: 'GCJ02',
+                poiId: 'p1',
+                source: 'amap-live',
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('来自高德地图 · 上海市黄浦区'), findsOneWidget);
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is Semantics && widget.properties.label == '导航到人民广场地铁站',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('导航'), findsOneWidget);
   });
 }
 

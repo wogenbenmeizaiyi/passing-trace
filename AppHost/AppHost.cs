@@ -16,6 +16,7 @@ var objectStoragePublicEndpoint = builder.AddParameter(
 var qwenApiKey = builder.AddParameter("qwen-api-key", secret: true);
 var miniMaxApiKey = builder.AddParameter("minimax-api-key", secret: true);
 var amapWebServiceKey = builder.AddParameter("amap-web-service-key", secret: true);
+var amapMcpKey = builder.Configuration["AMAP_MCP_KEY"];
 
 var redis = builder.AddRedis("redis")
     .WithLifetime(ContainerLifetime.Persistent);
@@ -48,6 +49,8 @@ var identityDatabase = postgres.AddDatabase("identity");
 
 // 引用数据库会自动注入 ConnectionStrings__identity。
 var identity = builder.AddProject<Projects.PassingTrace_Identity_AuthorizationServer>("passingtrace-identity")
+    // 手机内部测试包使用固定 HTTP 端口，避免每次重启 Aspire 后旧登录令牌和 APK 指向失效。
+    .WithEndpoint("http", endpoint => endpoint.Port = 56229)
     .WithReference(identityDatabase)
     .WaitFor(identityDatabase);
 
@@ -55,6 +58,7 @@ var identity = builder.AddProject<Projects.PassingTrace_Identity_AuthorizationSe
 var traceDatabase = postgres.AddDatabase("trace");
 
 var api = builder.AddProject<Projects.PassingTrace_Events_Api>("passingtrace-events-api")
+    .WithEndpoint("http", endpoint => endpoint.Port = 54934)
     .WithReference(traceDatabase)
     .WithReference(redis)
     .WithEnvironment("Identity__Authority", identity.GetEndpoint("http"))
@@ -70,6 +74,9 @@ var api = builder.AddProject<Projects.PassingTrace_Events_Api>("passingtrace-eve
     .WaitFor(traceDatabase)
     .WaitFor(redis)
     .WaitFor(minio);
+
+if (!string.IsNullOrWhiteSpace(amapMcpKey))
+    api.WithEnvironment("AMAP_MCP_KEY", amapMcpKey);
 
 var aiWorker = builder.AddProject<Projects.PassingTrace_Ai_Worker>("passingtrace-ai-worker")
     .WithReference(traceDatabase)

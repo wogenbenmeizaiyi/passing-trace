@@ -54,10 +54,10 @@ async function downloadAndroid(event?: MouseEvent) {
       <section class="hero-section" aria-labelledby="hero-title">
         <div class="hero-copy">
           <p class="section-kicker">你的私人生活档案</p>
-          <h1 id="hero-title">把散落的生活，<br /><span>收进会理解你的记忆盒。</span></h1>
+          <h1 id="hero-title">记下当下，串成故事，<br /><span>再问回你的生活。</span></h1>
           <p class="hero-lede">
-            记录文字、照片、视频、文件和地点。星期八会替你整理分类、理解线索，
-            在你想回望时，用真实记录回答问题。
+            星期八把文字、照片、计划和地点收进同一条时间线；你可以把散落的记录拼成故事线， 也可以让
+            AI 沿着真实记录，回答经历、地点与生活变化。
           </p>
           <div class="hero-actions">
             <a
@@ -103,7 +103,7 @@ async function downloadAndroid(event?: MouseEvent) {
               <path d="M12 3 5 6v5c0 4.6 2.8 8.1 7 10 4.2-1.9 7-5.4 7-10V6l-7-3Z" />
               <path d="m9.2 12 1.8 1.8 3.8-4" />
             </svg>
-            私有对象存储 · 用户数据隔离 · 回答附带记录证据
+            私有对象存储 · 故事线保留原始记录 · AI 回答附带可点击证据
           </p>
           <p v-if="auth.error" class="inline-error" role="alert">
             {{ auth.error }}
@@ -149,8 +149,8 @@ async function downloadAndroid(event?: MouseEvent) {
                   <path d="m18.5 14 .7 2.3 2.3.7-2.3.7-.7 2.3-.7-2.3-2.3-.7 2.3-.7.7-2.3Z" />
                 </svg>
                 <div>
-                  <strong>这个月，你更常在傍晚留下记录</strong>
-                  <span>基于 13 条记录与 4 个地点</span>
+                  <strong>这两条记录可以接入“西湖周末”故事线</strong>
+                  <span>AI 已整理标签，原始内容保持不变</span>
                 </div>
               </aside>
             </div>
@@ -161,9 +161,9 @@ async function downloadAndroid(event?: MouseEvent) {
 
       <section id="features" class="feature-section" aria-labelledby="feature-title">
         <div class="section-heading">
-          <p class="section-kicker">不只是记事</p>
-          <h2 id="feature-title">留下信息，也留下它发生时的上下文。</h2>
-          <p>你只管记录，整理、关联和回望交给星期八。</p>
+          <p class="section-kicker">一套完整的生活记录方式</p>
+          <h2 id="feature-title">一条记录是当下，连起来就是一段经历。</h2>
+          <p>从随手记下一件事，到整理一段完整的过程，再到用自然语言重新找到它。</p>
         </div>
         <div class="feature-grid">
           <article>
@@ -172,8 +172,8 @@ async function downloadAndroid(event?: MouseEvent) {
               <path d="M8 5h12l5 5v17H8V5Z" />
               <path d="M20 5v6h5M12 16h9M12 21h6" />
             </svg>
-            <h3>多媒体记录</h3>
-            <p>文字、图片、视频和各种文件放进同一条记录，地点与时间也会一起保存。</p>
+            <h3>记录每个当下</h3>
+            <p>文字、图片、视频、文件、时间和地点都能留在同一条记录里，计划也可以提前写下。</p>
           </article>
           <article>
             <span class="feature-index">02</span>
@@ -183,34 +183,127 @@ async function downloadAndroid(event?: MouseEvent) {
               />
               <circle cx="16" cy="16" r="6" />
             </svg>
-            <h3>AI 分类与理解</h3>
-            <p>自动概括图片与正文，补充美食、旅行、运动等标签，原始内容始终由你掌控。</p>
+            <h3>自动整理线索</h3>
+            <p>AI 理解正文与图片，补充分类、行为标签和检索线索；人工选择始终优先。</p>
           </article>
           <article>
             <span class="feature-index">03</span>
             <svg class="feature-icon" viewBox="0 0 32 32" aria-hidden="true">
-              <path d="M16 28s9-8.4 9-16a9 9 0 1 0-18 0c0 7.6 9 16 9 16Z" />
-              <circle cx="16" cy="12" r="3" />
+              <rect x="4" y="5" width="9" height="7" rx="2" />
+              <rect x="19" y="20" width="9" height="7" rx="2" />
+              <path d="M13 8.5h3a5 5 0 0 1 5 5V20M9 12v8h10" />
             </svg>
-            <h3>记忆与地点回溯</h3>
-            <p>问“上个月去了哪里”，从自己的记录获得有证据的回答，还能导航回曾经保存的地点。</p>
+            <h3>拼成完整故事线</h3>
+            <p>把购票、出发、抵达和沿途分支接成一段完整经历，也能把还没发生的计划放进来。</p>
+          </article>
+          <article>
+            <span class="feature-index">04</span>
+            <svg class="feature-icon" viewBox="0 0 32 32" aria-hidden="true">
+              <path d="M7 6h18v15H14l-6 5v-5H7V6Z" />
+              <path d="M11 11h10M11 16h7" />
+            </svg>
+            <h3>问回自己的生活</h3>
+            <p>询问去过哪里、做过什么或某段经历怎样发展，回答会带上记录标题、地点与导航入口。</p>
           </article>
         </div>
       </section>
 
-      <section id="experience" class="experience-section" aria-labelledby="experience-title">
-        <div class="experience-copy">
-          <p class="section-kicker">从记录到回答</p>
-          <h2 id="experience-title">不用反复翻找，也不让 AI 凭空猜测。</h2>
+      <section id="storylines" class="storyline-section" aria-labelledby="storyline-title">
+        <div class="storyline-demo" aria-label="故事线编辑器示意">
+          <header class="storyline-demo__header">
+            <div>
+              <span>故事线</span>
+              <strong>周末去看海</strong>
+            </div>
+            <span class="storyline-status"><i aria-hidden="true"></i>进行中</span>
+          </header>
+          <div class="storyline-canvas">
+            <p class="storyline-stage">准备</p>
+            <div class="story-node story-node--plan">
+              <small>未来安排</small><strong>订周六早班车</strong><span>周六 · 07:30</span>
+            </div>
+            <span class="story-edge story-edge--one" aria-hidden="true"></span>
+            <p class="storyline-stage storyline-stage--second">抵达以后</p>
+            <div class="story-node story-node--main">
+              <small>当下记录</small><strong>沿海边慢慢走</strong><span>美景 · 步行 · 拍照</span>
+            </div>
+            <span class="story-edge story-edge--branch-a" aria-hidden="true"></span>
+            <span class="story-edge story-edge--branch-b" aria-hidden="true"></span>
+            <div class="story-node story-node--branch story-node--food">
+              <small>分支</small><strong>在码头吃海鲜</strong><span>美食 · 聚餐</span>
+            </div>
+            <div class="story-node story-node--branch story-node--sunset">
+              <small>分支</small><strong>等一场日落</strong><span>18:42 · 灯塔附近</span>
+            </div>
+          </div>
+          <footer class="storyline-demo__footer">
+            <span>4 个节点</span><span>2 个阶段</span><span>记录与计划共同组成</span>
+          </footer>
+        </div>
+
+        <div class="storyline-copy">
+          <p class="section-kicker">故事线</p>
+          <h2 id="storyline-title">散装的记录，终于可以讲清一件事。</h2>
           <p>
-            每次分析都和原始记录、修订版本与证据绑定。问题需要精确数字时，系统重新统计；
-            问到经历与偏好时，只在你的数据范围内检索。
+            一次旅行、一个项目、一只宠物的成长，往往不是一条记录能说完的。故事线保留每条原始记录，
+            只描述它们之间的阶段、先后、分支与汇合。
+          </p>
+          <ul class="storyline-benefits">
+            <li>
+              <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="m5 12 4 4L19 6" />
+              </svg>
+              <span
+                ><strong>记录与计划可以放在一起</strong
+                >出发前的安排和发生后的经历，共用一条故事线。</span
+              >
+            </li>
+            <li>
+              <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="m5 12 4 4L19 6" />
+              </svg>
+              <span
+                ><strong>复杂关系交给网页整理</strong
+                >大屏编辑分支与阶段，手机继续负责随时记录和查看。</span
+              >
+            </li>
+            <li>
+              <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="m5 12 4 4L19 6" />
+              </svg>
+              <span
+                ><strong>原始内容不会被复制或改写</strong
+                >节点固定到记录修订，过去的证据依然清楚。</span
+              >
+            </li>
+          </ul>
+          <RouterLink v-if="auth.isAuthenticated" class="storyline-link" to="/storylines">
+            打开我的故事线
+            <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="m9 5 7 7-7 7" />
+            </svg>
+          </RouterLink>
+        </div>
+      </section>
+
+      <section id="assistant" class="experience-section" aria-labelledby="experience-title">
+        <div class="experience-copy">
+          <p class="section-kicker">问问 AI</p>
+          <h2 id="experience-title">它不是替你编故事，而是帮你找回故事。</h2>
+          <p>
+            AI 能理解连续对话，也能检索记录、故事线和确认过的地点。回答中的记录标题可以直接打开；
+            问到曾经去过的地方，还能使用保存的坐标唤起高德导航。
           </p>
           <ol class="experience-steps">
-            <li><strong>随手留下</strong><span>把当下的文字、照片、文件与地点放进去。</span></li>
-            <li><strong>后台整理</strong><span>AI 生成摘要、分类、标签与检索索引。</span></li>
             <li>
-              <strong>随时问回</strong><span>答案带着可点击的记录标题，而不是模糊的猜测。</span>
+              <strong>先找你的记录</strong><span>经历类问题优先从私人记录与故事线里检索证据。</span>
+            </li>
+            <li>
+              <strong>再补实时地点能力</strong
+              ><span>需要路线、天气或公共地点时，再调用高德能力。</span>
+            </li>
+            <li>
+              <strong>把结果交还给你</strong><span>回答、记录证据与导航动作各自标明来源。</span>
             </li>
           </ol>
         </div>
@@ -219,11 +312,22 @@ async function downloadAndroid(event?: MouseEvent) {
             <span class="assistant-mark"><BrandMark /></span>
             <div><strong>问问 AI</strong><small>只回答你的生活记录</small></div>
           </header>
-          <div class="demo-question">帮我总结一下这个月的生活。</div>
+          <div class="demo-question">定位出我最近吃过的一家烤肉店。</div>
           <div class="demo-answer">
-            <p>这个月有三条清晰的主线：个人项目继续推进，运动保持稳定，也留下了几次散步和探店。</p>
-            <a href="#experience"><span>八月生活小结</span><small>8 月 30 日 · 生活</small></a>
-            <a href="#experience"><span>沿江骑行 12 公里</span><small>8 月 23 日 · 运动</small></a>
+            <p>找到了。你最近一次吃烤肉是在“周末和朋友去吃烤肉”这条记录里。</p>
+            <div class="demo-evidence">
+              <span>周末和朋友去吃烤肉</span><small>8 月 31 日 · 美食 · 记录证据</small>
+            </div>
+            <div class="demo-place">
+              <span class="demo-place__icon">
+                <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 21s7-6.2 7-12a7 7 0 1 0-14 0c0 5.8 7 12 7 12Z" />
+                  <circle cx="12" cy="9" r="2.2" />
+                </svg>
+              </span>
+              <span><strong>山野炉端烧</strong><small>来自你的记录 · 已保存坐标</small></span>
+              <span class="demo-place__action">高德导航</span>
+            </div>
           </div>
           <div class="demo-composer">
             <span>继续问你的记录…</span>
@@ -241,12 +345,13 @@ async function downloadAndroid(event?: MouseEvent) {
           <h2 id="privacy-title">记忆可以被理解，但不应该失去归属。</h2>
           <p>
             附件保持私有，访问地址短时有效；搜索与 AI
-            工具从登录身份取得用户范围，不能请求其他人的数据。
+            工具从登录身份取得用户范围，不能请求其他人的数据。外部地图结果和私人记录证据也会分开标注。
           </p>
         </div>
         <ul>
           <li>私有 S3 对象存储</li>
           <li>每个回答保留证据</li>
+          <li>AI 只读检索，不修改故事线</li>
           <li>长期记忆可确认、修正或遗忘</li>
         </ul>
       </section>
@@ -254,7 +359,7 @@ async function downloadAndroid(event?: MouseEvent) {
       <section class="download-section" aria-labelledby="download-title">
         <div>
           <p class="section-kicker">从今天开始</p>
-          <h2 id="download-title">先留下一条，未来就多一个可以回去的地方。</h2>
+          <h2 id="download-title">先留下一条，未来就有一段可以继续写下去的故事。</h2>
         </div>
         <a
           class="button button-primary"
@@ -275,7 +380,7 @@ async function downloadAndroid(event?: MouseEvent) {
         <span class="site-brand__mark"><BrandMark /></span>
         <span class="site-brand__copy"><strong>星期八</strong><small>私人生活档案</small></span>
       </RouterLink>
-      <p>记录 · 理解 · 回望</p>
+      <p>记录 · 串联 · 回望</p>
       <p>© 2026 星期八</p>
     </footer>
   </div>
@@ -597,19 +702,22 @@ async function downloadAndroid(event?: MouseEvent) {
 }
 .feature-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   border: 1px solid var(--line);
   border-radius: var(--radius-xl);
   overflow: hidden;
 }
 .feature-grid article {
-  min-height: 350px;
+  min-height: 320px;
   padding: 32px;
   position: relative;
   background: var(--surface);
 }
-.feature-grid article + article {
+.feature-grid article:nth-child(even) {
   border-left: 1px solid var(--line);
+}
+.feature-grid article:nth-child(n + 3) {
+  border-top: 1px solid var(--line);
 }
 .feature-index {
   position: absolute;
@@ -638,6 +746,250 @@ async function downloadAndroid(event?: MouseEvent) {
   color: var(--ink-secondary);
   font-size: 14px;
   line-height: 1.75;
+}
+.storyline-section {
+  width: min(1196px, calc(100% - 48px));
+  margin: 0 auto;
+  padding: clamp(88px, 11vw, 156px) 0;
+  display: grid;
+  grid-template-columns: minmax(500px, 1.08fr) minmax(0, 0.82fr);
+  align-items: center;
+  gap: clamp(56px, 8vw, 112px);
+}
+.storyline-demo {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xl);
+  background: var(--surface);
+  box-shadow: var(--shadow-1);
+}
+.storyline-demo__header,
+.storyline-demo__footer {
+  padding: 18px 22px;
+  display: flex;
+  align-items: center;
+  border-color: var(--line);
+}
+.storyline-demo__header {
+  justify-content: space-between;
+  gap: 20px;
+  border-bottom: 1px solid var(--line);
+}
+.storyline-demo__header div span,
+.storyline-demo__header div strong {
+  display: block;
+}
+.storyline-demo__header div span {
+  margin-bottom: 3px;
+  color: var(--ink-tertiary);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+.storyline-demo__header div strong {
+  font-size: 16px;
+}
+.storyline-status {
+  min-height: 30px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--primary-strong);
+  background: var(--surface-soft);
+  font-size: 11px;
+  font-weight: 700;
+}
+.storyline-status i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--success);
+}
+.storyline-canvas {
+  min-height: 470px;
+  overflow: hidden;
+  position: relative;
+  background-color: var(--surface-soft);
+  background-image: radial-gradient(var(--line-strong) 0.8px, transparent 0.8px);
+  background-size: 18px 18px;
+}
+.storyline-stage {
+  margin: 0;
+  position: absolute;
+  top: 22px;
+  left: 26px;
+  color: var(--ink-tertiary);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+.storyline-stage--second {
+  top: 222px;
+}
+.story-node {
+  min-width: 0;
+  padding: 15px 17px;
+  position: absolute;
+  z-index: 2;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-1);
+}
+.story-node small,
+.story-node strong,
+.story-node span {
+  display: block;
+}
+.story-node small {
+  margin-bottom: 6px;
+  color: var(--accent);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+.story-node strong {
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+.story-node span {
+  margin-top: 7px;
+  color: var(--ink-tertiary);
+  font-size: 9px;
+}
+.story-node--plan {
+  width: 36%;
+  top: 58px;
+  left: 6%;
+  border-style: dashed;
+}
+.story-node--main {
+  width: 40%;
+  top: 150px;
+  left: 53%;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 12%, transparent);
+}
+.story-node--branch {
+  width: 36%;
+  top: 286px;
+}
+.story-node--food {
+  left: 8%;
+}
+.story-node--sunset {
+  left: 56%;
+}
+.story-edge {
+  height: 1px;
+  position: absolute;
+  z-index: 1;
+  background: var(--primary);
+  transform-origin: left center;
+}
+.story-edge::after {
+  content: '';
+  width: 7px;
+  height: 7px;
+  position: absolute;
+  top: -3px;
+  right: -1px;
+  border-top: 1px solid var(--primary);
+  border-right: 1px solid var(--primary);
+  transform: rotate(45deg);
+}
+.story-edge--one {
+  width: 18%;
+  top: 124px;
+  left: 40%;
+  transform: rotate(18deg);
+}
+.story-edge--branch-a {
+  width: 30%;
+  top: 236px;
+  left: 70%;
+  transform: rotate(153deg);
+}
+.story-edge--branch-b {
+  width: 18%;
+  top: 236px;
+  left: 72%;
+  transform: rotate(66deg);
+}
+.storyline-demo__footer {
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  border-top: 1px solid var(--line);
+  color: var(--ink-tertiary);
+  font-size: 10px;
+}
+.storyline-demo__footer span:last-child {
+  margin-left: auto;
+}
+.storyline-copy h2 {
+  margin: 0;
+  font-size: clamp(34px, 4.2vw, 58px);
+  line-height: 1.16;
+  letter-spacing: -0.05em;
+  text-wrap: balance;
+}
+.storyline-copy > p:not(.section-kicker) {
+  margin: 24px 0 30px;
+  color: var(--ink-secondary);
+  line-height: 1.85;
+}
+.storyline-benefits {
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 18px;
+  list-style: none;
+}
+.storyline-benefits li {
+  display: flex;
+  align-items: flex-start;
+  gap: 13px;
+  color: var(--ink-secondary);
+  font-size: 13px;
+  line-height: 1.65;
+}
+.storyline-benefits .ui-icon {
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+  padding: 3px;
+  border-radius: 50%;
+  color: var(--on-primary);
+  background: var(--primary);
+}
+.storyline-benefits strong {
+  display: block;
+  color: var(--ink);
+  font-size: 14px;
+}
+.storyline-link {
+  min-height: 48px;
+  width: max-content;
+  margin-top: 30px;
+  padding: 0 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--primary-strong);
+  font-size: 14px;
+  font-weight: 800;
+}
+.storyline-link:hover {
+  text-decoration: underline;
+  text-underline-offset: 5px;
+}
+.storyline-link .ui-icon {
+  width: 18px;
+  height: 18px;
 }
 .experience-section {
   width: min(1196px, calc(100% - 48px));
@@ -738,21 +1090,74 @@ async function downloadAndroid(event?: MouseEvent) {
   font-size: 13px;
   line-height: 1.7;
 }
-.demo-answer a {
+.demo-evidence {
   padding: 11px 0;
   display: flex;
   justify-content: space-between;
   gap: 14px;
   border-top: 1px solid var(--line);
 }
-.demo-answer a span {
+.demo-evidence span {
   color: var(--primary-strong);
   font-size: 12px;
   font-weight: 700;
 }
-.demo-answer a small {
+.demo-evidence small {
   color: var(--ink-tertiary);
   font-size: 9px;
+  white-space: nowrap;
+}
+.demo-place {
+  min-height: 62px;
+  margin-top: 12px;
+  padding: 10px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+.demo-place__icon {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  color: var(--primary-strong);
+  background: var(--primary-soft);
+}
+.demo-place__icon .ui-icon {
+  width: 20px;
+  height: 20px;
+}
+.demo-place > span:nth-child(2) {
+  min-width: 0;
+}
+.demo-place strong,
+.demo-place small {
+  display: block;
+}
+.demo-place strong {
+  overflow-wrap: anywhere;
+  font-size: 11px;
+}
+.demo-place small {
+  margin-top: 3px;
+  color: var(--ink-tertiary);
+  font-size: 8px;
+}
+.demo-place__action {
+  min-height: 34px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 9px;
+  color: var(--on-primary);
+  background: var(--primary);
+  font-size: 9px;
+  font-weight: 800;
   white-space: nowrap;
 }
 .demo-composer {
@@ -854,6 +1259,7 @@ async function downloadAndroid(event?: MouseEvent) {
 }
 @media (max-width: 980px) {
   .hero-section,
+  .storyline-section,
   .experience-section {
     grid-template-columns: 1fr;
   }
@@ -875,6 +1281,9 @@ async function downloadAndroid(event?: MouseEvent) {
   }
   .feature-icon {
     margin-top: 48px;
+  }
+  .storyline-copy {
+    max-width: 760px;
   }
   .privacy-section {
     grid-template-columns: 88px 1fr;
@@ -942,8 +1351,57 @@ async function downloadAndroid(event?: MouseEvent) {
     padding: 24px;
   }
   .experience-section,
+  .storyline-section,
   .download-section {
     width: calc(100% - 32px);
+  }
+  .storyline-demo__header,
+  .storyline-demo__footer {
+    padding-inline: 16px;
+  }
+  .storyline-copy {
+    order: -1;
+  }
+  .storyline-canvas {
+    min-height: 500px;
+  }
+  .story-node--plan {
+    width: 48%;
+    left: 5%;
+  }
+  .story-node--main {
+    width: 52%;
+    top: 166px;
+    left: 43%;
+  }
+  .story-node--branch {
+    width: 43%;
+    top: 318px;
+  }
+  .story-node--food {
+    left: 5%;
+  }
+  .story-node--sunset {
+    left: 52%;
+  }
+  .storyline-stage--second {
+    top: 254px;
+  }
+  .story-edge--one {
+    top: 129px;
+    left: 49%;
+  }
+  .story-edge--branch-a {
+    top: 252px;
+    left: 68%;
+  }
+  .story-edge--branch-b {
+    top: 252px;
+    left: 70%;
+  }
+  .storyline-demo__footer span:last-child {
+    width: 100%;
+    margin-left: 0;
   }
   .assistant-demo {
     padding: 16px;

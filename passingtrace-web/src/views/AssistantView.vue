@@ -1,6 +1,13 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue'
-import { aiApi, type ConversationSummary, type EvidenceBundle, type UserMemory } from '@/api/ai'
+import {
+  aiApi,
+  type AssistantAction,
+  type ConversationSummary,
+  type EvidenceBundle,
+  type UserMemory,
+} from '@/api/ai'
+import AmapActionCards from '@/components/AmapActionCards.vue'
 import BrandMark from '@/components/BrandMark.vue'
 import AssistantMessageContent from '@/components/AssistantMessageContent'
 import EvidenceDisclosure from '@/components/EvidenceDisclosure.vue'
@@ -11,6 +18,7 @@ interface ChatItem {
   role: 'User' | 'Assistant'
   content: string
   evidence?: EvidenceBundle | null
+  actions?: AssistantAction[]
 }
 
 const auth = useAuthStore()
@@ -51,6 +59,7 @@ async function open(id: string) {
     role: item.role === 'User' ? 'User' : 'Assistant',
     content: item.content,
     evidence: item.evidence,
+    actions: item.evidence?.actions ?? [],
   }))
 }
 
@@ -70,6 +79,15 @@ async function send(textOverride?: string) {
         answer.content = event.data.replacement ? event.data.text : answer.content + event.data.text
       } else if (event.type === 'evidence') {
         answer.evidence = event.data
+        answer.actions = event.data.actions ?? answer.actions
+      } else if (event.type === 'action') {
+        answer.actions ??= []
+        if (
+          !answer.actions.some(
+            (action) => action.type === event.data.type && action.label === event.data.label,
+          )
+        )
+          answer.actions.push(event.data)
       } else if (event.type === 'error') {
         error.value = event.data.message
       }
@@ -201,6 +219,10 @@ watch(
               <EvidenceDisclosure
                 v-if="message.evidence?.records?.length"
                 :records="message.evidence.records"
+              />
+              <AmapActionCards
+                :places="message.evidence?.amapPlaces ?? []"
+                :actions="message.actions ?? message.evidence?.actions ?? []"
               />
             </div>
           </article>

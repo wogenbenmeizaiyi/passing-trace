@@ -117,6 +117,7 @@ jobs:
           QWEN_API_KEY=${{ secrets.QWEN_API_KEY }}
           MINIMAX_API_KEY=${{ secrets.MINIMAX_API_KEY }}
           AMAP_WEB_SERVICE_KEY=${{ secrets.AMAP_WEB_SERVICE_KEY }}
+          AMAP_MCP_KEY=${{ secrets.AMAP_MCP_KEY }}
           EOF
 
       - name: Update server

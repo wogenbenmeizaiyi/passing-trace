@@ -45,11 +45,48 @@ export interface EvidenceBundle {
   records: Array<{ eventId: number; title: string | null }>
   memories: Array<{ memoryId: number; content: string }>
   aggregate: string | null
+  amapPlaces?: AmapPlaceEvidence[]
+  actions?: AssistantAction[]
+}
+
+export interface AmapPlaceEvidence {
+  candidateId: string
+  poiId: string | null
+  name: string
+  address: string | null
+  province: string | null
+  city: string | null
+  district: string | null
+  latitude: number
+  longitude: number
+  coordinateSystem: 'GCJ02'
+  source: 'amap-live'
+}
+
+export interface AssistantAction {
+  type: 'amap-navigation' | 'amap-trip-map'
+  provider: 'amap'
+  label: string
+  placeName: string
+  address: string | null
+  latitude: number
+  longitude: number
+  coordinateSystem: 'GCJ02'
+  poiId: string | null
+  source: 'amap-live' | 'personal-record'
+  eventId?: number | null
+  locationId?: number | null
+  webUrl?: string | null
+}
+
+export interface AiCapabilities {
+  amap: { available: boolean; capabilities: string[] }
 }
 
 export type StreamEvent =
   | { type: 'delta'; data: { text: string; replacement?: boolean; cached?: boolean } }
   | { type: 'evidence'; data: EvidenceBundle }
+  | { type: 'action'; data: AssistantAction }
   | { type: 'done'; data: { cached: boolean; watermark: number } }
   | { type: 'error'; data: { message: string } }
 
@@ -73,6 +110,7 @@ export const aiApi = {
   getSemantic: (eventId: number) =>
     httpClient.get<SemanticResult>(`/api/v1/events/${eventId}/semantic`),
   reparse: (eventId: number) => httpClient.post<void>(`/api/v1/events/${eventId}/semantic/reparse`),
+  getCapabilities: () => httpClient.get<AiCapabilities>('/api/v1/ai/capabilities'),
 
   async sendMessage(id: string, content: string, onEvent: (event: StreamEvent) => void) {
     const token = useAuthStore().user?.access_token

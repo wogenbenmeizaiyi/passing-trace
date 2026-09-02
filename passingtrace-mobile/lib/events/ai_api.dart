@@ -29,11 +29,15 @@ class AiMessageModel {
     required this.role,
     required this.content,
     required this.evidenceRecords,
+    required this.amapPlaces,
+    required this.actions,
   });
 
   final String role;
   final String content;
   final List<AiEvidenceRecord> evidenceRecords;
+  final List<AmapPlaceModel> amapPlaces;
+  final List<AssistantActionModel> actions;
   List<int> get evidenceEventIds =>
       evidenceRecords.map((record) => record.eventId).toList(growable: false);
 
@@ -42,6 +46,12 @@ class AiMessageModel {
     final records = evidence is Map<String, dynamic>
         ? evidence['records'] as List<dynamic>? ?? const []
         : const <dynamic>[];
+    final amapPlaces = evidence is Map<String, dynamic>
+        ? evidence['amapPlaces'] as List<dynamic>? ?? const []
+        : const <dynamic>[];
+    final actions = evidence is Map<String, dynamic>
+        ? evidence['actions'] as List<dynamic>? ?? const []
+        : const <dynamic>[];
     return AiMessageModel(
       role: (json['role'] as String).toLowerCase(),
       content: json['content'] as String,
@@ -49,7 +59,134 @@ class AiMessageModel {
           .whereType<Map<String, dynamic>>()
           .map(AiEvidenceRecord.fromJson)
           .toList(growable: false),
+      amapPlaces: amapPlaces
+          .whereType<Map<String, dynamic>>()
+          .map(AmapPlaceModel.fromJson)
+          .where((place) => place.isValid)
+          .toList(growable: false),
+      actions: actions
+          .whereType<Map<String, dynamic>>()
+          .map(AssistantActionModel.fromJson)
+          .where((action) => action.isSafe)
+          .toList(growable: false),
     );
+  }
+}
+
+class AmapPlaceModel {
+  const AmapPlaceModel({
+    required this.candidateId,
+    required this.name,
+    required this.latitude,
+    required this.longitude,
+    this.poiId,
+    this.address,
+  });
+
+  final String candidateId;
+  final String? poiId;
+  final String name;
+  final String? address;
+  final double latitude;
+  final double longitude;
+
+  bool get isValid =>
+      candidateId.isNotEmpty &&
+      name.isNotEmpty &&
+      latitude >= -90 &&
+      latitude <= 90 &&
+      longitude >= -180 &&
+      longitude <= 180;
+
+  factory AmapPlaceModel.fromJson(Map<String, dynamic> json) => AmapPlaceModel(
+    candidateId: json['candidateId'] as String? ?? '',
+    poiId: json['poiId'] as String?,
+    name: json['name'] as String? ?? '',
+    address: json['address'] as String?,
+    latitude: (json['latitude'] as num?)?.toDouble() ?? double.nan,
+    longitude: (json['longitude'] as num?)?.toDouble() ?? double.nan,
+  );
+
+  static List<AmapPlaceModel> fromEnvelope(Map<String, dynamic> json) {
+    final raw = json['amapPlaces'] ?? json['AmapPlaces'];
+    if (raw is! List<dynamic>) return const [];
+    return raw
+        .whereType<Map<String, dynamic>>()
+        .map(AmapPlaceModel.fromJson)
+        .where((place) => place.isValid)
+        .toList(growable: false);
+  }
+}
+
+class AssistantActionModel {
+  const AssistantActionModel({
+    required this.type,
+    required this.provider,
+    required this.label,
+    required this.placeName,
+    required this.latitude,
+    required this.longitude,
+    required this.coordinateSystem,
+    required this.source,
+    this.address,
+    this.poiId,
+    this.webUrl,
+  });
+
+  final String type;
+  final String provider;
+  final String label;
+  final String placeName;
+  final String? address;
+  final double latitude;
+  final double longitude;
+  final String coordinateSystem;
+  final String? poiId;
+  final String source;
+  final String? webUrl;
+
+  bool get isSafe {
+    if (provider != 'amap') return false;
+    if (type == 'amap-trip-map') return _isTrustedAmapUrl(webUrl);
+    return type == 'amap-navigation' &&
+        coordinateSystem == 'GCJ02' &&
+        latitude >= -90 &&
+        latitude <= 90 &&
+        longitude >= -180 &&
+        longitude <= 180;
+  }
+
+  factory AssistantActionModel.fromJson(Map<String, dynamic> json) =>
+      AssistantActionModel(
+        type: json['type'] as String? ?? '',
+        provider: json['provider'] as String? ?? '',
+        label: json['label'] as String? ?? '',
+        placeName: json['placeName'] as String? ?? '',
+        address: json['address'] as String?,
+        latitude: (json['latitude'] as num?)?.toDouble() ?? double.nan,
+        longitude: (json['longitude'] as num?)?.toDouble() ?? double.nan,
+        coordinateSystem: json['coordinateSystem'] as String? ?? '',
+        poiId: json['poiId'] as String?,
+        source: json['source'] as String? ?? '',
+        webUrl: json['webUrl'] as String?,
+      );
+
+  static bool _isTrustedAmapUrl(String? value) {
+    final uri = Uri.tryParse(value ?? '');
+    if (uri == null || uri.scheme != 'https') return false;
+    return uri.host == 'uri.amap.com' ||
+        uri.host == 'm.amap.com' ||
+        uri.host.endsWith('.amap.com');
+  }
+
+  static List<AssistantActionModel> fromEnvelope(Map<String, dynamic> json) {
+    final raw = json['actions'] ?? json['Actions'];
+    if (raw is! List<dynamic>) return const [];
+    return raw
+        .whereType<Map<String, dynamic>>()
+        .map(AssistantActionModel.fromJson)
+        .where((action) => action.isSafe)
+        .toList(growable: false);
   }
 }
 

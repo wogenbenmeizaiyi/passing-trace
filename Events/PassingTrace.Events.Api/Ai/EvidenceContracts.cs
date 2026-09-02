@@ -22,6 +22,40 @@ public sealed record PlaceEvidence(
     DateTimeOffset? HappenedAt,
     int VisitCount);
 
+public sealed record AmapPlaceEvidence(
+    string CandidateId,
+    string? PoiId,
+    string Name,
+    string? Address,
+    string? Province,
+    string? City,
+    string? District,
+    decimal Latitude,
+    decimal Longitude,
+    string CoordinateSystem = "GCJ02",
+    string Source = "amap-live");
+
+public sealed record AmapResultEvidence(
+    string Capability,
+    string Summary,
+    DateTimeOffset RetrievedAt,
+    string Source = "amap-live");
+
+public sealed record AssistantAction(
+    string Type,
+    string Provider,
+    string Label,
+    string PlaceName,
+    string? Address,
+    decimal Latitude,
+    decimal Longitude,
+    string CoordinateSystem,
+    string? PoiId,
+    string Source,
+    long? EventId = null,
+    long? LocationId = null,
+    string? WebUrl = null);
+
 public sealed record MemoryEvidence(
     long MemoryId,
     string Type,
@@ -55,8 +89,11 @@ public sealed record EvidenceBundle(
     string? TimeRange = null,
     string? Assumptions = null,
     IReadOnlyList<PlaceEvidence>? Places = null,
-    object? NavigationTarget = null,
-    IReadOnlyList<StorylineEvidence>? Storylines = null);
+    AssistantAction? NavigationTarget = null,
+    IReadOnlyList<StorylineEvidence>? Storylines = null,
+    IReadOnlyList<AmapPlaceEvidence>? AmapPlaces = null,
+    IReadOnlyList<AssistantAction>? Actions = null,
+    IReadOnlyList<AmapResultEvidence>? AmapResults = null);
 
 public sealed record RecordEvidenceDetail(
     long EventId,

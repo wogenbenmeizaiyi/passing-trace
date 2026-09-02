@@ -9,6 +9,8 @@ namespace PassingTrace.Events.Api.Ai;
 [Route("api/v1/ai/conversations")]
 public sealed class AssistantController(AssistantService service) : ControllerBase
 {
+    private static readonly JsonSerializerOptions SseJsonOptions = new(JsonSerializerDefaults.Web);
+
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<AiConversationResponse>>> ListAsync(CancellationToken cancellationToken) =>
         Ok(await service.ListAsync(cancellationToken));
@@ -65,7 +67,7 @@ public sealed class AssistantController(AssistantService service) : ControllerBa
     private async Task WriteEventAsync(string type, object? data, CancellationToken cancellationToken)
     {
         await Response.WriteAsync($"event: {type}\n", cancellationToken);
-        await Response.WriteAsync($"data: {JsonSerializer.Serialize(data)}\n\n", cancellationToken);
+        await Response.WriteAsync($"data: {JsonSerializer.Serialize(data, SseJsonOptions)}\n\n", cancellationToken);
         await Response.Body.FlushAsync(cancellationToken);
     }
 }

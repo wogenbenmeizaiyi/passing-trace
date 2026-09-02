@@ -15,7 +15,7 @@
 - **多媒体附件**：上传图片、视频以及常见文档和其他文件，文件保存在私有 S3 对象存储中。
 - **分类与标签**：支持人工分类和标签；未填写时由 AI 从正文和图片中补充结构化分类。
 - **地点能力**：Android 端使用高德定位获取一次前台位置，支持附近地点、关键词搜索以及历史地点导航。
-- **个人 AI 助手**：结合全文、向量、分类、标签、地点和结构化统计回答关于个人记录的问题，并返回记录证据。
+- **个人 AI 助手**：结合全文、向量、分类、标签、地点和结构化统计回答个人记录问题；也可通过高德查询实时地点、路线和天气，并返回安全的导航按钮。
 - **用户记忆**：按用户隔离长期记忆及其来源，减少重复分析，同时允许纠正和遗忘。
 - **故事线**：把记录和计划按阶段、先后、分支与汇合组织成完整经历；Web 提供流程编辑器，手机提供纵向时间线和快捷补充。
 - **身份与扫码授权**：基于 OpenID Connect、Authorization Code + PKCE；手机可扫描电脑端二维码并批准登录。
@@ -80,6 +80,7 @@ deploy/                          部署相关文件
 - [核心数据与 AI 分析技术方案](PassingTrace_%E6%A0%B8%E5%BF%83%E6%95%B0%E6%8D%AE%E4%B8%8EAI%E5%88%86%E6%9E%90%E6%8A%80%E6%9C%AF%E6%96%B9%E6%A1%88_v0.1.md)
 - [高德定位与历史地点导航技术方案](PassingTrace_%E9%AB%98%E5%BE%B7%E5%AE%9A%E4%BD%8D%E4%B8%8E%E5%8E%86%E5%8F%B2%E5%9C%B0%E7%82%B9%E5%AF%BC%E8%88%AA%E6%8A%80%E6%9C%AF%E6%96%B9%E6%A1%88_v0.1.md)
 - [故事线跨端技术方案](PassingTrace_%E6%95%85%E4%BA%8B%E7%BA%BF%E8%B7%A8%E7%AB%AF%E6%8A%80%E6%9C%AF%E6%96%B9%E6%A1%88_v1.0.md)
+- [高德 AI 工具包技术方案](PassingTrace_%E9%AB%98%E5%BE%B7AI%E5%B7%A5%E5%85%B7%E5%8C%85%E6%8A%80%E6%9C%AF%E6%96%B9%E6%A1%88_v1.0.md)
 
 ## 本地开发
 
@@ -126,6 +127,8 @@ dotnet user-secrets set --project AppHost "Parameters:minio-secret-key" "change-
 dotnet user-secrets set --project AppHost "Parameters:qwen-api-key" "your-qwen-api-key"
 dotnet user-secrets set --project AppHost "Parameters:minimax-api-key" "your-minimax-api-key"
 dotnet user-secrets set --project AppHost "Parameters:amap-web-service-key" "your-amap-web-service-key"
+# 可选：给 AI 高德工具单独轮换和统计；不设置时复用上面的 Web 服务 Key
+dotnet user-secrets set --project AppHost "AMAP_MCP_KEY" "your-amap-mcp-key"
 ```
 
 如需让真机直接访问 MinIO 预签名地址，还应把对象存储公开地址设置为电脑的局域网地址：
@@ -140,7 +143,7 @@ Android 高德 Key 写入不会提交的 `passingtrace-mobile/android/local.prop
 AMAP_ANDROID_KEY=your-amap-android-key
 ```
 
-高德 Android Key 需要与 `com.passingtrace.passingtrace_mobile` 的包名和本机调试签名 SHA-1 匹配；后端使用的高德 Key 应选择“Web 服务”平台。AI 问答和图片/文本语义分析默认使用原生多模态的 MiniMax-M3，向量仍使用百炼；Provider、模型和 Endpoint 均在 `AiModels` 中按角色配置。没有有效的 MiniMax、Qwen 或高德 Key 时，对应能力将不可用，但不应把真实 Key 写进源码或 `appsettings.json`。
+高德 Android Key 需要与 `com.passingtrace.passingtrace_mobile` 的包名和本机调试签名 SHA-1 匹配；后端使用的高德 Key 应选择“Web 服务”平台。AI 高德工具通过官方 Streamable HTTP MCP 接入，优先读取 `AMAP_MCP_KEY`，未配置时复用 Web 服务 Key；记录表单的地点选择仍走原有 REST 服务，两者故障相互隔离。AI 问答和图片/文本语义分析默认使用原生多模态的 MiniMax-M3，向量仍使用百炼；Provider、模型和 Endpoint 均在 `AiModels` 中按角色配置。没有有效的 MiniMax、Qwen 或高德 Key 时，对应能力将不可用，但不应把真实 Key 写进源码或 `appsettings.json`。
 
 ### 3. 启动完整环境
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../auth_service.dart';
 import '../events/ai_api.dart';
@@ -69,6 +70,8 @@ class _AssistantViewState extends State<AssistantView> {
                   role: message.role,
                   text: message.content,
                   evidenceRecords: message.evidenceRecords,
+                  amapPlaces: message.amapPlaces,
+                  actions: message.actions,
                 ),
               ),
             );
@@ -116,11 +119,30 @@ class _AssistantViewState extends State<AssistantView> {
         } else if (chunk.type == 'evidence') {
           final raw = chunk.data as Map<String, dynamic>;
           final records = AiEvidenceRecord.fromEnvelope(raw);
-          setState(
-            () => answer.eventTitles = {
+          final places = AmapPlaceModel.fromEnvelope(raw);
+          final actions = AssistantActionModel.fromEnvelope(raw);
+          setState(() {
+            answer.eventTitles = {
               for (final record in records) record.eventId: record.displayTitle,
-            },
+            };
+            answer.amapPlaces = places;
+            answer.actions = actions;
+          });
+        } else if (chunk.type == 'action') {
+          final action = AssistantActionModel.fromJson(
+            chunk.data as Map<String, dynamic>,
           );
+          if (action.isSafe) {
+            setState(() {
+              if (!answer.actions.any(
+                (existing) =>
+                    existing.type == action.type &&
+                    existing.label == action.label,
+              )) {
+                answer.actions = [...answer.actions, action];
+              }
+            });
+          }
         } else if (chunk.type == 'error') {
           throw StateError(
             (chunk.data as Map<String, dynamic>)['message'] as String,
@@ -189,6 +211,8 @@ class _AssistantViewState extends State<AssistantView> {
                 role: message.role,
                 text: message.content,
                 evidenceRecords: message.evidenceRecords,
+                amapPlaces: message.amapPlaces,
+                actions: message.actions,
               ),
             ),
           );
@@ -223,6 +247,8 @@ class _AssistantViewState extends State<AssistantView> {
                 role: message.role,
                 text: message.content,
                 evidenceRecords: message.evidenceRecords,
+                amapPlaces: message.amapPlaces,
+                actions: message.actions,
               ),
             ),
           );
@@ -517,6 +543,11 @@ class _AssistantViewState extends State<AssistantView> {
               AssistantEvidenceDisclosure(
                 records: message.eventTitles,
                 onOpenEvent: _openEvent,
+              ),
+            if (message.amapPlaces.isNotEmpty || message.actions.isNotEmpty)
+              AmapActionCards(
+                places: message.amapPlaces,
+                actions: message.actions,
               ),
           ],
         ),
@@ -1088,13 +1119,261 @@ class _ChatBubble {
     required this.role,
     required this.text,
     List<AiEvidenceRecord>? evidenceRecords,
+    List<AmapPlaceModel>? amapPlaces,
+    List<AssistantActionModel>? actions,
   }) : eventTitles = {
          for (final record in evidenceRecords ?? const <AiEvidenceRecord>[])
            record.eventId: record.displayTitle,
-       };
+       },
+       amapPlaces = amapPlaces ?? [],
+       actions = actions ?? [];
   final String role;
   String text;
   Map<int, String> eventTitles;
+  List<AmapPlaceModel> amapPlaces;
+  List<AssistantActionModel> actions;
+}
+
+class AmapActionCards extends StatelessWidget {
+  const AmapActionCards({
+    super.key,
+    required this.places,
+    required this.actions,
+  });
+
+  final List<AmapPlaceModel> places;
+  final List<AssistantActionModel> actions;
+
+  @override
+  Widget build(BuildContext context) {
+    final actionKeys = actions
+        .map(
+          (action) => '${action.poiId}:${action.latitude}:${action.longitude}',
+        )
+        .toSet();
+    final passivePlaces = places
+        .where(
+          (place) => !actionKeys.contains(
+            '${place.poiId}:${place.latitude}:${place.longitude}',
+          ),
+        )
+        .toList(growable: false);
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Column(
+        children: [
+          for (final action in actions)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: _AmapActionCard(action: action),
+            ),
+          for (final place in passivePlaces)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: _AmapPlaceCard(place: place),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AmapActionCard extends StatelessWidget {
+  const _AmapActionCard({required this.action});
+
+  final AssistantActionModel action;
+
+  Future<void> _open(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      if (action.type == 'amap-trip-map') {
+        final target = Uri.parse(action.webUrl!);
+        if (!await launchUrl(target, mode: LaunchMode.externalApplication)) {
+          messenger.showSnackBar(const SnackBar(content: Text('暂时无法打开高德地图。')));
+        }
+        return;
+      }
+      final appUri = Uri(
+        scheme: 'amapuri',
+        host: 'route',
+        path: '/plan/',
+        queryParameters: {
+          'sourceApplication': '星期八',
+          'dlat': action.latitude.toStringAsFixed(6),
+          'dlon': action.longitude.toStringAsFixed(6),
+          'dname': action.placeName,
+          'dev': '0',
+          't': '0',
+        },
+      );
+      if (await canLaunchUrl(appUri) &&
+          await launchUrl(appUri, mode: LaunchMode.externalApplication)) {
+        return;
+      }
+      final webUri = Uri.https('uri.amap.com', '/navigation', {
+        'to': '${action.longitude},${action.latitude},${action.placeName}',
+        'mode': 'car',
+        'coordinate': 'gaode',
+        'callnative': '1',
+        'src': 'passingtrace',
+      });
+      if (!await launchUrl(webUri, mode: LaunchMode.externalApplication)) {
+        messenger.showSnackBar(const SnackBar(content: Text('暂时无法打开高德地图。')));
+      }
+    } catch (_) {
+      messenger.showSnackBar(const SnackBar(content: Text('导航链接无效，请重新查询地点。')));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.traceColors;
+    return Semantics(
+      button: true,
+      container: true,
+      label: action.label,
+      child: Material(
+        color: colors.primarySoft.withValues(alpha: 0.52),
+        shape: RoundedRectangleBorder(
+          side: BorderSide(color: colors.primary.withValues(alpha: 0.32)),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: InkWell(
+          onTap: () => _open(context),
+          borderRadius: BorderRadius.circular(14),
+          child: Padding(
+            padding: const EdgeInsets.all(10),
+            child: Row(
+              children: [
+                _AmapIcon(colors: colors),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        action.placeName,
+                        style: TextStyle(
+                          color: colors.ink,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        _subtitle,
+                        style: TextStyle(
+                          color: colors.inkMuted,
+                          fontSize: 11,
+                          height: 1.4,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(
+                    minWidth: 48,
+                    minHeight: 48,
+                  ),
+                  child: Center(
+                    child: Text(
+                      action.type == 'amap-trip-map' ? '打开' : '导航',
+                      style: TextStyle(
+                        color: colors.primaryStrong,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  String get _subtitle {
+    if (action.type == 'amap-trip-map') return '高德专属地图';
+    final source = action.source == 'personal-record' ? '来自你的记录' : '来自高德地图';
+    return action.address == null ? source : '$source · ${action.address}';
+  }
+}
+
+class _AmapPlaceCard extends StatelessWidget {
+  const _AmapPlaceCard({required this.place});
+
+  final AmapPlaceModel place;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.traceColors;
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: colors.surfaceSoft,
+        border: Border.all(color: colors.line),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        children: [
+          _AmapIcon(colors: colors),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  place.name,
+                  style: TextStyle(
+                    color: colors.ink,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  '来自高德地图 · ${place.address ?? '地址未提供'}',
+                  style: TextStyle(
+                    color: colors.inkMuted,
+                    fontSize: 11,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Text('高德', style: TextStyle(color: colors.inkMuted, fontSize: 10)),
+        ],
+      ),
+    );
+  }
+}
+
+class _AmapIcon extends StatelessWidget {
+  const _AmapIcon({required this.colors});
+
+  final PassingTraceThemeColors colors;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: 40,
+    height: 40,
+    decoration: BoxDecoration(
+      color: colors.primarySoft,
+      borderRadius: BorderRadius.circular(10),
+    ),
+    child: Center(
+      child: TraceIcon(
+        TraceGlyph.mapPin,
+        size: 20,
+        color: colors.primaryStrong,
+      ),
+    ),
+  );
 }
 
 class AssistantMessageContent extends StatelessWidget {
