@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" role="img" aria-labelledby="title desc">
+  <title id="title">PassingTrace 回忆相册图标</title>
+  <desc id="desc">叠放的照片记录生活画面</desc>
+  <rect x="3" y="3" width="102" height="102" rx="28" fill="#2F6B57"/>
+  <rect x="24" y="23" width="61" height="63" rx="10" fill="#E28A62" transform="rotate(-7 54 54)"/>
+  <rect x="22" y="24" width="64" height="64" rx="10" fill="#FFF6E8" transform="rotate(5 54 56)"/>
+  <circle cx="66" cy="40" r="8" fill="#E28A62"/>
+  <path d="M27 72 L42 55 L52 65 L61 54 L82 77 L82 84 H27 Z" fill="#A8CCBA" transform="rotate(5 54 69)"/>
+  <path d="M27 76 L42 64 L53 73 L65 61 L83 77 L83 86 H27 Z" fill="#2F6B57" transform="rotate(5 55 75)"/>
+</svg>

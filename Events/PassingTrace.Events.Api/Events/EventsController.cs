@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PassingTrace.Events.Api.Common;
+using PassingTrace.Events.Api.Media;
 using PassingTrace.Events.Api.Security;
 using PassingTrace.Core.Events;
 
@@ -27,7 +28,10 @@ public sealed class EventsController(EventService service) : ControllerBase
             request.HappenedAt,
             request.PlannedAt,
             request.Timezone ?? "UTC",
-            idempotencyKey);
+            idempotencyKey,
+            request.MediaIds,
+            request.Classification,
+            request.Locations);
 
         var evt = await service.CreateAsync(command, cancellationToken);
 
@@ -44,11 +48,14 @@ public sealed class EventsController(EventService service) : ControllerBase
         [FromQuery] EventStatus? status,
         [FromQuery] DateTimeOffset? from,
         [FromQuery] DateTimeOffset? to,
+        [FromQuery] string? categoryKey,
+        [FromQuery] string? tagKeys,
+        [FromQuery(Name = "query")] string? searchQuery,
         [FromQuery] int limit = 50,
         [FromQuery] long? cursor = null,
         CancellationToken cancellationToken = default)
     {
-        var query = new EventListQuery(
+        var listQuery = new EventListQuery(
             User.GetUserId(),
             kind,
             status,
@@ -56,9 +63,12 @@ public sealed class EventsController(EventService service) : ControllerBase
             to,
             IncludeDeleted: false,
             limit,
-            cursor);
+            cursor,
+            categoryKey,
+            tagKeys?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
+            searchQuery);
 
-        var events = await service.ListAsync(query, cancellationToken);
+        var events = await service.ListAsync(listQuery, cancellationToken);
         var items = events.Select(ToResponse).ToList();
 
         long? nextCursor = events.Count == limit && events.Count > 0
@@ -99,7 +109,10 @@ public sealed class EventsController(EventService service) : ControllerBase
             request.RawContent,
             request.HappenedAt,
             request.PlannedAt,
-            request.Timezone ?? "UTC");
+            request.Timezone ?? "UTC",
+            request.MediaIds,
+            request.Classification,
+            request.Locations);
 
         var evt = await service.UpdateSourceAsync(command, cancellationToken);
 
@@ -136,6 +149,42 @@ public sealed class EventsController(EventService service) : ControllerBase
 
     private static EventResponse ToResponse(Event evt)
     {
+        var semantic = evt.SemanticRuns
+            .Where(x => x.SourceRevision == evt.CurrentSourceRevision)
+            .OrderByDescending(x => x.CreatedAt)
+            .FirstOrDefault();
+        var media = evt.MediaAssets
+            .OrderBy(x => x.SortOrder)
+            .Select(x => new MediaResponse(
+                x.MediaAsset.Id,
+                x.MediaAsset.OriginalFileName,
+                x.MediaAsset.Kind,
+                x.MediaAsset.VerifiedMimeType ?? x.MediaAsset.DeclaredMimeType,
+                x.MediaAsset.ActualSize ?? x.MediaAsset.ExpectedSize,
+                x.MediaAsset.Status,
+                x.SortOrder))
+            .ToArray();
+
+        var revision = evt.SourceRevisions.SingleOrDefault(x => x.Revision == evt.CurrentSourceRevision);
+        var sourceLabels = revision?.Labels ?? [];
+        var manual = new ManualClassificationResponse(
+            sourceLabels.FirstOrDefault(x => x.Type == EventLabelType.PrimaryCategory && x.Decision == SourceLabelDecision.Include)?.TaxonomyKey,
+            sourceLabels.Where(x => x.Type == EventLabelType.BehaviorTag && x.Decision == SourceLabelDecision.Include)
+                .OrderBy(x => x.SortOrder)
+                .Select(x => new ManualTagInput(x.TaxonomyKey, x.TaxonomyKey is null ? x.DisplayName : null)).ToArray(),
+            sourceLabels.Where(x => x.Type == EventLabelType.BehaviorTag && x.Decision == SourceLabelDecision.Exclude)
+                .Select(x => x.TaxonomyKey!).ToArray());
+        var effectiveLabels = evt.LabelIndexes.Where(x => x.IsCurrent && x.SourceRevision == evt.CurrentSourceRevision).ToArray();
+        EventLabelResponse MapLabel(EventLabelIndex x) => new(x.TaxonomyKey, x.DisplayName,
+            x.Origin == EventLabelOrigin.Ai ? "ai" : "manual", x.Confidence);
+        var effective = new EffectiveClassificationResponse(
+            effectiveLabels.FirstOrDefault(x => x.Type == EventLabelType.PrimaryCategory) is { } primary ? MapLabel(primary) : null,
+            effectiveLabels.Where(x => x.Type == EventLabelType.BehaviorTag).Select(MapLabel).ToArray(),
+            EventTaxonomy.Version);
+        var locations = evt.Locations.Where(x => x.SourceRevision == evt.CurrentSourceRevision)
+            .Select(x => new EventLocationResponse(x.Id, x.Name, x.Address, x.Province, x.City, x.District,
+                x.AdCode, x.ProviderPoiId, x.PoiType, x.Latitude, x.Longitude, x.AccuracyMeters,
+                x.CoordinateSystem, x.Source, x.CapturedAt)).ToArray();
         return new EventResponse(
             evt.Id,
             evt.EventKind,
@@ -150,6 +199,12 @@ public sealed class EventsController(EventService service) : ControllerBase
             evt.CurrentSourceRevision,
             evt.RowVersion,
             evt.CreatedAt,
-            evt.UpdatedAt);
+            evt.UpdatedAt,
+            media,
+            semantic?.Status.ToString() ?? "Pending",
+            semantic?.Summary,
+            manual,
+            effective,
+            locations);
     }
 }

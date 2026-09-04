@@ -15,9 +15,10 @@ public static class WebApplicationExtensions
     public static async Task<WebApplication> ConfigureTracePipelineAsync(
         this WebApplication app)
     {
-        if (app.Environment.IsDevelopment())
+        if (app.Environment.IsDevelopment() ||
+            app.Configuration.GetValue<bool>("Database:AutoMigrate"))
         {
-            // 仅开发环境自动迁移；生产迁移应作为部署步骤单独执行。
+            // 本地开发默认迁移；单机容器部署可显式开启，集群部署应改用独立迁移任务。
             await using var scope = app.Services.CreateAsyncScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<TraceDbContext>();
             await dbContext.Database.MigrateAsync();
@@ -29,6 +30,9 @@ public static class WebApplicationExtensions
         }
 
         app.UseExceptionHandler();
+        // 浏览器开发客户端与 API 使用独立端口，CORS 必须先于认证处理预检请求。
+        // 生产环境默认不配置跨域来源，继续采用同域反向代理。
+        app.UseCors(ApplicationExtensions.WebClientCorsPolicy);
         app.UseAuthentication();
         app.UseAuthorization();
         app.MapControllers();

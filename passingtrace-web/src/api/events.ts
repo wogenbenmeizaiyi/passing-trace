@@ -8,6 +8,8 @@ import type {
   EventResponse,
   ListEventsQuery,
   UpdateEventRequest,
+  EventTaxonomyResponse,
+  PlaceCandidate,
 } from '@/api/events-types'
 
 function listQuery(input: ListEventsQuery) {
@@ -18,6 +20,9 @@ function listQuery(input: ListEventsQuery) {
     status: input.status,
     from: input.from,
     to: input.to,
+    categoryKey: input.categoryKey,
+    tagKeys: input.tagKeys?.join(','),
+    query: input.query,
   }
 }
 
@@ -66,5 +71,39 @@ export const eventsApi = {
       ...opts,
       ifMatch: version,
     })
+  },
+  taxonomy(opts: RequestOptions = {}): Promise<EventTaxonomyResponse> {
+    return httpClient.get<EventTaxonomyResponse>('/api/v1/event-taxonomy', opts)
+  },
+  searchPlaces(
+    body: {
+      mode: 'nearby' | 'keyword'
+      query?: string
+      latitude?: number
+      longitude?: number
+      radiusMeters?: number
+      cityAdCode?: string
+    },
+    opts: RequestOptions = {},
+  ): Promise<PlaceCandidate[]> {
+    return httpClient.post<PlaceCandidate[]>('/api/v1/places/search', { ...opts, body })
+  },
+  navigationTarget(
+    eventId: number,
+    locationId: number,
+    opts: RequestOptions = {},
+  ): Promise<{
+    eventId: number
+    locationId: number
+    name: string
+    latitude: number
+    longitude: number
+    coordinateSystem: string
+    providerPoiId: string | null
+  }> {
+    return httpClient.get(
+      `/api/v1/events/${eventId}/locations/${locationId}/navigation-target`,
+      opts,
+    )
   },
 }

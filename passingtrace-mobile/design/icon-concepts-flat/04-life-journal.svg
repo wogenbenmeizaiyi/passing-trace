@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" role="img" aria-labelledby="title desc">
+  <title id="title">PassingTrace 人生日记图标</title>
+  <desc id="desc">带有朱砂书签的打开日记本</desc>
+  <rect x="3" y="3" width="102" height="102" rx="28" fill="#A8CCBA"/>
+  <path d="M18 28 C31 25 43 28 54 36 V83 C43 75 31 73 18 77 Z" fill="#FFF6E8"/>
+  <path d="M90 28 C77 25 65 28 54 36 V83 C65 75 77 73 90 77 Z" fill="#FFF6E8"/>
+  <path d="M47 33 C49 34 52 36 54 38 V83 C52 81 49 79 47 78 Z" fill="#2F6B57"/>
+  <path d="M63 31 H77 V62 L70 56 L63 62 Z" fill="#E28A62"/>
+  <rect x="26" y="42" width="15" height="6" rx="3" fill="#2F6B57"/>
+  <rect x="26" y="55" width="19" height="6" rx="3" fill="#2F6B57"/>
+  <rect x="26" y="68" width="13" height="6" rx="3" fill="#2F6B57"/>
+</svg>

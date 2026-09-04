@@ -1,7 +1,7 @@
 // 与 Events API 时间约定对齐：
 //   - `happenedAt` / `plannedAt` 为 ISO 8601 字符串（带偏移，例如 `2026-08-18T19:30:00+09:00`）。
 //   - `timezone` 为 IANA 时区名（例如 `Asia/Tokyo`），与表单里"用户选定的时区"一致。
-// 表单使用 `YYYY-MM-DDTHH:mm` 这样的"墙上时间"输入，
+// 表单使用 `YYYY-MM-DD HH:mm` 这样的"墙上时间"显示，
 // 我们把它当作"用户在该时区的本地时间"来编码，附加该时区在那一刻的偏移后发送。
 //
 // 注意：本实现使用内置的常见 IANA 时区偏移表，不引入 `tz` 包。
@@ -24,6 +24,7 @@ String defaultTimezone() {
 String? _windowsNameToIana(String name) {
   switch (name) {
     case 'China Standard Time':
+    case 'CST':
       return 'Asia/Shanghai';
     case 'Tokyo Standard Time':
       return 'Asia/Tokyo';
@@ -51,12 +52,19 @@ String offsetForTimezone(DateTime probe, String timezone) {
   return _formatOffset(minutes);
 }
 
-/// 把 `YYYY-MM-DDTHH:mm` 形式的墙上时间 + 用户选定的 IANA 时区，
+/// 把 `YYYY-MM-DD HH:mm` 或 `YYYY-MM-DDTHH:mm` 形式的墙上时间
+/// + 用户选定的 IANA 时区，
 /// 转成带偏移的 ISO 8601 字符串发送给后端。
 String? toIsoWithOffset(String wallClock, String timezone) {
   final parts = _parseWallClock(wallClock);
   if (parts == null) return null;
-  final probe = DateTime.utc(parts.year, parts.month, parts.day, parts.hour, parts.minute);
+  final probe = DateTime.utc(
+    parts.year,
+    parts.month,
+    parts.day,
+    parts.hour,
+    parts.minute,
+  );
   final offset = offsetForTimezone(probe, timezone);
   String two(int n) => n.toString().padLeft(2, '0');
   final y = parts.year.toString().padLeft(4, '0');
@@ -64,14 +72,14 @@ String? toIsoWithOffset(String wallClock, String timezone) {
       'T${two(parts.hour)}:${two(parts.minute)}:00$offset';
 }
 
-/// 把后端返回的 ISO 8601 字符串转换为 `YYYY-MM-DDTHH:mm`（按本机本地时区）。
+/// 把后端返回的 ISO 8601 字符串转换为 `YYYY-MM-DD HH:mm`（按本机本地时区）。
 String toWallClockLocal(DateTime? value) {
   if (value == null) return '';
   final local = value.toLocal();
   String two(int n) => n.toString().padLeft(2, '0');
   return '${local.year.toString().padLeft(4, '0')}'
       '-${two(local.month)}-${two(local.day)}'
-      'T${two(local.hour)}:${two(local.minute)}';
+      ' ${two(local.hour)}:${two(local.minute)}';
 }
 
 /// 友好展示：按本机本地时区显示日期 + 时间。空值显示占位符。
@@ -100,11 +108,13 @@ class _WallClock {
   final int minute;
 }
 
-final _wallClockRegExp = RegExp(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?$');
+final _wallClockRegExp = RegExp(
+  r'^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2})?$',
+);
 
 _WallClock? _parseWallClock(String value) {
   if (!_wallClockRegExp.hasMatch(value)) return null;
-  final parts = value.split('T');
+  final parts = value.split(RegExp('[T ]'));
   final date = parts[0].split('-');
   final time = parts[1].split(':');
   final year = int.tryParse(date[0]);

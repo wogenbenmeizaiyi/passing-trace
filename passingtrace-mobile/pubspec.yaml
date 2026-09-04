@@ -1,5 +1,5 @@
 name: passingtrace_mobile
-description: "PassingTrace 的 Android 账号控制端与扫码登录批准器。"
+description: "星期八的 Android 账号控制端与扫码登录批准器。"
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -41,7 +41,10 @@ dependencies:
   crypto: ^3.0.7
   app_links: ^7.2.1
   url_launcher: ^6.3.2
-
+  file_picker: ^12.1.2
+  video_player: ^2.14.0
+  flutter_markdown_plus: ^1.0.12
+  package_info_plus: ^10.2.1
 dev_dependencies:
   flutter_test:
     sdk: flutter

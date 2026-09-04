@@ -2,14 +2,19 @@ using PassingTrace.Core.Events;
 using PassingTrace.Events.Api.DependencyInjection;
 using PassingTrace.Infrastructure;
 using PassingTrace.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
+using Pgvector.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.AddRedisClient("redis");
-builder.AddNpgsqlDbContext<TraceDbContext>("trace");
+builder.AddNpgsqlDbContext<TraceDbContext>(
+    "trace",
+    configureDbContextOptions: options =>
+        options.UseNpgsql(npgsql => npgsql.UseVector()));
 builder.Services
     .AddTraceAuthentication(builder.Configuration)
-    .AddTraceApplication();
+    .AddTraceApplication(builder.Configuration);
 
 builder.Services.AddScoped<IEventRepository, EventRepository>();
 

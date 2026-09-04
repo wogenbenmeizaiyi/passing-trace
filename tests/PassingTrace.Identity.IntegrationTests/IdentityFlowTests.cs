@@ -17,6 +17,30 @@ public sealed class IdentityFlowTests(IdentityWebApplicationFactory factory)
     : IClassFixture<IdentityWebApplicationFactory>
 {
     [Fact]
+    public async Task HomePage_UsesChineseBrandName()
+    {
+        using var client = CreateBrowserClient();
+
+        var html = await client.GetStringAsync("/");
+
+        Assert.Contains("星期八", html, StringComparison.Ordinal);
+        Assert.DoesNotContain(">PassingTrace<", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task IdentityPages_UseTheSameThemeTokensAsTheWebClient()
+    {
+        using var client = CreateBrowserClient();
+
+        var css = await client.GetStringAsync("/css/identity.css");
+
+        Assert.Contains("--canvas: #e9ede8", css, StringComparison.Ordinal);
+        Assert.Contains("--primary: #2f6b57", css, StringComparison.Ordinal);
+        Assert.Contains(".qr-login__visual", css, StringComparison.Ordinal);
+        Assert.DoesNotContain("#cf4a36", css, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task MobileRegistration_IssuesValidJwt_AndRefreshes()
     {
         using var client = CreateBrowserClient();
@@ -72,6 +96,10 @@ public sealed class IdentityFlowTests(IdentityWebApplicationFactory factory)
         qrPage.EnsureSuccessStatusCode();
         var qrHtml = await qrPage.Content.ReadAsStringAsync();
         Assert.Contains("<svg", qrHtml, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("class=\"brand-mark\"", qrHtml, StringComparison.Ordinal);
+        Assert.Contains("class=\"qr-login__visual\"", qrHtml, StringComparison.Ordinal);
+        Assert.Contains("data-state=\"waiting\"", qrHtml, StringComparison.Ordinal);
+        Assert.Contains("role=\"status\"", qrHtml, StringComparison.Ordinal);
         var antiforgery = ExtractAntiforgeryToken(qrHtml);
         var parsedQr = ParseQrLocation(qrLocation);
 
@@ -212,6 +240,23 @@ public sealed class IdentityFlowTests(IdentityWebApplicationFactory factory)
             username.ToLowerInvariant(),
             "a sufficiently long password");
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Registration_RequiresAtLeastEightPasswordCharacters()
+    {
+        using var client = CreateBrowserClient();
+        var tooShort = await BeginAndCompleteRegistrationAsync(
+            client,
+            Unique("short_password"),
+            "1234567");
+        Assert.Equal(HttpStatusCode.BadRequest, tooShort.StatusCode);
+
+        var accepted = await BeginAndCompleteRegistrationAsync(
+            client,
+            Unique("eight_password"),
+            "12345678");
+        Assert.Equal(HttpStatusCode.Created, accepted.StatusCode);
     }
 
     [Fact]

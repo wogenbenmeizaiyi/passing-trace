@@ -6,13 +6,21 @@
 >
 > 适用：passingtrace-mobile（主客户端）与 passingtrace-web（辅助 Web 端），供界面实现使用
 
+> 多媒体上传、语义分析、AI 问答与用户记忆扩展见仓库根目录的
+> `PassingTrace_多媒体与AI记忆运行说明_v1.0.md`。Event 创建/修改现在支持
+> `mediaIds`，标题、正文与附件至少存在一种即可。
+>
+> Event 地点、按地点 AI 检索和历史地点导航契约见仓库根目录的
+> `PassingTrace_高德定位与历史地点导航技术方案_v0.1.md`。故事线接口与跨端语义图约束见
+> `PassingTrace_故事线跨端技术方案_v1.0.md`。
+
 本文档描述 `PassingTrace.Events.Api` 暴露的 HTTP 接口，以及客户端从登录、获取令牌到完成「记录 / 查看 / 修改 / 删除」的完整交互链路。实现界面时只需遵循本文契约，无需了解后端内部实现。
 
 ---
 
 ## 1. 概述
 
-Events API 是「记录域」的业务服务，当前提供 Event（痕迹 / 计划统一抽象）的创建、列表、详情、修改与软删除。
+Events API 是「记录域」的业务服务，提供 Event（痕迹 / 计划统一抽象）的创建、列表、详情、修改与软删除，并扩展私有媒体、异步语义分析、用户记忆和带证据的 AI 问答。
 
 - **认证**：OAuth 2.0 授权码 + PKCE，业务 API 用 JwtBearer 离线验证，不访问身份数据库。
 - **授权**：访问令牌必须携带 `passingtrace.api` Scope，audience 为 `passingtrace-api`。
@@ -150,7 +158,7 @@ If-Match: 1284
 
 | 状态码 | 含义 | 客户端处理 |
 |---|---|---|
-| `400` | 请求不合法（如标题与正文同时为空） | 展示校验错误 |
+| `400` | 请求不合法（如标题、正文与附件同时为空） | 展示校验错误 |
 | `401` | 无令牌 / 过期 / 签名错误 | 刷新令牌或重新登录 |
 | `403` | 令牌有效但缺 `passingtrace.api` Scope | 检查登录 scope 配置 |
 | `404` | 资源不存在或无权访问（不区分，防枚举） | 提示不存在 |
@@ -264,8 +272,8 @@ Authorization: Bearer <access_token>
 | `cursor` | long? | 上一页最后一条的 `id` |
 | `kind` | int? | 0/1 筛选 |
 | `status` | int? | 0/1/2 筛选 |
-| `from` | string? | 创建时间下界（ISO 8601） |
-| `to` | string? | 创建时间上界（ISO 8601） |
+| `from` | string? | 记录时间下界（ISO 8601；痕迹取发生时间，计划取计划时间，未填写时回退创建时间） |
+| `to` | string? | 记录时间上界（ISO 8601；痕迹取发生时间，计划取计划时间，未填写时回退创建时间） |
 
 **响应** `200`
 
@@ -372,6 +380,28 @@ App 启动
   → 409：提示内容与已存在记录不一致，丢弃幂等键
 ```
 
+创建和修改请求可附带：
+
+```json
+{
+  "classification": {
+    "primaryCategoryKey": "food",
+    "tags": [{ "taxonomyKey": "dining" }, { "name": "老张推荐" }],
+    "suppressedAiTagKeys": []
+  },
+  "locations": [{
+    "name": "西湖风景名胜区",
+    "providerPoiId": "B000A",
+    "latitude": 30.249,
+    "longitude": 120.143,
+    "coordinateSystem": "GCJ02",
+    "source": 3
+  }]
+}
+```
+
+`classification` 或 `locations` 在 PATCH 中省略表示继承上一修订，传空对象/空数组表示清除。每条记录 V1 最多一个地点、10 个行为标签。响应同时返回 `manualClassification`、`effectiveClassification` 和当前修订 `locations[]`。
+
 ### 6.5 编辑 Event
 
 ```text
@@ -393,6 +423,31 @@ App 启动
   → 409：提示版本冲突，重新加载后重试
 ```
 
+### 6.7 分类与地点
+
+- `GET /api/v1/event-taxonomy`：取得版本化主分类与建议行为标签。
+- `POST /api/v1/places/search`：`mode=nearby|keyword`，坐标放 JSON body，不放 URL。
+- `GET /api/v1/events/{eventId}/locations/{locationId}/navigation-target`：仅返回当前用户当前修订的可信导航目标。
+- Event 列表支持 `categoryKey` 与逗号分隔的 `tagKeys`。
+
+### 6.8 Android 发布与 Web 下载
+
+- `GET /api/v1/app-updates/android/latest?currentVersionCode=<code>`：检查更新。移动端传当前 `versionCode`；产品网页传 `0` 表示尚未安装 App。仅当服务端版本更高时返回短效 `downloadUrl`。
+- `GET /api/v1/app-updates/android/latest/download`：产品首页下载入口，无需登录。后端读取私有 S3 中的 `releases/android/latest.json`，为清单指向的 APK 生成短效预签名 URL，并返回 `302` 重定向。
+- APK 与发布清单位于私有桶的 `releases/android/` 前缀。客户端不持有 S3 凭据，也不把对象 Key 当作公开地址。
+- 发布顺序必须是先上传 APK、确认成功后再覆盖 `latest.json`，避免下载按钮指向尚未完成的对象。
+
+### 6.9 故事线
+
+- `GET /api/v1/storyline-taxonomy`：故事线主分类与关系类型词表。
+- `GET/POST /api/v1/storylines`：分页筛选与创建；列表支持 `status`、`categoryKey`、`from`、`to`。
+- `GET/PUT/DELETE /api/v1/storylines/{id}`：读取当前修订、完整图保存和软删除。
+- `GET /api/v1/storylines/{id}/revisions` 与 `GET .../{revision}`：历史列表和不可变修订详情。
+- `POST /api/v1/storylines/{id}/revisions/{revision}/restore`：恢复历史修订。
+- `POST /api/v1/storylines/{id}/changes`：手机白名单增量操作。
+
+故事线写请求需要 `Idempotency-Key`；修改、删除、恢复和增量操作还需要 `If-Match`。节点固定引用 `eventId + sourceRevision`，响应另外返回当前最新修订和 `revisionState`。手机按 `outline[]` 阅读拓扑结构，Web 才使用可选 `webCanvasLayout`，坐标不参与业务校验、统计或 AI。
+
 ---
 
 ## 7. 前端接入要点
@@ -407,7 +462,7 @@ App 启动
 
 ---
 
-## 8. 待补齐（非本次范围）
+## 8. 当前约束
 
-- AppHost 尚未向 `passingtrace-web` 注入 Events API 地址，前端实现需新增环境变量（如 `VITE_EVENTS_API_BASE_URL`）并在 AppHost 中注入。
-- 接口枚举当前为数字；如需更友好的字符串枚举（`"trace"` 等），需在 API 侧启用 `JsonStringEnumConverter`，属后续可选调整。
+- AppHost 已通过 `VITE_EVENTS_API_BASE_URL` 向 Web 注入 Events API 地址；生产环境由同域 `/api/*` 反向代理。
+- 接口枚举当前为数字；如需更友好的字符串枚举（`"trace"` 等），需在 API 侧启用 `JsonStringEnumConverter`。

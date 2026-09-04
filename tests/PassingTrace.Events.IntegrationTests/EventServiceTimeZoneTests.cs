@@ -1,3 +1,6 @@
+using System.Security.Claims;
+using System.Security.Cryptography;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -5,6 +8,10 @@ using PassingTrace.Events.Api.Events;
 using PassingTrace.Infrastructure;
 using PassingTrace.Infrastructure.Persistence;
 using PassingTrace.Core.Events;
+using PassingTrace.Core.Ai;
+using PassingTrace.Core.Media;
+using PassingTrace.Events.Api.Ai;
+using PassingTrace.Events.Api.Media;
 using Xunit;
 
 namespace PassingTrace.Events.IntegrationTests;
@@ -95,6 +102,341 @@ public sealed class EventServiceTimeZoneTests : IDisposable
         Assert.Equal(2, reloaded.CurrentSourceRevision);
     }
 
+    [Fact]
+    public async Task CreateAsync_AllowsMediaOnly_AndSnapshotsAttachment()
+    {
+        var asset = AddReadyMedia(userId: 31, "photo.jpg", MediaKind.Image);
+        await _db.SaveChangesAsync();
+        var service = CreateMediaAwareService(_db);
+
+        var created = await service.CreateAsync(new CreateEventCommand(
+            UserId: 31, Kind: EventKind.Trace, Title: null, RawContent: null,
+            HappenedAt: null, PlannedAt: null, Timezone: "UTC", IdempotencyKey: "media-only",
+            MediaIds: [asset.Id]), CancellationToken.None);
+
+        var reloaded = await _db.Events.AsNoTracking()
+            .Include(x => x.MediaAssets)
+            .Include(x => x.SourceRevisions).ThenInclude(x => x.MediaAssets)
+            .SingleAsync(x => x.Id == created.Id);
+        Assert.Single(reloaded.MediaAssets);
+        Assert.Equal(asset.Id, reloaded.MediaAssets[0].MediaAssetId);
+        Assert.Single(reloaded.SourceRevisions[0].MediaAssets);
+        Assert.Equal(asset.Id, reloaded.SourceRevisions[0].MediaAssets[0].MediaAssetId);
+    }
+
+    [Fact]
+    public async Task UpdateSourceAsync_PreservesOldMediaSnapshot()
+    {
+        var first = AddReadyMedia(32, "first.pdf", MediaKind.File);
+        var second = AddReadyMedia(32, "second.pdf", MediaKind.File);
+        await _db.SaveChangesAsync();
+        var service = CreateMediaAwareService(_db);
+        var created = await service.CreateAsync(new CreateEventCommand(
+            32, EventKind.Trace, null, null, null, null, "UTC", "revision-media", [first.Id]),
+            CancellationToken.None);
+
+        await service.UpdateSourceAsync(new UpdateEventCommand(
+            32, created.Id, created.RowVersion, null, null, null, null, "UTC", [second.Id]),
+            CancellationToken.None);
+
+        var revisions = await _db.SourceRevisions.AsNoTracking()
+            .Include(x => x.MediaAssets)
+            .Where(x => x.EventId == created.Id)
+            .OrderBy(x => x.Revision)
+            .ToListAsync();
+        Assert.Equal(2, revisions.Count);
+        Assert.Equal(first.Id, Assert.Single(revisions[0].MediaAssets).MediaAssetId);
+        Assert.Equal(second.Id, Assert.Single(revisions[1].MediaAssets).MediaAssetId);
+    }
+
+    [Fact]
+    public async Task ResolveAsync_RejectsAttachmentOwnedByAnotherUser()
+    {
+        var foreign = AddReadyMedia(40, "private.png", MediaKind.Image);
+        await _db.SaveChangesAsync();
+        var media = CreateMediaService(_db);
+
+        var error = await Assert.ThrowsAsync<DomainValidationException>(() =>
+            media.ResolveAsync(41, [foreign.Id], CancellationToken.None));
+
+        Assert.Contains("不属于当前用户", error.Message);
+    }
+
+    [Fact]
+    public async Task CreateAccessAsync_AllowsAttachmentLinkedToCurrentUsersEvent()
+    {
+        var foreign = AddReadyMedia(40, "imported-photo.png", MediaKind.Image);
+        var now = DateTimeOffset.UtcNow;
+        var evt = Event.Create(41, EventKind.Trace, "导入记录", null, now, null, "UTC", "imported-event", now);
+        evt.MediaAssets.Add(new EventMediaAsset
+        {
+            Event = evt,
+            MediaAsset = foreign,
+            MediaAssetId = foreign.Id,
+            SortOrder = 0,
+            CreatedAt = now,
+        });
+        _db.Events.Add(evt);
+        await _db.SaveChangesAsync();
+        var media = new MediaService(
+            _db,
+            new MemoryObjectStorage([0x89, 0x50, 0x4E, 0x47]),
+            new AnalysisOutbox(_db),
+            TimeProvider.System);
+
+        var access = await media.CreateAccessAsync(41, foreign.Id, CancellationToken.None);
+
+        Assert.True(access.Inline);
+        Assert.Equal("https://objects.test/imported-photo.png", access.Url.ToString());
+    }
+
+    [Fact]
+    public async Task OpenContentAsync_AllowsConfirmedImageWhenAiProcessingFailed()
+    {
+        var asset = AddReadyMedia(42, "original.png", MediaKind.Image);
+        asset.Status = MediaAssetStatus.Failed;
+        asset.ProcessingError = "AI derivative processing failed";
+        await _db.SaveChangesAsync();
+        var bytes = new byte[] { 0x89, 0x50, 0x4E, 0x47 };
+        var media = new MediaService(
+            _db,
+            new MemoryObjectStorage(bytes),
+            new AnalysisOutbox(_db),
+            TimeProvider.System);
+
+        var content = await media.OpenContentAsync(42, asset.Id, CancellationToken.None);
+        await using var stream = content.Stream;
+        await using var copy = new MemoryStream();
+        await stream.CopyToAsync(copy);
+
+        Assert.Equal(bytes, copy.ToArray());
+        Assert.True(content.Inline);
+    }
+
+    [Fact]
+    public async Task ConfirmAsync_RejectsImageWhoseDeclaredMimeDoesNotMatchMagicBytes()
+    {
+        var bytes = new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 1, 2, 3 };
+        var now = DateTimeOffset.UtcNow;
+        var asset = new MediaAsset
+        {
+            Id = Guid.NewGuid(),
+            UserId = 45,
+            ObjectKey = "tests/spoofed.jpg",
+            OriginalFileName = "spoofed.jpg",
+            Kind = MediaKind.Image,
+            DeclaredMimeType = "image/jpeg",
+            ExpectedSize = bytes.Length,
+            ExpectedSha256 = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant(),
+            Status = MediaAssetStatus.PendingUpload,
+            UploadMode = MediaUploadMode.Single,
+            UploadExpiresAt = now.AddHours(1),
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+        _db.MediaAssets.Add(asset);
+        await _db.SaveChangesAsync();
+        var storage = new MemoryObjectStorage(bytes);
+        var media = new MediaService(_db, storage, new AnalysisOutbox(_db), TimeProvider.System);
+
+        var error = await Assert.ThrowsAsync<DomainValidationException>(() =>
+            media.ConfirmAsync(45, asset.Id, new ConfirmMediaUploadRequest(null), CancellationToken.None));
+
+        Assert.Contains("声明类型", error.Message);
+        Assert.True(storage.Deleted);
+        Assert.Equal(MediaAssetStatus.Failed, asset.Status);
+    }
+
+    [Fact]
+    public async Task UserMemoryService_UpdatesCurrentUser_AndCannotRejectForeignMemory()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var mine = new UserMemory
+        {
+            UserId = 51,
+            Type = UserMemoryType.Preference,
+            Content = "喜欢徒步",
+            Confidence = 0.9m,
+            Status = UserMemoryStatus.Automatic,
+            Fingerprint = new string('a', 64),
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+        var foreign = new UserMemory
+        {
+            UserId = 52,
+            Type = UserMemoryType.Profile,
+            Content = "住在别处",
+            Confidence = 0.8m,
+            Status = UserMemoryStatus.Confirmed,
+            Fingerprint = new string('b', 64),
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+        _db.UserMemories.AddRange(mine, foreign);
+        await _db.SaveChangesAsync();
+        var service = new UserMemoryService(_db, CreateCurrentUser(51), null!, TimeProvider.System);
+
+        var updated = await service.UpdateAsync(
+            mine.Id,
+            new UpdateUserMemoryRequest(null, null, "Confirmed"),
+            CancellationToken.None);
+
+        Assert.Equal(mine.Id, updated.Id);
+        Assert.Equal("Confirmed", updated.Status);
+        await Assert.ThrowsAsync<KeyNotFoundException>(() =>
+            service.RejectAsync(foreign.Id, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task CreateAsync_SnapshotsManualLabelsAndConfirmedLocation_AndBuildsBaseIndex()
+    {
+        var service = CreateService(_db);
+        var created = await service.CreateAsync(new CreateEventCommand(
+            61, EventKind.Trace, "西湖散步", "今天沿着西湖走了一圈。", DateTimeOffset.UtcNow, null,
+            "Asia/Shanghai", "labels-location", Classification: new ClassificationInput("scenery",
+                [new ManualTagInput("walking", null), new ManualTagInput(null, "周末放松")], []),
+            Locations: [new EventLocationInput("西湖风景名胜区", "杭州市西湖区", "浙江省", "杭州市", "西湖区",
+                "330106", "B000A", "风景名胜", 30.249m, 120.143m, 18m, "GCJ02",
+                EventLocationSource.KeywordSearch, DateTimeOffset.UtcNow)]), CancellationToken.None);
+
+        var revision = await _db.SourceRevisions.AsNoTracking().Include(x => x.Labels).Include(x => x.Locations)
+            .SingleAsync(x => x.EventId == created.Id);
+        Assert.Equal(3, revision.Labels.Count);
+        Assert.Equal("scenery", revision.Labels.Single(x => x.Type == EventLabelType.PrimaryCategory).TaxonomyKey);
+        Assert.Equal("西湖风景名胜区", Assert.Single(revision.Locations).Name);
+        var index = await _db.EventSearchIndexes.AsNoTracking().SingleAsync(x => x.EventId == created.Id && x.IsCurrent);
+        Assert.Contains("周末放松", index.RetrievalText);
+        Assert.Contains("西湖风景名胜区", index.RetrievalText);
+    }
+
+    [Fact]
+    public async Task UpdateSourceAsync_OmittedMetadataPreservesIt_AndExplicitEmptyClearsIt()
+    {
+        var service = CreateService(_db);
+        var created = await service.CreateAsync(new CreateEventCommand(62, EventKind.Trace, "咖啡", null, null, null,
+            "UTC", "preserve-labels", Classification: new ClassificationInput("food",
+                [new ManualTagInput("coffee", null)], []), Locations: [new EventLocationInput("咖啡店", null, null,
+                null, null, null, null, null, null, null, null, null, EventLocationSource.ManualText, null)]), CancellationToken.None);
+
+        var preserved = await service.UpdateSourceAsync(new UpdateEventCommand(62, created.Id, created.RowVersion,
+            "咖啡续杯", null, null, null, "UTC"), CancellationToken.None);
+        var second = await _db.SourceRevisions.AsNoTracking().Include(x => x.Labels).Include(x => x.Locations)
+            .SingleAsync(x => x.EventId == created.Id && x.Revision == 2);
+        Assert.Contains(second.Labels, x => x.TaxonomyKey == "coffee");
+        Assert.Single(second.Locations);
+
+        await service.UpdateSourceAsync(new UpdateEventCommand(62, created.Id, preserved.RowVersion,
+            "咖啡续杯", null, null, null, "UTC", Classification: new ClassificationInput(null, [], []), Locations: []),
+            CancellationToken.None);
+        var third = await _db.SourceRevisions.AsNoTracking().Include(x => x.Labels).Include(x => x.Locations)
+            .SingleAsync(x => x.EventId == created.Id && x.Revision == 3);
+        Assert.Empty(third.Labels);
+        Assert.Empty(third.Locations);
+    }
+
+    [Fact]
+    public async Task CreateAsync_RejectsInvalidCustomTagAndNonGcjCoordinates()
+    {
+        var service = CreateService(_db);
+        await Assert.ThrowsAsync<DomainValidationException>(() => service.CreateAsync(new CreateEventCommand(
+            63, EventKind.Trace, "x", null, null, null, "UTC", "bad-tag",
+            Classification: new ClassificationInput(null, [new ManualTagInput(null, new string('长', 25))], [])),
+            CancellationToken.None));
+        await Assert.ThrowsAsync<DomainValidationException>(() => service.CreateAsync(new CreateEventCommand(
+            63, EventKind.Trace, "x", null, null, null, "UTC", "bad-coordinate",
+            Locations: [new EventLocationInput("位置", null, null, null, null, null, null, null, 30m, 120m,
+                null, "WGS84", EventLocationSource.CurrentPosition, null)]), CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task ListAsync_FiltersByOccurrenceAndPlannedTime()
+    {
+        var createdAt = new DateTimeOffset(2026, 9, 1, 8, 0, 0, TimeSpan.Zero);
+        var augustTrace = Event.Create(
+            70, EventKind.Trace, "八月散步", null,
+            new DateTimeOffset(2026, 8, 18, 10, 0, 0, TimeSpan.Zero), null,
+            "Asia/Shanghai", "filter-trace", createdAt);
+        var septemberPlan = Event.Create(
+            70, EventKind.Plan, "九月出行", null, null,
+            new DateTimeOffset(2026, 9, 5, 10, 0, 0, TimeSpan.Zero),
+            "Asia/Shanghai", "filter-plan", createdAt);
+        _db.Events.AddRange(augustTrace, septemberPlan);
+        await _db.SaveChangesAsync();
+
+        var repository = new EventRepository(_db);
+        var august = await repository.ListAsync(
+            new EventListQuery(
+                70,
+                From: new DateTimeOffset(2026, 8, 1, 0, 0, 0, TimeSpan.Zero),
+                To: new DateTimeOffset(2026, 8, 31, 23, 59, 59, TimeSpan.Zero)),
+            CancellationToken.None);
+
+        Assert.Collection(august, item => Assert.Equal("八月散步", item.Title));
+    }
+
+    [Fact]
+    public async Task ListAsync_OrdersAndPaginatesByBusinessTime_NotImportTime()
+    {
+        var importedAt = new DateTimeOffset(2026, 9, 2, 8, 0, 0, TimeSpan.Zero);
+        var septemberFirst = Event.Create(71, EventKind.Trace, "九月一日", null,
+            new DateTimeOffset(2026, 9, 1, 8, 0, 0, TimeSpan.Zero), null,
+            "Asia/Shanghai", "business-time-sep-1", importedAt.AddDays(-5));
+        var augustImportedLater = Event.Create(71, EventKind.Trace, "八月补录", null,
+            new DateTimeOffset(2026, 8, 31, 20, 0, 0, TimeSpan.Zero), null,
+            "Asia/Shanghai", "business-time-aug", importedAt);
+        var septemberLatest = Event.Create(71, EventKind.Plan, "九月计划", null, null,
+            new DateTimeOffset(2026, 9, 5, 8, 0, 0, TimeSpan.Zero),
+            "Asia/Shanghai", "business-time-sep-5", importedAt.AddDays(-10));
+        _db.Events.AddRange(septemberFirst, augustImportedLater, septemberLatest);
+        await _db.SaveChangesAsync();
+
+        var repository = new EventRepository(_db);
+        var firstPage = await repository.ListAsync(
+            new EventListQuery(71, Limit: 2), CancellationToken.None);
+        var secondPage = await repository.ListAsync(
+            new EventListQuery(71, Limit: 2, Cursor: firstPage[^1].Id), CancellationToken.None);
+
+        Assert.Collection(firstPage,
+            item => Assert.Equal("九月计划", item.Title),
+            item => Assert.Equal("九月一日", item.Title));
+        Assert.Collection(secondPage, item => Assert.Equal("八月补录", item.Title));
+    }
+
+    [Fact]
+    public async Task UploadContentAsync_StreamsThroughAuthenticatedApiStorage()
+    {
+        var bytes = new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 1, 2, 3 };
+        var now = DateTimeOffset.UtcNow;
+        var asset = new MediaAsset
+        {
+            Id = Guid.NewGuid(),
+            UserId = 72,
+            ObjectKey = "tests/proxy.png",
+            OriginalFileName = "proxy.png",
+            Kind = MediaKind.Image,
+            DeclaredMimeType = "image/png",
+            ExpectedSize = bytes.Length,
+            ExpectedSha256 = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant(),
+            Status = MediaAssetStatus.PendingUpload,
+            UploadMode = MediaUploadMode.Single,
+            UploadExpiresAt = now.AddHours(1),
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+        _db.MediaAssets.Add(asset);
+        await _db.SaveChangesAsync();
+        var storage = new MemoryObjectStorage([]);
+        var service = new MediaService(_db, storage, new AnalysisOutbox(_db), TimeProvider.System);
+
+        await using var input = new MemoryStream(bytes, writable: false);
+        await service.UploadContentAsync(72, asset.Id, input, bytes.Length, "image/png", CancellationToken.None);
+        var confirmed = await service.ConfirmAsync(72, asset.Id, new ConfirmMediaUploadRequest(null), CancellationToken.None);
+
+        Assert.Equal(bytes, storage.Content);
+        Assert.Equal(MediaAssetStatus.Uploaded, confirmed.Status);
+    }
+
     private static TraceDbContext CreateDbContext() =>
         throw new InvalidOperationException("请使用带连接的构造器。");
 
@@ -109,6 +451,97 @@ public sealed class EventServiceTimeZoneTests : IDisposable
 
     private static EventService CreateService(TraceDbContext db) =>
         new(new EventRepository(db), TimeProvider.System);
+
+    private static EventService CreateMediaAwareService(TraceDbContext db) =>
+        new(new EventRepository(db), TimeProvider.System, CreateMediaService(db), new AnalysisOutbox(db));
+
+    private static MediaService CreateMediaService(TraceDbContext db) =>
+        new(db, new UnusedObjectStorage(), new AnalysisOutbox(db), TimeProvider.System);
+
+    private static CurrentUserContext CreateCurrentUser(long userId)
+    {
+        var context = new DefaultHttpContext
+        {
+            User = new ClaimsPrincipal(new ClaimsIdentity([new Claim("sub", userId.ToString())], "test")),
+        };
+        return new CurrentUserContext(new HttpContextAccessor { HttpContext = context });
+    }
+
+    private MediaAsset AddReadyMedia(long userId, string fileName, MediaKind kind)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var asset = new MediaAsset
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            ObjectKey = $"tests/{Guid.NewGuid():N}",
+            OriginalFileName = fileName,
+            Kind = kind,
+            DeclaredMimeType = kind == MediaKind.Image ? "image/png" : "application/pdf",
+            VerifiedMimeType = kind == MediaKind.Image ? "image/png" : "application/pdf",
+            ExpectedSize = 4,
+            ActualSize = 4,
+            ExpectedSha256 = new string('0', 64),
+            ActualSha256 = new string('0', 64),
+            Status = MediaAssetStatus.Ready,
+            UploadMode = MediaUploadMode.Single,
+            UploadExpiresAt = now.AddHours(1),
+            ConfirmedAt = now,
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+        _db.MediaAssets.Add(asset);
+        return asset;
+    }
+
+    private sealed class UnusedObjectStorage : IObjectStorage
+    {
+        private static Exception Unused() => new InvalidOperationException("对象存储不应在此测试中被调用。");
+        public Task EnsureBucketAsync(CancellationToken cancellationToken) => throw Unused();
+        public Task<string> CreateMultipartUploadAsync(string objectKey, string contentType, CancellationToken cancellationToken) => throw Unused();
+        public Task<Uri> CreateUploadUrlAsync(string objectKey, string contentType, DateTimeOffset expiresAt, CancellationToken cancellationToken) => throw Unused();
+        public Task<Uri> CreatePartUploadUrlAsync(string objectKey, string uploadId, int partNumber, DateTimeOffset expiresAt, CancellationToken cancellationToken) => throw Unused();
+        public Task<string> UploadPartAsync(string objectKey, string uploadId, int partNumber, Stream content, long contentLength, CancellationToken cancellationToken) => throw Unused();
+        public Task CompleteMultipartUploadAsync(string objectKey, string uploadId, IReadOnlyList<CompletedPart> parts, CancellationToken cancellationToken) => throw Unused();
+        public Task AbortMultipartUploadAsync(string objectKey, string uploadId, CancellationToken cancellationToken) => throw Unused();
+        public Task<StoredObjectInfo> GetInfoAsync(string objectKey, CancellationToken cancellationToken) => throw Unused();
+        public Task<Stream> OpenReadAsync(string objectKey, CancellationToken cancellationToken) => throw Unused();
+        public Task PutAsync(string objectKey, Stream content, string contentType, long contentLength, CancellationToken cancellationToken) => throw Unused();
+        public Task<Uri> CreateDownloadUrlAsync(string objectKey, string fileName, string contentType, bool inline, DateTimeOffset expiresAt, CancellationToken cancellationToken) => throw Unused();
+        public Task DeleteAsync(string objectKey, CancellationToken cancellationToken) => throw Unused();
+    }
+
+    private sealed class MemoryObjectStorage(byte[] content) : IObjectStorage
+    {
+        private byte[] _content = content;
+        private static Exception Unused() => new InvalidOperationException("对象存储方法不应在此测试中被调用。");
+        public bool Deleted { get; private set; }
+        public byte[] Content => _content;
+        public Task EnsureBucketAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task<string> CreateMultipartUploadAsync(string objectKey, string contentType, CancellationToken cancellationToken) => throw Unused();
+        public Task<Uri> CreateUploadUrlAsync(string objectKey, string contentType, DateTimeOffset expiresAt, CancellationToken cancellationToken) => throw Unused();
+        public Task<Uri> CreatePartUploadUrlAsync(string objectKey, string uploadId, int partNumber, DateTimeOffset expiresAt, CancellationToken cancellationToken) => throw Unused();
+        public Task<string> UploadPartAsync(string objectKey, string uploadId, int partNumber, Stream content, long contentLength, CancellationToken cancellationToken) => throw Unused();
+        public Task CompleteMultipartUploadAsync(string objectKey, string uploadId, IReadOnlyList<CompletedPart> parts, CancellationToken cancellationToken) => throw Unused();
+        public Task AbortMultipartUploadAsync(string objectKey, string uploadId, CancellationToken cancellationToken) => throw Unused();
+        public Task<StoredObjectInfo> GetInfoAsync(string objectKey, CancellationToken cancellationToken) =>
+            Task.FromResult(new StoredObjectInfo(_content.Length, "image/png"));
+        public Task<Stream> OpenReadAsync(string objectKey, CancellationToken cancellationToken) =>
+            Task.FromResult<Stream>(new MemoryStream(_content, writable: false));
+        public async Task PutAsync(string objectKey, Stream stream, string contentType, long contentLength, CancellationToken cancellationToken)
+        {
+            await using var output = new MemoryStream();
+            await stream.CopyToAsync(output, cancellationToken);
+            _content = output.ToArray();
+        }
+        public Task<Uri> CreateDownloadUrlAsync(string objectKey, string fileName, string contentType, bool inline, DateTimeOffset expiresAt, CancellationToken cancellationToken) =>
+            Task.FromResult(new Uri($"https://objects.test/{fileName}"));
+        public Task DeleteAsync(string objectKey, CancellationToken cancellationToken)
+        {
+            Deleted = true;
+            return Task.CompletedTask;
+        }
+    }
 
     /// <summary>
     /// SQLite 没有 PostgreSQL 的 xmin 系统列。把 RowVersion 的 IsRowVersion()
@@ -127,6 +560,21 @@ public sealed class EventServiceTimeZoneTests : IDisposable
             modelBuilder.Entity<Event>()
                 .Property(e => e.RowVersion)
                 .ValueGeneratedNever();
+            modelBuilder.Entity<Event>()
+                .Property(e => e.CreatedAt)
+                .HasConversion<long>();
+            modelBuilder.Entity<Event>()
+                .Property(e => e.HappenedAt)
+                .HasConversion<long?>();
+            modelBuilder.Entity<Event>()
+                .Property(e => e.PlannedAt)
+                .HasConversion<long?>();
+            modelBuilder.Entity<EventSearchIndex>().Ignore("Embedding");
+            modelBuilder.Entity<EventSearchIndex>().Ignore("SearchVector");
+            modelBuilder.Entity<UserMemory>().Ignore("Embedding");
+            modelBuilder.Entity<UserPlace>().Ignore("Embedding");
+            modelBuilder.Entity<PassingTrace.Core.Storylines.StorylineSearchIndex>().Ignore("Embedding");
+            modelBuilder.Entity<PassingTrace.Core.Storylines.StorylineSearchIndex>().Ignore("SearchVector");
         }
     }
 }

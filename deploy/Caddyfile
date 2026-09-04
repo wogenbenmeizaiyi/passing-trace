@@ -1,0 +1,29 @@
+{$WEB_DOMAIN} {
+	encode zstd gzip
+
+	handle /api/* {
+		reverse_proxy events:8080
+	}
+
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		-Server
+	}
+}
+
+www.{$WEB_DOMAIN} {
+	redir https://{$WEB_DOMAIN}{uri} permanent
+}
+
+{$AUTH_DOMAIN} {
+	reverse_proxy identity:8080
+	header -Server
+}

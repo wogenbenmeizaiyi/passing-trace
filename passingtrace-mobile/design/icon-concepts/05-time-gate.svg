@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" role="img" aria-labelledby="title desc">
+  <title id="title">PassingTrace 时光门图标</title>
+  <desc id="desc">一条轨迹穿过拱门，表达穿行与回望</desc>
+  <rect x="3" y="3" width="102" height="102" rx="28" fill="#2F6B57"/>
+  <path d="M31 82 V49 C31 31 42 22 54 22 C66 22 77 31 77 49 V82 Z" fill="#FFFDF7"/>
+  <path d="M43 82 V50 C43 40 48 35 54 35 C60 35 65 40 65 50 V82 Z" fill="#2F6B57"/>
+  <path d="M21 82 C33 73 44 69 54 56" fill="none" stroke="#E28A62" stroke-width="7" stroke-linecap="round"/>
+  <circle cx="54" cy="56" r="5" fill="#FFFDF7"/>
+</svg>

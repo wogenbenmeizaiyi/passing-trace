@@ -56,18 +56,17 @@ class EventApiClient {
   }
 
   Future<Map<String, String>> _bearerHeaders(AuthSession session) async {
-    final fresh = await auth.ensureFreshToken(session);
+    late final AuthSession fresh;
+    try {
+      fresh = await auth.ensureFreshToken(session);
+    } on AuthSessionExpiredException catch (error) {
+      throw EventApiException(status: 401, message: error.message);
+    }
     final token = fresh.accessToken;
     if (token == null || token.isEmpty) {
-      throw const EventApiException(
-        status: 401,
-        message: '登录状态已失效，请重新登录。',
-      );
+      throw const EventApiException(status: 401, message: '登录状态已失效，请重新登录。');
     }
-    return {
-      'Authorization': 'Bearer $token',
-      'Accept': 'application/json',
-    };
+    return {'Authorization': 'Bearer $token', 'Accept': 'application/json'};
   }
 
   Future<http.Response> _send(
@@ -76,7 +75,6 @@ class EventApiClient {
     Uri uri, {
     Object? body,
     Map<String, String>? extraHeaders,
-    bool retryOn401 = true,
   }) async {
     Future<http.Response> doRequest(Map<String, String> headers) {
       final encoded = body == null ? null : jsonEncode(body);
@@ -98,30 +96,28 @@ class EventApiClient {
     if (extraHeaders != null) headers.addAll(extraHeaders);
 
     final response = await doRequest(headers);
-    if (response.statusCode == 401 && retryOn401) {
-      // 重试一次：`ensureFreshToken` 会判定过期并走 refresh token 续期。
-      // 续期成功时拿到的就是新 session；重试仍 401 才视为真正过期。
+    if (response.statusCode == 401) {
+      // API 拒绝了当前 access token 时强制刷新一次，并用返回的
+      // 新 token 直接重试。不再递归传入旧 session，避免重复使用已轮换的
+      // refresh token。
+      late final AuthSession refreshed;
       try {
-        await auth.ensureFreshToken(session);
+        refreshed = await auth.ensureFreshToken(session, forceRefresh: true);
       } catch (_) {
-        throw const EventApiException(
-          status: 401,
-          message: '登录状态已失效，请重新登录。',
-        );
+        throw const EventApiException(status: 401, message: '登录状态已失效，请重新登录。');
       }
-      return _send(
-        session,
-        method,
-        uri,
-        body: body,
-        extraHeaders: extraHeaders,
-        retryOn401: false,
-      );
+      final retryHeaders = Map<String, String>.from(headers)
+        ..['Authorization'] = 'Bearer ${refreshed.accessToken}';
+      return doRequest(retryHeaders);
     }
     return response;
   }
 
-  T _decode<T>(http.Response response, Set<int> success, T Function(dynamic) parse) {
+  T _decode<T>(
+    http.Response response,
+    Set<int> success,
+    T Function(dynamic) parse,
+  ) {
     if (success.contains(response.statusCode)) {
       if (response.body.isEmpty) {
         return parse(null);
@@ -139,7 +135,8 @@ class EventApiClient {
     } catch (_) {
       problem = null;
     }
-    final message = problem?.detail ?? problem?.title ?? '请求失败：${response.statusCode}';
+    final message =
+        problem?.detail ?? problem?.title ?? '请求失败：${response.statusCode}';
     throw EventApiException(
       status: response.statusCode,
       message: message,
@@ -155,6 +152,9 @@ class EventApiClient {
     EventStatus? status,
     String? from,
     String? to,
+    String? categoryKey,
+    List<String> tagKeys = const [],
+    String? query,
   }) async {
     final uri = _resolve('/api/v1/events', {
       'limit': limit,
@@ -163,13 +163,14 @@ class EventApiClient {
       'status': status?.value,
       'from': from,
       'to': to,
+      'categoryKey': categoryKey,
+      'tagKeys': tagKeys.isEmpty ? null : tagKeys.join(','),
+      'query': query,
     });
     final response = await _send(session, 'GET', uri);
-    return _decode(
-      response,
-      const {200},
-      (raw) => EventPage.fromJson(raw as Map<String, dynamic>),
-    );
+    return _decode(response, const {
+      200,
+    }, (raw) => EventPage.fromJson(raw as Map<String, dynamic>));
   }
 
   Future<EventModel> get(AuthSession session, int id) async {
@@ -178,11 +179,9 @@ class EventApiClient {
     }
     final uri = _resolve('/api/v1/events/$id');
     final response = await _send(session, 'GET', uri);
-    return _decode(
-      response,
-      const {200},
-      (raw) => EventModel.fromJson(raw as Map<String, dynamic>),
-    );
+    return _decode(response, const {
+      200,
+    }, (raw) => EventModel.fromJson(raw as Map<String, dynamic>));
   }
 
   Future<EventModel> create(
@@ -194,6 +193,9 @@ class EventApiClient {
     DateTime? plannedAt,
     required String timezone,
     required String idempotencyKey,
+    List<String> mediaIds = const [],
+    ManualClassification? classification,
+    List<EventLocationModel>? locations,
   }) async {
     if (idempotencyKey.isEmpty) {
       throw ArgumentError.value(idempotencyKey, 'idempotencyKey', '幂等键不能为空');
@@ -205,6 +207,10 @@ class EventApiClient {
       'happenedAt': happenedAt?.toUtc().toIso8601String(),
       'plannedAt': plannedAt?.toUtc().toIso8601String(),
       'timezone': timezone,
+      'mediaIds': mediaIds,
+      if (classification != null) 'classification': classification.toJson(),
+      if (locations != null)
+        'locations': locations.map((x) => x.toJson()).toList(),
     };
     final uri = _resolve('/api/v1/events');
     final response = await _send(
@@ -214,11 +220,9 @@ class EventApiClient {
       body: body,
       extraHeaders: {'Idempotency-Key': idempotencyKey},
     );
-    return _decode(
-      response,
-      const {201},
-      (raw) => EventModel.fromJson(raw as Map<String, dynamic>),
-    );
+    return _decode(response, const {
+      201,
+    }, (raw) => EventModel.fromJson(raw as Map<String, dynamic>));
   }
 
   Future<EventModel> update(
@@ -230,6 +234,9 @@ class EventApiClient {
     DateTime? plannedAt,
     required String timezone,
     required int version,
+    List<String> mediaIds = const [],
+    ManualClassification? classification,
+    List<EventLocationModel>? locations,
   }) async {
     if (version < 0) {
       throw ArgumentError.value(version, 'version', 'version 必须为非负整数');
@@ -240,6 +247,10 @@ class EventApiClient {
       'happenedAt': happenedAt?.toUtc().toIso8601String(),
       'plannedAt': plannedAt?.toUtc().toIso8601String(),
       'timezone': timezone,
+      'mediaIds': mediaIds,
+      if (classification != null) 'classification': classification.toJson(),
+      if (locations != null)
+        'locations': locations.map((x) => x.toJson()).toList(),
     };
     final uri = _resolve('/api/v1/events/$id');
     final response = await _send(
@@ -249,14 +260,16 @@ class EventApiClient {
       body: body,
       extraHeaders: {'If-Match': '$version'},
     );
-    return _decode(
-      response,
-      const {200},
-      (raw) => EventModel.fromJson(raw as Map<String, dynamic>),
-    );
+    return _decode(response, const {
+      200,
+    }, (raw) => EventModel.fromJson(raw as Map<String, dynamic>));
   }
 
-  Future<void> remove(AuthSession session, int id, {required int version}) async {
+  Future<void> remove(
+    AuthSession session,
+    int id, {
+    required int version,
+  }) async {
     if (version < 0) {
       throw ArgumentError.value(version, 'version', 'version 必须为非负整数');
     }
@@ -279,12 +292,70 @@ class EventApiClient {
     } catch (_) {
       problem = null;
     }
-    final message = problem?.detail ?? problem?.title ?? '删除失败：${response.statusCode}';
+    final message =
+        problem?.detail ?? problem?.title ?? '删除失败：${response.statusCode}';
     throw EventApiException(
       status: response.statusCode,
       message: message,
       problem: problem,
     );
+  }
+
+  Future<EventTaxonomyModel> taxonomy(AuthSession session) async {
+    final response = await _send(
+      session,
+      'GET',
+      _resolve('/api/v1/event-taxonomy'),
+    );
+    return _decode(response, const {
+      200,
+    }, (raw) => EventTaxonomyModel.fromJson(raw as Map<String, dynamic>));
+  }
+
+  Future<List<PlaceCandidateModel>> searchPlaces(
+    AuthSession session, {
+    required String mode,
+    String? query,
+    double? latitude,
+    double? longitude,
+    int radiusMeters = 1000,
+    String? cityAdCode,
+  }) async {
+    final response = await _send(
+      session,
+      'POST',
+      _resolve('/api/v1/places/search'),
+      body: {
+        'mode': mode,
+        'query': query,
+        'latitude': latitude,
+        'longitude': longitude,
+        'radiusMeters': radiusMeters,
+        'cityAdCode': cityAdCode,
+      },
+    );
+    return _decode(
+      response,
+      const {200},
+      (raw) => (raw as List<dynamic>)
+          .map((x) => PlaceCandidateModel.fromJson(x as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+
+  Future<Map<String, dynamic>> navigationTarget(
+    AuthSession session,
+    int eventId,
+    int locationId,
+  ) async {
+    final response = await _send(
+      session,
+      'GET',
+      _resolve(
+        '/api/v1/events/$eventId/locations/$locationId/navigation-target',
+      ),
+    );
+    return _decode(response, const {200}, (raw) => raw as Map<String, dynamic>);
   }
 
   void close() => _http.close();

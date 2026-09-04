@@ -1,0 +1,56 @@
+name: Seed Production Demo Data
+
+on:
+  workflow_dispatch:
+    inputs:
+      username:
+        description: Demo account username
+        required: true
+        default: passingtrace-demo
+      record_count:
+        description: Number of curated records (1-36)
+        required: true
+        default: "36"
+      confirmation:
+        description: Type seed-passingtrace-production-demo
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: passingtrace-production-demo-seed
+  cancel-in-progress: false
+
+jobs:
+  seed:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate confirmation
+        shell: bash
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+          RECORD_COUNT: ${{ inputs.record_count }}
+        run: |
+          set -euo pipefail
+          test "$CONFIRMATION" = "seed-passingtrace-production-demo"
+          test "$RECORD_COUNT" -ge 1
+          test "$RECORD_COUNT" -le 36
+
+      - name: Run unit tests
+        run: python3 -m unittest discover -s tools/tests -p 'test_*.py' -v
+
+      - name: Seed through production APIs
+        env:
+          PASSINGTRACE_IDENTITY_URL: https://auth.passingtrace.com
+          PASSINGTRACE_EVENTS_URL: https://passingtrace.com
+          DEMO_ACCOUNT_USERNAME: ${{ inputs.username }}
+          DEMO_ACCOUNT_PASSWORD: ${{ secrets.DEMO_ACCOUNT_PASSWORD }}
+          REGISTRATION_BOOTSTRAP_CODE: ${{ secrets.REGISTRATION_BOOTSTRAP_CODE }}
+          DEMO_RECORD_COUNT: ${{ inputs.record_count }}
+          DEMO_SEED_CONFIRM: ${{ inputs.confirmation }}
+        run: python3 tools/seed_production_demo.py

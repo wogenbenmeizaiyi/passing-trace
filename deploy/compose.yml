@@ -1,0 +1,175 @@
+name: passingtrace
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg18-trixie
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: passingtrace
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: postgres
+    volumes:
+      - postgres-data:/var/lib/postgresql
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/10-passingtrace.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U passingtrace -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [backend]
+
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD}"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD}\" ping | grep PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    networks: [backend]
+
+  certificates:
+    image: alpine:3.22
+    profiles: [setup]
+    environment:
+      CERTIFICATE_PASSWORD: ${CERTIFICATE_PASSWORD}
+    volumes:
+      - identity-certificates:/certificates
+      - ./generate-certificates.sh:/scripts/generate-certificates.sh:ro
+    entrypoint: ["/bin/sh", "/scripts/generate-certificates.sh"]
+
+  identity:
+    image: ${IDENTITY_IMAGE:-passingtrace-identity:latest}
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.identity
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
+      ConnectionStrings__identity: Host=postgres;Port=5432;Database=identity;Username=passingtrace;Password=${POSTGRES_PASSWORD}
+      Database__AutoMigrate: "true"
+      OpenIddict__Issuer: https://${AUTH_DOMAIN}/
+      OpenIddict__Certificates__Signing__Path: /certificates/signing.pfx
+      OpenIddict__Certificates__Signing__Password: ${CERTIFICATE_PASSWORD}
+      OpenIddict__Certificates__Encryption__Path: /certificates/encryption.pfx
+      OpenIddict__Certificates__Encryption__Password: ${CERTIFICATE_PASSWORD}
+      OpenIddict__AllowedOrigins__0: https://${WEB_DOMAIN}
+      OpenIddict__AllowedOrigins__1: https://${WEB_DOMAIN}
+      OpenIddict__Clients__2__RedirectUris__0: https://${WEB_DOMAIN}/auth/callback
+      OpenIddict__Clients__2__PostLogoutRedirectUris__0: https://${WEB_DOMAIN}/auth/logout-callback
+      MobileRegistration__BootstrapCode: ${REGISTRATION_BOOTSTRAP_CODE}
+      MobileRegistration__MaxUsers: ${IDENTITY_MAX_USERS:-2}
+      QrLogin__PublicOrigin: https://${AUTH_DOMAIN}
+    volumes:
+      - identity-certificates:/certificates:ro
+      - identity-data-protection:/root/.aspnet/DataProtection-Keys
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [backend]
+
+  events:
+    image: ${EVENTS_IMAGE:-passingtrace-events:latest}
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.events
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
+      ConnectionStrings__trace: Host=postgres;Port=5432;Database=trace;Username=passingtrace;Password=${POSTGRES_PASSWORD}
+      ConnectionStrings__redis: redis:6379,password=${REDIS_PASSWORD}
+      Database__AutoMigrate: "true"
+      Identity__Authority: https://${AUTH_DOMAIN}/
+      Identity__RequireHttpsMetadata: "true"
+      ObjectStorage__Endpoint: ${S3_ENDPOINT}
+      ObjectStorage__PublicEndpoint: ${S3_PUBLIC_ENDPOINT}
+      ObjectStorage__AccessKey: ${S3_ACCESS_KEY}
+      ObjectStorage__SecretKey: ${S3_SECRET_KEY}
+      ObjectStorage__Bucket: ${S3_BUCKET}
+      ObjectStorage__Region: ${S3_REGION:-us-east-1}
+      ObjectStorage__ForcePathStyle: ${S3_FORCE_PATH_STYLE:-false}
+      ObjectStorage__CreateBucketIfMissing: "false"
+      ObjectStorage__ConfigureCors: "false"
+      AiModels__Providers__Qwen__ApiKey: ${QWEN_API_KEY}
+      AiModels__Providers__MiniMax__ApiKey: ${MINIMAX_API_KEY}
+      Amap__WebServiceKey: ${AMAP_WEB_SERVICE_KEY}
+      AMAP_MCP_KEY: ${AMAP_MCP_KEY:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      identity:
+        condition: service_started
+    networks: [backend]
+
+  worker:
+    image: ${WORKER_IMAGE:-passingtrace-worker:latest}
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.worker
+    restart: unless-stopped
+    environment:
+      DOTNET_ENVIRONMENT: Production
+      ConnectionStrings__trace: Host=postgres;Port=5432;Database=trace;Username=passingtrace;Password=${POSTGRES_PASSWORD}
+      ObjectStorage__Endpoint: ${S3_ENDPOINT}
+      ObjectStorage__PublicEndpoint: ${S3_PUBLIC_ENDPOINT}
+      ObjectStorage__AccessKey: ${S3_ACCESS_KEY}
+      ObjectStorage__SecretKey: ${S3_SECRET_KEY}
+      ObjectStorage__Bucket: ${S3_BUCKET}
+      ObjectStorage__Region: ${S3_REGION:-us-east-1}
+      ObjectStorage__ForcePathStyle: ${S3_FORCE_PATH_STYLE:-false}
+      ObjectStorage__CreateBucketIfMissing: "false"
+      ObjectStorage__ConfigureCors: "false"
+      AiModels__Providers__Qwen__ApiKey: ${QWEN_API_KEY}
+      AiModels__Providers__MiniMax__ApiKey: ${MINIMAX_API_KEY}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      events:
+        condition: service_started
+    networks: [backend]
+
+  caddy:
+    image: ${CADDY_IMAGE:-passingtrace-caddy:latest}
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.caddy
+      args:
+        VITE_IDENTITY_AUTHORITY: https://${AUTH_DOMAIN}
+        VITE_EVENTS_API_BASE_URL: https://${WEB_DOMAIN}
+    restart: unless-stopped
+    environment:
+      WEB_DOMAIN: ${WEB_DOMAIN}
+      AUTH_DOMAIN: ${AUTH_DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      identity:
+        condition: service_started
+      events:
+        condition: service_started
+    networks: [backend]
+
+networks:
+  backend:
+
+volumes:
+  postgres-data:
+  redis-data:
+  identity-certificates:
+  identity-data-protection:
+  caddy-data:
+  caddy-config:

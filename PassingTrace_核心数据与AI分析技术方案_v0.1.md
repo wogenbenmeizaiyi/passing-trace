@@ -8,6 +8,9 @@
 
 **记录是数据入口，AI 是核心价值。**
 
+> 高德定位、地点 Source、按地点 AI 检索与历史地点导航的专项设计见
+> `PassingTrace_高德定位与历史地点导航技术方案_v0.1.md`。
+
 本方案暂不实现社交、分享和互动，也不展开到具体类与数据库 DDL，重点确定：
 
 - 用户自由记录如何落库
@@ -1923,8 +1926,7 @@ PassingTrace.slnx
 ├─ tests
 │  └─ PassingTrace.Identity.IntegrationTests
 ├─ passingtrace-web
-├─ passingtrace-mobile
-└─ passingtrace-sso-demo
+└─ passingtrace-mobile
 ```
 
 ### 25.1 代码组织规则
@@ -2057,3 +2059,15 @@ PassingTrace.slnx
 12. 生产环境 SLO、AI 成本预算、RPO、RTO 和告警责任人。
 
 以上事项确定后，数据库表、索引、API DTO 和测试用例应直接从本模块合同派生，避免各层分别重新解释业务规则。
+
+---
+
+## 29. 已确定：生活分类、行为标签与地点检索
+
+- `SemanticEnvelope v2` 输出一个受控主分类和最多 5 个受控行为标签，均要求置信度及正文位置或 `mediaId` 证据。
+- 主分类词表版本 `life-v1`：美食、购物、旅行、美景、娱乐、运动、工作、学习、社交、居家、健康、交通、其他。
+- 用户决定写入 `SourceRevisionLabel`；当前合并结果写入 `EventLabelIndex`。人工主分类优先，AI 行为标签阈值为 0.70，人工排除项不会在同一 Source 上恢复。
+- 用户可以新增 1–24 字符的自定义行为标签；AI 不生成自由标签。一条记录最多 10 个生效行为标签。
+- Event 保存时立即建立包含原文、人工标签和确认地点的基础搜索索引；Worker 后续添加 AI 摘要、图片描述、AI 标签和 embedding，因此模型故障不会阻塞人工内容检索。
+- 用户确认地点作为 SourceRevision 事实写入 `EventLocation`；AI 地点提及只能检索，不能生成坐标或导航。历史地点聚合到可重建的 `UserPlace`。
+- 故事线不在当前范围内，但标签和地点均保留修订、时间、来源及证据，未来可以按时间序列安全构建。

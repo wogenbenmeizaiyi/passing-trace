@@ -65,18 +65,7 @@ Refresh Token 失效 -> 重新打开系统浏览器授权
 | `passingtrace-mobile` | `com.passingtrace.mobile:/oauth2redirect` | `com.passingtrace.mobile:/logout-callback` |
 | `passingtrace-desktop` | `com.passingtrace.desktop:/oauth2redirect` | `com.passingtrace.desktop:/logout-callback` |
 | `passingtrace-web` | `http://localhost:5173/auth/callback` | `http://localhost:5173/auth/logout-callback` |
-| `passingtrace-sso-demo` | `http://localhost:5174/auth/callback` | `http://localhost:5174/auth/logout-callback` |
-
-### 从界面验证 SSO
-
-1. 在 `http://localhost:5173` 主站登录。
-2. 打开独立验证站 `http://localhost:5174`。
-3. 点击“发起 SSO 授权”，验证站以 `prompt=none` 发起静默授权。
-4. 如果直接回到 5174 并显示相同 `sub`，说明第二个 Client 复用了 Identity Cookie；不存在共享 Cookie 时会明确返回 `login_required`。
-
-两个站点拥有独立 Origin、Client ID、授权码和 Token 存储；它们没有复制彼此的 Access Token。
-
-两个客户端都是无 Client Secret 的 public client，并强制 PKCE。配置位于 AuthorizationServer 的 `appsettings.json`，启动时会幂等同步到 OpenIddict 表。
+这些客户端都是无 Client Secret 的 public client，并强制 PKCE。配置位于 AuthorizationServer 的 `appsettings.json`，启动时会幂等同步到 OpenIddict 表。
 
 ## 5. 业务 API 接入
 

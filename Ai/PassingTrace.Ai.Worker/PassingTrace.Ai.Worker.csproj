@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk.Worker">
+  <ItemGroup>
+    <PackageReference Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="Microsoft.Extensions.AI" />
+    <PackageReference Include="Microsoft.Extensions.AI.OpenAI" />
+    <PackageReference Include="Pgvector.EntityFrameworkCore" />
+    <PackageReference Include="SkiaSharp" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\Events\PassingTrace.Events.Api\PassingTrace.Events.Api.csproj" />
+    <ProjectReference Include="..\..\PassingTrace.Core\PassingTrace.Core.csproj" />
+    <ProjectReference Include="..\..\PassingTrace.Infrastructure\PassingTrace.Infrastructure.csproj" />
+  </ItemGroup>
+</Project>

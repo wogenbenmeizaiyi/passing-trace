@@ -21,10 +21,81 @@ export const EventVisibility = {
 
 export type EventVisibility = (typeof EventVisibility)[keyof typeof EventVisibility]
 
+export const MediaKind = { Image: 1, Video: 2, File: 3 } as const
+export type MediaKind = (typeof MediaKind)[keyof typeof MediaKind]
+
+export interface MediaResponse {
+  id: string
+  fileName: string
+  kind: MediaKind
+  contentType: string
+  size: number
+  status: number
+  sortOrder: number
+}
+
+export interface ManualTagInput {
+  taxonomyKey?: string | null
+  name?: string | null
+}
+export interface ManualClassification {
+  primaryCategoryKey?: string | null
+  tags: ManualTagInput[]
+  suppressedAiTagKeys: string[]
+}
+export interface EventLabelResponse {
+  taxonomyKey: string | null
+  displayName: string
+  origin: 'manual' | 'ai'
+  confidence: number | null
+}
+export interface EffectiveClassification {
+  primaryCategory: EventLabelResponse | null
+  tags: EventLabelResponse[]
+  taxonomyVersion: string
+}
+export interface EventLocationResponse {
+  id?: number
+  name: string
+  address?: string | null
+  province?: string | null
+  city?: string | null
+  district?: string | null
+  adCode?: string | null
+  providerPoiId?: string | null
+  poiType?: string | null
+  latitude?: number | null
+  longitude?: number | null
+  accuracyMeters?: number | null
+  coordinateSystem: string
+  source: number
+  capturedAt?: string | null
+}
+export interface TaxonomyItem {
+  key: string
+  label: string
+}
+export interface EventTaxonomyResponse {
+  version: string
+  categories: TaxonomyItem[]
+  behaviorTags: TaxonomyItem[]
+}
+export interface PlaceCandidate extends Omit<EventLocationResponse, 'id' | 'source'> {
+  provider: string
+  poiId: string
+  distanceMeters: number | null
+}
+
 /** UI 展示用的中文文案。 */
 export const EventKindLabel: Record<EventKind, string> = {
-  [EventKind.Trace]: '痕迹',
-  [EventKind.Plan]: '计划',
+  [EventKind.Trace]: '当下记录',
+  [EventKind.Plan]: '未来安排',
+}
+
+/** 新建表单使用动作式文案，避免把内部数据类型直接暴露给用户。 */
+export const EventKindActionLabel: Record<EventKind, string> = {
+  [EventKind.Trace]: '记录当下',
+  [EventKind.Plan]: '写下计划',
 }
 
 export const EventStatusLabel: Record<EventStatus, string> = {
@@ -55,6 +126,12 @@ export interface EventResponse {
   createdAt: string
   /** ISO 8601 带偏移。 */
   updatedAt: string
+  media: MediaResponse[]
+  semanticStatus: string
+  semanticSummary: string | null
+  manualClassification: ManualClassification
+  effectiveClassification: EffectiveClassification
+  locations: EventLocationResponse[]
 }
 
 export interface CreateEventRequest {
@@ -64,6 +141,9 @@ export interface CreateEventRequest {
   happenedAt?: string | null
   plannedAt?: string | null
   timezone: string
+  mediaIds?: string[]
+  classification?: ManualClassification
+  locations?: EventLocationResponse[]
 }
 
 export interface UpdateEventRequest {
@@ -72,6 +152,9 @@ export interface UpdateEventRequest {
   happenedAt?: string | null
   plannedAt?: string | null
   timezone: string
+  mediaIds?: string[]
+  classification?: ManualClassification
+  locations?: EventLocationResponse[]
 }
 
 export interface EventPage {
@@ -86,6 +169,9 @@ export interface ListEventsQuery {
   status?: EventStatus
   from?: string
   to?: string
+  categoryKey?: string
+  tagKeys?: string[]
+  query?: string
 }
 
 export interface ProblemDetails {

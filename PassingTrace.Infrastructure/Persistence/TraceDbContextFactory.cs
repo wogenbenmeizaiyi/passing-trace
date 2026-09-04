@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
+using Pgvector.EntityFrameworkCore;
 
 namespace PassingTrace.Infrastructure.Persistence;
 
@@ -16,7 +17,7 @@ public sealed class TraceDbContextFactory : IDesignTimeDbContextFactory<TraceDbC
             ?? "Host=localhost;Port=5432;Database=trace;Username=postgres;Password=postgres";
 
         var options = new DbContextOptionsBuilder<TraceDbContext>()
-            .UseNpgsql(connectionString)
+            .UseNpgsql(connectionString, npgsql => npgsql.UseVector())
             .Options;
 
         return new TraceDbContext(options);

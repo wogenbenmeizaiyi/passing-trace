@@ -10,7 +10,7 @@ vi.mock('@/auth/oidc', () => ({
 
 import { eventsApi } from '@/api/events'
 import { useAuthStore } from '@/stores/auth'
-import { EventKind, EventStatus } from '@/api/events-types'
+import { EventKind, EventKindActionLabel, EventKindLabel, EventStatus } from '@/api/events-types'
 
 function makeUser(): User {
   return {
@@ -154,5 +154,9 @@ describe('eventsApi', () => {
     expect(EventStatus.Cancelled).toBe(2)
     expect(EventKind.Trace).toBe(0)
     expect(EventKind.Plan).toBe(1)
+    expect(EventKindLabel[EventKind.Trace]).toBe('当下记录')
+    expect(EventKindLabel[EventKind.Plan]).toBe('未来安排')
+    expect(EventKindActionLabel[EventKind.Trace]).toBe('记录当下')
+    expect(EventKindActionLabel[EventKind.Plan]).toBe('写下计划')
   })
 })

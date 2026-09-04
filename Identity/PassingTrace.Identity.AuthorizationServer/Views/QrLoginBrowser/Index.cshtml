@@ -4,13 +4,31 @@
     ViewData["Title"] = "手机扫码登录";
 }
 
-<section class="card compact qr-login" data-transaction-id="@Model.Id" data-poll-seconds="@Model.PollIntervalSeconds">
-    <p class="eyebrow">SCAN TO SIGN IN</p>
-    <h1>使用 PassingTrace 手机端扫码</h1>
-    <p class="lede">正在登录 <strong>@Model.ClientDisplayName</strong>。请在手机上确认网站与浏览器信息。</p>
+<section class="card qr-login" data-transaction-id="@Model.Id" data-poll-seconds="@Model.PollIntervalSeconds" data-state="waiting">
+    <div class="qr-login__copy">
+        <p class="eyebrow">手机确认登录</p>
+        <h1>用星期八扫描二维码</h1>
+        <p class="lede">你正在登录 <strong>@Model.ClientDisplayName</strong>。打开手机端左侧菜单里的“扫一扫”，并确认本次浏览器登录。</p>
 
-    <div class="qr-code" aria-label="PassingTrace 登录二维码">@Html.Raw(Model.Svg)</div>
-    <p id="qr-status" class="signed-in">等待手机确认……</p>
+        <ol class="qr-steps" aria-label="扫码登录步骤">
+            <li><span>1</span><p><strong>打开星期八</strong><small>进入左侧菜单，点击“扫一扫”</small></p></li>
+            <li><span>2</span><p><strong>扫描右侧二维码</strong><small>确认网站和浏览器信息后批准登录</small></p></li>
+        </ol>
+
+        <div class="security-note">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 3 5 6v5c0 4.8 2.8 8.1 7 10 4.2-1.9 7-5.2 7-10V6l-7-3Z"/><path d="m9.2 12 1.8 1.8 3.8-4"/></svg>
+            <span>二维码只用于这一次登录，请勿分享给其他人。</span>
+        </div>
+    </div>
+
+    <div class="qr-login__visual">
+        <div class="qr-code" role="img" aria-label="星期八登录二维码">@Html.Raw(Model.Svg)</div>
+        <p id="qr-status" class="qr-status" role="status" aria-live="polite" aria-atomic="true">
+            <span aria-hidden="true"></span>
+            <strong>等待手机确认</strong>
+        </p>
+        <noscript><p class="qr-noscript">需要启用 JavaScript 才能自动完成登录。</p></noscript>
+    </div>
 
     <form id="complete-form" method="post" action="/account/qr-login/@Model.Id/complete" hidden>
         @Html.AntiForgeryToken()
@@ -35,24 +53,32 @@
             });
             if (!response.ok) throw new Error('status');
             const result = await response.json();
+            if (result.status === 'pending') {
+                root.dataset.state = 'waiting';
+                status.querySelector('strong').textContent = '等待手机确认';
+            }
             if (result.status === 'approved') {
                 stopped = true;
-                status.textContent = '已在手机上确认，正在完成登录……';
+                root.dataset.state = 'approved';
+                status.querySelector('strong').textContent = '已确认，正在完成登录';
                 form.submit();
                 return;
             }
             if (result.status === 'rejected') {
                 stopped = true;
-                status.textContent = '手机已拒绝本次登录。';
+                root.dataset.state = 'rejected';
+                status.querySelector('strong').textContent = '手机已拒绝本次登录';
                 return;
             }
             if (result.status === 'expired') {
                 stopped = true;
-                status.textContent = '二维码已过期，请返回应用重新登录。';
+                root.dataset.state = 'expired';
+                status.querySelector('strong').textContent = '二维码已过期，请重新登录';
                 return;
             }
         } catch {
-            status.textContent = '暂时无法查询状态，正在重试……';
+            root.dataset.state = 'retrying';
+            status.querySelector('strong').textContent = '网络不稳定，正在重试';
         }
         window.setTimeout(poll, delay);
     }

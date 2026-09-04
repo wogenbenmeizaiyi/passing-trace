@@ -14,7 +14,10 @@ class _FakeAuthService extends AuthService {
   int refreshCalls = 0;
 
   @override
-  Future<AuthSession> ensureFreshToken(AuthSession current) async {
+  Future<AuthSession> ensureFreshToken(
+    AuthSession current, {
+    bool forceRefresh = false,
+  }) async {
     refreshCalls += 1;
     return AuthSession(
       identityBaseUrl: current.identityBaseUrl,
@@ -25,6 +28,16 @@ class _FakeAuthService extends AuthService {
       idToken: current.idToken,
       accessTokenExpiration: current.accessTokenExpiration,
     );
+  }
+}
+
+class _ExpiredAuthService extends AuthService {
+  @override
+  Future<AuthSession> ensureFreshToken(
+    AuthSession current, {
+    bool forceRefresh = false,
+  }) async {
+    throw const AuthSessionExpiredException();
   }
 }
 
@@ -53,15 +66,82 @@ Map<String, dynamic> _lastBody(List<http.Request> captured) {
 
 void main() {
   group('EventApiClient', () {
+    test('地点搜索坐标放在 POST 请求体而不是 URL', () async {
+      final captured = <http.Request>[];
+      final client = EventApiClient(
+        auth: _FakeAuthService('t'),
+        baseUrl: 'https://events.test',
+        httpClient: MockClient((request) async {
+          captured.add(request);
+          return http.Response('[]', 200);
+        }),
+      );
+      await client.searchPlaces(
+        _session('t'),
+        mode: 'nearby',
+        latitude: 30.2,
+        longitude: 120.1,
+      );
+      expect(captured.single.method, 'POST');
+      expect(captured.single.url.query, isEmpty);
+      expect(_lastBody(captured)['latitude'], 30.2);
+      client.close();
+    });
+    test('附近地点名称搜索同时发送关键词和地图中心坐标', () async {
+      final captured = <http.Request>[];
+      final client = EventApiClient(
+        auth: _FakeAuthService('t'),
+        baseUrl: 'https://events.test',
+        httpClient: MockClient((request) async {
+          captured.add(request);
+          return http.Response('[]', 200);
+        }),
+      );
+
+      await client.searchPlaces(
+        _session('t'),
+        mode: 'nearby',
+        query: '早阳肉包',
+        latitude: 30.2,
+        longitude: 120.1,
+      );
+
+      final body = _lastBody(captured);
+      expect(body['mode'], 'nearby');
+      expect(body['query'], '早阳肉包');
+      expect(body['latitude'], 30.2);
+      expect(body['longitude'], 120.1);
+      client.close();
+    });
+    test('过期登录被转换成安全的 401 业务错误', () async {
+      var requested = false;
+      final client = EventApiClient(
+        auth: _ExpiredAuthService(),
+        baseUrl: 'https://events.test',
+        httpClient: MockClient((_) async {
+          requested = true;
+          return http.Response('{}', 200);
+        }),
+      );
+
+      await expectLater(
+        client.list(_session('expired')),
+        throwsA(
+          isA<EventApiException>()
+              .having((error) => error.status, 'status', 401)
+              .having((error) => error.message, 'message', '登录状态已过期，请重新登录。'),
+        ),
+      );
+      expect(requested, isFalse);
+      client.close();
+    });
+
     test('list 拼接查询参数并发送 Bearer', () async {
       final captured = <http.Request>[];
       final mock = MockClient((request) async {
         captured.add(request);
         return http.Response(
-          jsonEncode({
-            'items': <Map<String, dynamic>>[],
-            'nextCursor': null,
-          }),
+          jsonEncode({'items': <Map<String, dynamic>>[], 'nextCursor': null}),
           200,
           headers: {'content-type': 'application/json'},
         );
@@ -79,6 +159,10 @@ void main() {
         cursor: 5,
         kind: EventKind.trace,
         status: EventStatus.completed,
+        from: '2026-08-01T00:00:00Z',
+        to: '2026-08-31T23:59:59Z',
+        categoryKey: 'food',
+        tagKeys: const ['coffee', 'cooking'],
       );
 
       final uri = _lastUri(captured);
@@ -87,6 +171,10 @@ void main() {
       expect(uri.queryParameters['cursor'], '5');
       expect(uri.queryParameters['kind'], '0');
       expect(uri.queryParameters['status'], '1');
+      expect(uri.queryParameters['from'], '2026-08-01T00:00:00Z');
+      expect(uri.queryParameters['to'], '2026-08-31T23:59:59Z');
+      expect(uri.queryParameters['categoryKey'], 'food');
+      expect(uri.queryParameters['tagKeys'], 'coffee,cooking');
       expect(_lastHeaders(captured)['Authorization'], 'Bearer access-1');
       // `_bearerHeaders` 会在每次请求前调一次 `ensureFreshToken`；
       // token 本就没过期时这是单次查询，不会触发 refresh 流程。
@@ -243,15 +331,15 @@ void main() {
     });
 
     test('业务错误抛 EventApiException 并保留 ProblemDetails', () async {
-      final mock = MockClient((_) async => http.Response(
-            jsonEncode({
-              'status': 409,
-              'title': '版本冲突',
-              'detail': '内容已被他人修改。',
-            }),
-            409,
-            headers: const {'content-type': 'application/problem+json; charset=utf-8'},
-          ));
+      final mock = MockClient(
+        (_) async => http.Response(
+          jsonEncode({'status': 409, 'title': '版本冲突', 'detail': '内容已被他人修改。'}),
+          409,
+          headers: const {
+            'content-type': 'application/problem+json; charset=utf-8',
+          },
+        ),
+      );
       final client = EventApiClient(
         auth: _FakeAuthService('t'),
         baseUrl: 'https://events.test',
@@ -274,7 +362,7 @@ void main() {
       client.close();
     });
 
-    test('401 触发一次 ensureFreshToken 后重试', () async {
+    test('401 强制刷新并用新 Token 重试一次', () async {
       var calls = 0;
       final mock = MockClient((request) async {
         calls += 1;
@@ -315,16 +403,18 @@ void main() {
       final event = await client.get(_session('stale'), 1);
       expect(event.id, 1);
       expect(calls, 2);
-      expect(auth.refreshCalls, greaterThanOrEqualTo(2));
+      expect(auth.refreshCalls, 2);
       client.close();
     });
 
     test('401 重试后仍 401 抛 EventApiException', () async {
-      final mock = MockClient((_) async => http.Response(
-            jsonEncode({'status': 401, 'title': 'expired'}),
-            401,
-            headers: {'content-type': 'application/problem+json'},
-          ));
+      final mock = MockClient(
+        (_) async => http.Response(
+          jsonEncode({'status': 401, 'title': 'expired'}),
+          401,
+          headers: {'content-type': 'application/problem+json'},
+        ),
+      );
       final auth = _FakeAuthService('access-renewed');
       final client = EventApiClient(
         auth: auth,
@@ -333,8 +423,9 @@ void main() {
       );
       expect(
         () => client.get(_session('stale'), 1),
-        throwsA(isA<EventApiException>()
-            .having((e) => e.status, 'status', 401)),
+        throwsA(
+          isA<EventApiException>().having((e) => e.status, 'status', 401),
+        ),
       );
       client.close();
     });

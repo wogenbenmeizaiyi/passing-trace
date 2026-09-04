@@ -17,8 +17,13 @@ TestResults/
 coverage/
 coverage.*
 
+/output/
+/tmp/
+
 # Local tooling and temporary review artifacts
 .codex-tmp/
+.agents/
+.workbuddy/
 
 # Local configuration and secrets
 .env

@@ -5,13 +5,17 @@ import 'dart:math';
 import 'package:app_links/app_links.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_appauth/flutter_appauth.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 
+import 'build_environment.dart';
+
 const mobileClientId = 'passingtrace-mobile';
 const mobileRedirectUri = 'com.passingtrace.mobile:/oauth2redirect';
+const minimumPasswordLength = 8;
 const mobileScopes = <String>[
   'openid',
   'profile',
@@ -48,15 +52,16 @@ class AuthService {
     FlutterAppAuth? appAuth,
     http.Client? httpClient,
     AppLinks? appLinks,
+    this.environment = BuildEnvironment.current,
   }) : _storage = storage ?? const FlutterSecureStorage(),
        _appAuth = appAuth ?? const FlutterAppAuth(),
        _http = httpClient ?? http.Client(),
        _appLinks = appLinks ?? AppLinks();
 
-  static const defaultIdentityUrl = 'http://192.168.31.210:56229';
-  /// 默认 Events API 地址：与 Identity 默认地址共用 LAN 主机，端口切换到
-  /// `PassingTrace.Events.Api` 的 HTTP profile（见 launchSettings.json）。
-  static const defaultEventsApiUrl = 'http://192.168.31.210:54934';
+  static String get defaultIdentityUrl => BuildEnvironment.current.identityUrl;
+  static String get defaultEventsApiUrl =>
+      BuildEnvironment.current.eventsApiUrl;
+  static const _buildChannelKey = 'build_channel';
   static const _identityUrlKey = 'identity_url';
   static const _eventsApiUrlKey = 'events_api_url';
   static const _deviceIdKey = 'device_id';
@@ -70,16 +75,33 @@ class AuthService {
   final FlutterAppAuth _appAuth;
   final http.Client _http;
   final AppLinks _appLinks;
+  final BuildEnvironment environment;
+  AuthSession? _latestSession;
+  Future<AuthSession>? _refreshInFlight;
 
   Future<AuthSession?> restore() async {
     final values = await _storage.readAll();
+    final storedChannel = values[_buildChannelKey];
+    if (storedChannel != environment.channel) {
+      // Legacy builds did not persist a channel. Preserve their local session
+      // only for the internal channel; production must never inherit localhost
+      // endpoints or credentials issued by a development Identity server.
+      if (environment.isProduction || storedChannel != null) {
+        await _storage.deleteAll();
+        await _storage.write(key: _buildChannelKey, value: environment.channel);
+        return null;
+      }
+      await _storage.write(key: _buildChannelKey, value: environment.channel);
+    }
     final deviceId = values[_deviceIdKey];
     final deviceSecret = values[_deviceSecretKey];
     if (deviceId == null || deviceSecret == null) return null;
 
     final expiresText = values[_expiresAtKey];
-    return AuthSession(
-      identityBaseUrl: values[_identityUrlKey] ?? defaultIdentityUrl,
+    final session = AuthSession(
+      identityBaseUrl: environment.allowEndpointOverrides
+          ? values[_identityUrlKey] ?? environment.identityUrl
+          : environment.identityUrl,
       deviceId: deviceId,
       deviceSecret: deviceSecret,
       accessToken: values[_accessTokenKey],
@@ -89,6 +111,8 @@ class AuthService {
           ? null
           : DateTime.tryParse(expiresText),
     );
+    _latestSession = session;
+    return session;
   }
 
   Future<AuthSession> register({
@@ -98,7 +122,7 @@ class AuthService {
     required String bootstrapCode,
     required String deviceName,
   }) async {
-    final baseUrl = _normalizeBaseUrl(identityBaseUrl);
+    final baseUrl = _resolveIdentityUrl(identityBaseUrl);
     final pkce = _createPkce();
     final state = _randomSecret(32);
     final nonce = _randomSecret(32);
@@ -125,6 +149,7 @@ class AuthService {
     );
 
     await _storage.write(key: _identityUrlKey, value: baseUrl);
+    await _storage.write(key: _buildChannelKey, value: environment.channel);
     await _storage.write(
       key: _deviceIdKey,
       value: registration['deviceId'] as String,
@@ -153,7 +178,7 @@ class AuthService {
     required String password,
     required String deviceName,
   }) async {
-    final baseUrl = _normalizeBaseUrl(identityBaseUrl);
+    final baseUrl = _resolveIdentityUrl(identityBaseUrl);
     final pkce = _createPkce();
     final state = _randomSecret(32);
     final nonce = _randomSecret(32);
@@ -169,6 +194,7 @@ class AuthService {
     });
 
     await _storage.write(key: _identityUrlKey, value: baseUrl);
+    await _storage.write(key: _buildChannelKey, value: environment.channel);
     await _storage.write(
       key: _deviceIdKey,
       value: response['deviceId'] as String,
@@ -217,27 +243,56 @@ class AuthService {
     );
   }
 
-  Future<AuthSession> ensureFreshToken(AuthSession current) async {
-    final expiry = current.accessTokenExpiration;
-    if (current.hasToken &&
+  Future<AuthSession> ensureFreshToken(
+    AuthSession current, {
+    bool forceRefresh = false,
+  }) async {
+    final effective = _latestFor(current);
+    final expiry = effective.accessTokenExpiration;
+    if (!forceRefresh &&
+        effective.hasToken &&
         expiry != null &&
         expiry.isAfter(
           DateTime.now().toUtc().add(const Duration(minutes: 1)),
         )) {
-      return current;
+      return effective;
     }
-    if (current.refreshToken == null) return login(current);
+    if (effective.refreshToken == null) return login(effective);
 
-    final result = await _appAuth.token(
-      TokenRequest(
-        mobileClientId,
-        mobileRedirectUri,
-        refreshToken: current.refreshToken,
-        serviceConfiguration: _configuration(current.identityBaseUrl),
-        scopes: mobileScopes,
-        allowInsecureConnections: _allowsInsecure(current.identityBaseUrl),
-      ),
-    );
+    // 多个页面可能同时发现令牌即将过期。Refresh Token 启用轮换后，同一
+    // refresh token 只能可靠使用一次，因此所有调用必须共享同一个刷新任务。
+    final inFlight = _refreshInFlight;
+    if (inFlight != null) return inFlight;
+
+    final refresh = _refresh(effective);
+    _refreshInFlight = refresh;
+    try {
+      return await refresh;
+    } finally {
+      if (identical(_refreshInFlight, refresh)) {
+        _refreshInFlight = null;
+      }
+    }
+  }
+
+  Future<AuthSession> _refresh(AuthSession current) async {
+    late final TokenResponse result;
+    try {
+      result = await _appAuth.token(
+        TokenRequest(
+          mobileClientId,
+          mobileRedirectUri,
+          refreshToken: current.refreshToken,
+          serviceConfiguration: _configuration(current.identityBaseUrl),
+          scopes: mobileScopes,
+          allowInsecureConnections: _allowsInsecure(current.identityBaseUrl),
+        ),
+      );
+    } on PlatformException catch (error) {
+      if (!_isInvalidGrant(error)) rethrow;
+      await _clearTokens();
+      throw const AuthSessionExpiredException();
+    }
     if (result.accessToken == null) {
       throw const AuthException('刷新登录状态失败。');
     }
@@ -281,17 +336,43 @@ class AuthService {
     return details.session;
   }
 
-  Future<void> clearLocalAccount() => _storage.deleteAll();
+  Future<void> clearLocalAccount() async {
+    _latestSession = null;
+    _refreshInFlight = null;
+    await _storage.deleteAll();
+  }
+
+  Future<void> _clearTokens() async {
+    final latest = _latestSession;
+    if (latest != null) {
+      _latestSession = AuthSession(
+        identityBaseUrl: latest.identityBaseUrl,
+        deviceId: latest.deviceId,
+        deviceSecret: latest.deviceSecret,
+      );
+    }
+    await Future.wait([
+      _storage.delete(key: _accessTokenKey),
+      _storage.delete(key: _refreshTokenKey),
+      _storage.delete(key: _idTokenKey),
+      _storage.delete(key: _expiresAtKey),
+    ]);
+  }
 
   /// 读取已保存的 Events API 地址；若未保存则回落到默认值。
   Future<String> getEventsApiBaseUrl() async {
+    if (!environment.allowEndpointOverrides) return environment.eventsApiUrl;
     final stored = await _storage.read(key: _eventsApiUrlKey);
-    if (stored == null || stored.isEmpty) return defaultEventsApiUrl;
+    if (stored == null || stored.isEmpty) return environment.eventsApiUrl;
     return _normalizeBaseUrl(stored);
   }
 
   /// 持久化一个新的 Events API 地址。空字符串视作"重置为默认值"。
   Future<void> setEventsApiBaseUrl(String? value) async {
+    if (!environment.allowEndpointOverrides) {
+      await _storage.delete(key: _eventsApiUrlKey);
+      return;
+    }
     if (value == null || value.trim().isEmpty) {
       await _storage.delete(key: _eventsApiUrlKey);
       return;
@@ -299,6 +380,11 @@ class AuthService {
     final normalized = _normalizeBaseUrl(value);
     await _storage.write(key: _eventsApiUrlKey, value: normalized);
   }
+
+  String _resolveIdentityUrl(String requestedUrl) =>
+      environment.allowEndpointOverrides
+      ? _normalizeBaseUrl(requestedUrl)
+      : _normalizeBaseUrl(environment.identityUrl);
 
   Future<AuthSession> _authorize({
     required String baseUrl,
@@ -309,12 +395,13 @@ class AuthService {
     required String deviceId,
     required String deviceSecret,
   }) async {
-    final callbackFuture = _waitForCallback(expectedState);
-    if (!await launchUrl(authorizeUrl, mode: LaunchMode.externalApplication)) {
-      throw const AuthException('无法打开系统浏览器。');
-    }
-
-    final callback = await callbackFuture.timeout(const Duration(minutes: 3));
+    // 注册和账号密码登录已经由后端完成身份校验，handoff URL 只负责签发
+    // 一次性授权码。直接读取它的 302 回调即可，避免 Android 再弹浏览器选择器。
+    // 真正需要用户交互的设备重新认证仍使用系统 Custom Tab。
+    final directCallback = await _tryResolveHandoff(authorizeUrl);
+    final callback =
+        directCallback ??
+        await _launchAndWaitForCallback(authorizeUrl, expectedState);
     final error = callback.queryParameters['error'];
     if (error != null) {
       throw AuthException(
@@ -353,6 +440,36 @@ class AuthService {
     );
   }
 
+  Future<Uri?> _tryResolveHandoff(Uri authorizeUrl) async {
+    if (!authorizeUrl.queryParameters.containsKey('handoff_code')) return null;
+
+    final request = http.Request('GET', authorizeUrl)..followRedirects = false;
+    final response = await _http.send(request);
+    if (response.statusCode < 300 || response.statusCode >= 400) {
+      throw AuthException('登录授权失败：${response.statusCode}');
+    }
+    final location = response.headers['location'];
+    if (location == null || location.isEmpty) {
+      throw const AuthException('登录授权回调缺失。');
+    }
+    return authorizeUrl.resolve(location);
+  }
+
+  Future<Uri> _launchAndWaitForCallback(
+    Uri authorizeUrl,
+    String expectedState,
+  ) async {
+    final callbackFuture = _waitForCallback(expectedState);
+    if (!await launchUrl(
+      authorizeUrl,
+      mode: LaunchMode.inAppBrowserView,
+      browserConfiguration: const BrowserConfiguration(showTitle: false),
+    )) {
+      throw const AuthException('无法打开安全登录页。');
+    }
+    return callbackFuture.timeout(const Duration(minutes: 3));
+  }
+
   Future<Uri> _waitForCallback(String expectedState) async {
     bool isExpectedCallback(Uri uri) =>
         uri.scheme == 'com.passingtrace.mobile' &&
@@ -385,7 +502,18 @@ class AuthService {
         value: session.accessTokenExpiration?.toUtc().toIso8601String(),
       ),
     ]);
+    _latestSession = session;
     return session;
+  }
+
+  AuthSession _latestFor(AuthSession fallback) {
+    final latest = _latestSession;
+    if (latest == null ||
+        latest.identityBaseUrl != fallback.identityBaseUrl ||
+        latest.deviceId != fallback.deviceId) {
+      return fallback;
+    }
+    return latest;
   }
 
   Future<Map<String, dynamic>> _postJson(
@@ -408,6 +536,9 @@ class AuthService {
     if (!expectedStatuses.contains(response.statusCode)) {
       try {
         final problem = jsonDecode(response.body) as Map<String, dynamic>;
+        if (problem['title'] == 'invalid_device') {
+          throw const DeviceCredentialsInvalidException();
+        }
         throw AuthException(
           problem['detail'] as String? ??
               problem['title'] as String? ??
@@ -459,6 +590,13 @@ class AuthService {
   static bool _allowsInsecure(String baseUrl) =>
       Uri.parse(baseUrl).scheme == 'http';
 
+  static bool _isInvalidGrant(PlatformException error) {
+    final details =
+        '${error.code} ${error.message ?? ''} ${error.details ?? ''}'
+            .toLowerCase();
+    return details.contains('invalid_grant');
+  }
+
   static bool _isBase64Url256(String? value) =>
       value != null && RegExp(r'^[A-Za-z0-9_-]{43}$').hasMatch(value);
 
@@ -503,6 +641,14 @@ class AuthException implements Exception {
   final String message;
   @override
   String toString() => message;
+}
+
+class AuthSessionExpiredException extends AuthException {
+  const AuthSessionExpiredException() : super('登录状态已过期，请重新登录。');
+}
+
+class DeviceCredentialsInvalidException extends AuthException {
+  const DeviceCredentialsInvalidException() : super('此手机的设备凭据已失效，请重新登录绑定。');
 }
 
 class _Pkce {

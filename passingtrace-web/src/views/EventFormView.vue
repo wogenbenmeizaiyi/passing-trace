@@ -3,14 +3,19 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 
 import { eventsApi } from '@/api/events'
+import { mediaApi } from '@/api/media'
 import { HttpError } from '@/api/http-client'
+import WebAppHeader from '@/components/WebAppHeader.vue'
 import {
   EventKind,
-  EventKindLabel,
+  EventKindActionLabel,
   EventStatus,
   type EventKind as EventKindT,
   type EventResponse,
+  type MediaResponse,
   type UpdateEventRequest,
+  type EventTaxonomyResponse,
+  type EventLocationResponse,
 } from '@/api/events-types'
 import { useAuthStore } from '@/stores/auth'
 import { defaultTimezone, toDatetimeLocal, toIsoWithOffset } from '@/utils/datetime'
@@ -33,7 +38,7 @@ const form = ref({
   kind: EventKind.Trace as EventKindT,
   title: '',
   rawContent: '',
-  /** 发生时间（trace）或计划时间（plan），datetime-local 形式。 */
+  /** 发生时间（trace）或预定时间（plan），datetime-local 形式。 */
   when: '',
   timezone: defaultTimezone(),
 })
@@ -43,6 +48,23 @@ const loading = ref(false)
 const submitting = ref(false)
 const error = ref<string | null>(null)
 const fieldErrors = ref<Record<string, string>>({})
+interface AttachmentDraft {
+  key: string
+  file?: File
+  media?: MediaResponse
+  progress: number
+  uploading: boolean
+  error?: string
+}
+const attachments = ref<AttachmentDraft[]>([])
+const taxonomy = ref<EventTaxonomyResponse | null>(null)
+const primaryCategoryKey = ref<string | null>(null)
+const selectedTagKeys = ref<string[]>([])
+const customTags = ref<string[]>([])
+const customTagDraft = ref('')
+const location = ref<EventLocationResponse | null>(null)
+const placeQuery = ref('')
+const placeSearching = ref(false)
 
 /** 创建时生成一次，重试复用；成功后丢弃。 */
 let idempotencyKey: string | null = null
@@ -51,8 +73,11 @@ let activeController: AbortController | null = null
 
 function validate(): boolean {
   const errors: Record<string, string> = {}
-  if (!form.value.title.trim() && !form.value.rawContent.trim()) {
-    errors['content'] = '标题与正文至少需要填写一项。'
+  if (!form.value.title.trim() && !form.value.rawContent.trim() && attachments.value.length === 0) {
+    errors['content'] = '标题、正文和附件至少需要一项。'
+  }
+  if (attachments.value.some((item) => item.uploading || !item.media)) {
+    errors['media'] = '请等待所有附件上传成功，失败的附件可重试或移除。'
   }
   if (!form.value.timezone.trim()) {
     errors['timezone'] = '请填写 IANA 时区名，例如 Asia/Tokyo。'
@@ -89,6 +114,16 @@ async function load() {
       when: toDatetimeLocal(item.kind === EventKind.Plan ? item.plannedAt : item.happenedAt),
       timezone: item.timezone,
     }
+    attachments.value = item.media
+      .slice()
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map((media) => ({ key: media.id, media, progress: 100, uploading: false }))
+    primaryCategoryKey.value = item.manualClassification.primaryCategoryKey ?? null
+    selectedTagKeys.value = item.manualClassification.tags.flatMap((x) =>
+      x.taxonomyKey ? [x.taxonomyKey] : [],
+    )
+    customTags.value = item.manualClassification.tags.flatMap((x) => (x.name ? [x.name] : []))
+    location.value = item.locations[0] ?? null
   } catch (reason) {
     if (controller.signal.aborted) return
     if (reason instanceof HttpError && reason.status === 404) {
@@ -122,6 +157,9 @@ async function submit() {
           ? { plannedAt: isoWhen, happenedAt: null }
           : { happenedAt: isoWhen, plannedAt: null }),
         timezone: form.value.timezone.trim(),
+        mediaIds: attachments.value.map((item) => item.media!.id),
+        classification: classificationPayload(),
+        locations: location.value ? [location.value] : [],
       }
       const created = await eventsApi.create(payload, idempotencyKey)
       idempotencyKey = null
@@ -138,6 +176,9 @@ async function submit() {
           ? { plannedAt: isoWhen, happenedAt: null }
           : { happenedAt: isoWhen, plannedAt: null }),
         timezone: form.value.timezone.trim(),
+        mediaIds: attachments.value.map((item) => item.media!.id),
+        classification: classificationPayload(),
+        locations: location.value ? [location.value] : [],
       }
       const updated = await eventsApi.update(loaded.value.id, payload, loaded.value.version)
       loaded.value = updated
@@ -170,16 +211,116 @@ async function submit() {
   }
 }
 
+function classificationPayload() {
+  return {
+    primaryCategoryKey: primaryCategoryKey.value,
+    tags: [
+      ...selectedTagKeys.value.map((taxonomyKey) => ({ taxonomyKey })),
+      ...customTags.value.map((name) => ({ name })),
+    ],
+    suppressedAiTagKeys: loaded.value?.manualClassification.suppressedAiTagKeys ?? [],
+  }
+}
+
+function toggleTag(key: string) {
+  selectedTagKeys.value = selectedTagKeys.value.includes(key)
+    ? selectedTagKeys.value.filter((value) => value !== key)
+    : selectedTagKeys.value.length + customTags.value.length < 10
+      ? [...selectedTagKeys.value, key]
+      : selectedTagKeys.value
+}
+
+function addCustomTag() {
+  const value = customTagDraft.value.normalize('NFKC').trim().replace(/\s+/g, ' ')
+  if (!value || value.length > 24 || selectedTagKeys.value.length + customTags.value.length >= 10)
+    return
+  if (!customTags.value.some((x) => x.toLocaleLowerCase() === value.toLocaleLowerCase()))
+    customTags.value.push(value)
+  customTagDraft.value = ''
+}
+
+async function searchPlace() {
+  const query = placeQuery.value.trim()
+  if (!query) return
+  placeSearching.value = true
+  try {
+    const places = await eventsApi.searchPlaces({ mode: 'keyword', query })
+    const first = places[0]
+    if (!first) {
+      error.value = '没有找到这个地点。'
+      return
+    }
+    location.value = {
+      ...first,
+      providerPoiId: first.poiId,
+      source: 3,
+      capturedAt: new Date().toISOString(),
+    }
+  } catch (reason) {
+    error.value = reason instanceof Error ? reason.message : '地点搜索失败。'
+  } finally {
+    placeSearching.value = false
+  }
+}
+
+async function selectFiles(event: Event) {
+  const input = event.target as HTMLInputElement
+  const files = [...(input.files ?? [])]
+  input.value = ''
+  if (attachments.value.length + files.length > 10) {
+    fieldErrors.value.media = '每条记录最多 10 个附件。'
+    return
+  }
+  for (const file of files) {
+    const draft: AttachmentDraft = {
+      key: `${file.name}-${file.lastModified}-${crypto.randomUUID()}`,
+      file,
+      progress: 0,
+      uploading: false,
+    }
+    attachments.value.push(draft)
+    void uploadAttachment(draft)
+  }
+}
+
+async function uploadAttachment(draft: AttachmentDraft) {
+  if (!draft.file || draft.uploading) return
+  draft.uploading = true
+  draft.error = undefined
+  try {
+    draft.media = await mediaApi.upload(draft.file, (progress) => {
+      draft.progress = progress.percent
+    })
+    draft.progress = 100
+    delete fieldErrors.value.media
+  } catch (reason) {
+    draft.error = reason instanceof Error ? reason.message : '上传失败。'
+  } finally {
+    draft.uploading = false
+  }
+}
+
+function removeAttachment(index: number) {
+  attachments.value.splice(index, 1)
+}
+
+function moveAttachment(index: number, direction: -1 | 1) {
+  const target = index + direction
+  if (target < 0 || target >= attachments.value.length) return
+  const [item] = attachments.value.splice(index, 1)
+  if (item) attachments.value.splice(target, 0, item)
+}
+
 const kindOptions = [
-  { value: EventKind.Trace, label: EventKindLabel[EventKind.Trace] },
-  { value: EventKind.Plan, label: EventKindLabel[EventKind.Plan] },
+  { value: EventKind.Trace, label: EventKindActionLabel[EventKind.Trace] },
+  { value: EventKind.Plan, label: EventKindActionLabel[EventKind.Plan] },
 ]
 
-const whenLabel = computed(() => (form.value.kind === EventKind.Plan ? '计划时间' : '发生时间'))
+const whenLabel = computed(() => (form.value.kind === EventKind.Plan ? '预定时间' : '发生时间'))
 
 const statusHint = computed(() => {
   if (mode.value === 'create' && form.value.kind === EventKind.Plan) {
-    return '新建计划时状态默认为"待执行"。'
+    return '写下计划后，状态默认为“待执行”。'
   }
   if (mode.value === 'edit' && loaded.value) {
     return `当前状态：${loaded.value.status === EventStatus.Planned ? '待执行' : loaded.value.status === EventStatus.Completed ? '已完成' : '已取消'}`
@@ -188,6 +329,7 @@ const statusHint = computed(() => {
 })
 
 onMounted(() => {
+  if (auth.isAuthenticated) void eventsApi.taxonomy().then((value) => (taxonomy.value = value))
   if (mode.value === 'edit' && auth.isAuthenticated) void load()
 })
 watch(
@@ -203,31 +345,7 @@ onUnmounted(() => {
 
 <template>
   <div class="app-shell">
-    <header class="topbar">
-      <RouterLink class="brand" to="/" aria-label="PassingTrace 首页"
-        ><span class="brand-mark">P</span><span>PassingTrace</span></RouterLink
-      >
-      <nav class="nav-links" aria-label="主导航">
-        <RouterLink to="/events">记录</RouterLink>
-      </nav>
-      <div class="account-actions">
-        <template v-if="auth.isAuthenticated"
-          ><span class="signed-user"><i></i>{{ auth.username }}</span
-          ><button class="text-button" :disabled="auth.busy" @click="auth.logout">
-            退出
-          </button></template
-        >
-        <template v-else
-          ><button
-            class="button button-dark compact-button"
-            :disabled="auth.busy"
-            @click="auth.login"
-          >
-            登录
-          </button></template
-        >
-      </div>
-    </header>
+    <WebAppHeader />
 
     <main class="form-page">
       <p class="back-link">
@@ -237,7 +355,7 @@ onUnmounted(() => {
       </p>
 
       <p v-if="!auth.isAuthenticated" class="empty-state">
-        请先 <button class="inline-link inline-login" @click="auth.login">登录</button> 后再{{
+        请先 <button class="inline-link inline-login" @click="auth.login()">登录</button> 后再{{
           mode === 'create' ? '新建' : '编辑'
         }}。
       </p>
@@ -254,11 +372,11 @@ onUnmounted(() => {
         <form v-else class="event-form" @submit.prevent="submit">
           <fieldset class="form-field">
             <legend>类型</legend>
-            <div class="radio-row">
+            <div class="kind-tabs">
               <label
                 v-for="opt in kindOptions"
                 :key="opt.value"
-                class="radio-pill"
+                class="kind-tab"
                 :class="{ active: form.kind === opt.value, disabled: mode === 'edit' }"
               >
                 <input
@@ -295,25 +413,131 @@ onUnmounted(() => {
           </label>
           <p v-if="fieldErrors.content" class="field-error">{{ fieldErrors.content }}</p>
 
+          <details class="form-field optional-fields">
+            <summary>分类与标签（可选）</summary>
+            <p class="field-hint">不填写时由 AI 自动分类；人工主分类不会被 AI 覆盖。</p>
+            <label
+              ><span class="field-label">主分类</span>
+              <select v-model="primaryCategoryKey">
+                <option :value="null">交给 AI</option>
+                <option
+                  v-for="item in taxonomy?.categories ?? []"
+                  :key="item.key"
+                  :value="item.key"
+                >
+                  {{ item.label }}
+                </option>
+              </select>
+            </label>
+            <div class="tag-options">
+              <button
+                v-for="tag in taxonomy?.behaviorTags ?? []"
+                :key="tag.key"
+                type="button"
+                class="radio-pill"
+                :class="{ active: selectedTagKeys.includes(tag.key) }"
+                @click="toggleTag(tag.key)"
+              >
+                {{ tag.label }}
+              </button>
+            </div>
+            <div class="custom-tag-row">
+              <input
+                v-model="customTagDraft"
+                maxlength="24"
+                placeholder="自定义标签"
+                @keyup.enter.prevent="addCustomTag"
+              />
+              <button type="button" class="text-button" @click="addCustomTag">添加</button>
+            </div>
+            <div class="tag-options">
+              <button
+                v-for="tag in customTags"
+                :key="tag"
+                type="button"
+                class="radio-pill active"
+                @click="customTags = customTags.filter((x) => x !== tag)"
+              >
+                {{ tag }} ×
+              </button>
+            </div>
+          </details>
+
+          <fieldset class="form-field">
+            <legend>地点（可选）</legend>
+            <div class="custom-tag-row">
+              <input v-model="placeQuery" placeholder="搜索地点、商店或景点" />
+              <button
+                type="button"
+                class="text-button"
+                :disabled="placeSearching"
+                @click="searchPlace"
+              >
+                {{ placeSearching ? '搜索中…' : '搜索' }}
+              </button>
+            </div>
+            <p v-if="location" class="field-hint">
+              <svg class="location-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 21s7-6.6 7-12a7 7 0 1 0-14 0c0 5.4 7 12 7 12Z" />
+                <circle cx="12" cy="9" r="2.2" />
+              </svg>
+              {{ location.name }} · {{ location.address }}
+              <button type="button" class="text-button" @click="location = null">清除</button>
+            </p>
+          </fieldset>
+
+          <fieldset class="form-field media-field">
+            <legend>图片、视频或文件</legend>
+            <label class="media-picker">
+              <input type="file" multiple @change="selectFiles" />
+              <span>＋ 选择附件</span>
+              <small>最多 10 个；图片 20MB、视频 1GB、其他文件 200MB</small>
+            </label>
+            <ol v-if="attachments.length" class="attachment-list">
+              <li v-for="(item, index) in attachments" :key="item.key">
+                <span class="attachment-icon">{{
+                  item.media?.kind === 1 ? '图' : item.media?.kind === 2 ? '影' : '件'
+                }}</span>
+                <span class="attachment-name">{{ item.media?.fileName ?? item.file?.name }}</span>
+                <span v-if="item.uploading" class="attachment-progress">{{ item.progress }}%</span>
+                <span v-else-if="item.error" class="attachment-error">{{ item.error }}</span>
+                <button
+                  v-if="item.error"
+                  type="button"
+                  class="text-button"
+                  @click="uploadAttachment(item)"
+                >
+                  重试
+                </button>
+                <button
+                  type="button"
+                  class="text-button"
+                  :disabled="index === 0"
+                  @click="moveAttachment(index, -1)"
+                >
+                  ↑
+                </button>
+                <button
+                  type="button"
+                  class="text-button"
+                  :disabled="index === attachments.length - 1"
+                  @click="moveAttachment(index, 1)"
+                >
+                  ↓
+                </button>
+                <button type="button" class="text-button danger" @click="removeAttachment(index)">
+                  移除
+                </button>
+                <progress v-if="item.uploading" :value="item.progress" max="100" />
+              </li>
+            </ol>
+            <p v-if="fieldErrors.media" class="field-error">{{ fieldErrors.media }}</p>
+          </fieldset>
+
           <label class="form-field">
             <span class="field-label">{{ whenLabel }}</span>
             <input v-model="form.when" type="datetime-local" />
             <p v-if="fieldErrors.when" class="field-error">{{ fieldErrors.when }}</p>
-          </label>
-
-          <label class="form-field">
-            <span class="field-label">时区 (IANA)</span>
-            <input
-              v-model="form.timezone"
-              type="text"
-              placeholder="Asia/Tokyo"
-              autocomplete="off"
-              spellcheck="false"
-            />
-            <p class="field-hint">
-              例如 <code>Asia/Tokyo</code> / <code>Asia/Shanghai</code> / <code>UTC</code>。
-            </p>
-            <p v-if="fieldErrors.timezone" class="field-error">{{ fieldErrors.timezone }}</p>
           </label>
 
           <p v-if="error" class="error-banner" role="alert">{{ error }}</p>
@@ -340,22 +564,45 @@ onUnmounted(() => {
     </main>
 
     <footer>
-      <span>PassingTrace © 2026</span>
+      <span>星期八 © 2026</span>
       <span>记录 · 个人时间线</span>
     </footer>
   </div>
 </template>
 
 <style scoped>
+.optional-fields summary {
+  cursor: pointer;
+  font-weight: 700;
+  margin-bottom: 14px;
+}
+.tag-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin: 10px 0;
+}
+.tag-options .radio-pill {
+  cursor: pointer;
+}
+.custom-tag-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 10px;
+}
+.custom-tag-row input {
+  flex: 1;
+}
 .form-page {
-  max-width: 720px;
+  max-width: 780px;
   margin: 0 auto;
-  padding: 48px 42px 96px;
+  padding: 56px 42px 104px;
 }
 .back-link {
   margin: 0 0 20px;
   font-size: 12px;
-  color: rgba(36, 35, 31, 0.55);
+  color: var(--ink-tertiary);
 }
 .back-link a:hover {
   color: var(--red);
@@ -365,42 +612,46 @@ onUnmounted(() => {
 }
 .form-header h1 {
   margin: 4px 0 0;
-  font-family: 'Noto Serif SC', serif;
   font-size: clamp(26px, 3vw, 36px);
-  font-weight: 500;
-  letter-spacing: -0.02em;
+  font-weight: 750;
+  letter-spacing: -0.045em;
 }
 .status-hint {
   margin: 10px 0 0;
-  color: rgba(36, 35, 31, 0.55);
+  color: var(--ink-secondary);
   font-size: 12px;
 }
 .event-form {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 16px;
 }
 .form-field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  border: 0;
-  padding: 0;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 18px;
   margin: 0;
+  background: var(--surface);
+  box-shadow: var(--shadow-1);
 }
 .form-field > .field-label,
 .form-field > legend {
   font-size: 11px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: rgba(36, 35, 31, 0.55);
+  color: var(--ink-tertiary);
   padding: 0;
 }
 .form-field input,
-.form-field textarea {
+.form-field textarea,
+.form-field select {
   border: 1px solid var(--line);
-  background: var(--paper);
-  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: var(--surface-soft);
+  padding: 12px 13px;
   font: inherit;
   font-size: 14px;
   color: var(--ink);
@@ -409,10 +660,12 @@ onUnmounted(() => {
     background 0.18s;
 }
 .form-field input:focus,
-.form-field textarea:focus {
+.form-field textarea:focus,
+.form-field select:focus {
   outline: none;
-  border-color: var(--red);
-  background: #fdf9f1;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--focus-color);
+  background: var(--surface);
 }
 .form-field textarea {
   resize: vertical;
@@ -421,23 +674,152 @@ onUnmounted(() => {
 }
 .field-hint {
   margin: 0;
-  color: rgba(36, 35, 31, 0.45);
-  font-size: 11px;
+  color: var(--ink-tertiary);
+  font-size: 12px;
+}
+.field-hint:has(.location-icon) {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.location-icon {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: var(--primary);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 .field-hint code {
-  font-family: 'DM Sans', monospace;
-  background: rgba(36, 35, 31, 0.05);
+  font-family: ui-monospace, monospace;
+  background: var(--surface-soft);
   padding: 1px 5px;
   border-radius: 3px;
 }
 .field-error {
   margin: 0;
-  color: #b33225;
+  color: var(--danger);
   font-size: 12px;
 }
-.radio-row {
+.media-picker {
   display: flex;
-  gap: 10px;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-soft);
+  cursor: pointer;
+}
+.media-picker input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.media-picker span {
+  color: var(--primary-strong);
+  font-weight: 700;
+}
+.media-picker small {
+  color: var(--ink-tertiary);
+}
+.attachment-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.attachment-list li {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-soft);
+}
+.attachment-icon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-sm);
+  background: var(--primary-soft);
+  color: var(--primary-strong);
+  font-size: 11px;
+}
+.attachment-name {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+.attachment-progress {
+  color: var(--sage);
+  font-size: 12px;
+}
+.attachment-error {
+  max-width: 180px;
+  color: var(--danger);
+  font-size: 11px;
+}
+.attachment-list progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  height: 3px;
+}
+.text-button.danger {
+  color: var(--danger);
+}
+.kind-tabs {
+  display: flex;
+  gap: 24px;
+  border-bottom: 1px solid var(--line);
+}
+.kind-tab {
+  min-height: 44px;
+  padding: 0 4px;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  color: var(--ink-tertiary);
+  cursor: pointer;
+}
+.kind-tab::after {
+  content: '';
+  height: 2px;
+  position: absolute;
+  right: 100%;
+  bottom: -1px;
+  left: 0;
+  border-radius: 2px;
+  background: var(--primary);
+  transition: right var(--motion-fast);
+}
+.kind-tab input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.kind-tab.active {
+  color: var(--primary-strong);
+  font-weight: 700;
+}
+.kind-tab.active::after {
+  right: 0;
+}
+.kind-tab.disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
 }
 .radio-pill {
   display: inline-flex;
@@ -457,17 +839,27 @@ onUnmounted(() => {
 }
 .radio-pill.active {
   border-color: var(--red);
-  color: var(--red);
+  color: var(--primary-strong);
+  background: var(--primary-soft);
 }
 .radio-pill.disabled {
   cursor: not-allowed;
   opacity: 0.55;
 }
 .form-actions {
+  padding: 12px;
+  position: sticky;
+  z-index: 5;
+  bottom: 16px;
   display: flex;
   justify-content: flex-end;
   gap: 10px;
   margin-top: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  box-shadow: var(--shadow-2);
+  backdrop-filter: blur(12px);
 }
 .button.ghost {
   background: transparent;
@@ -477,7 +869,7 @@ onUnmounted(() => {
 .empty-state {
   text-align: center;
   padding: 48px 0;
-  color: rgba(36, 35, 31, 0.55);
+  color: var(--ink-secondary);
   font-size: 14px;
 }
 .inline-login {

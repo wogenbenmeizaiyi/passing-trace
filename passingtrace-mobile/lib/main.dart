@@ -2,55 +2,44 @@ import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import 'auth_service.dart';
+import 'theme/appearance_controller.dart';
+import 'theme/passingtrace_mark.dart';
+import 'theme/passingtrace_theme.dart';
+import 'theme/quiet_trace_components.dart';
+import 'theme/quiet_trace_icons.dart';
+import 'build_environment.dart';
+import 'update_service.dart';
+import 'views/assistant_view.dart';
 import 'views/events_list_view.dart';
+import 'views/settings_view.dart';
+import 'views/storylines_list_view.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const PassingTraceApp());
+  final appearance = AppearanceController();
+  await appearance.load();
+  runApp(PassingTraceApp(appearance: appearance));
 }
 
 class PassingTraceApp extends StatelessWidget {
-  const PassingTraceApp({super.key});
+  const PassingTraceApp({super.key, required this.appearance});
 
-  static const paper = Color(0xfff4f0e5);
-  static const ink = Color(0xff24231f);
-  static const coral = Color(0xffd64b3c);
-  static const sage = Color(0xff60715a);
+  final AppearanceController appearance;
 
   @override
-  Widget build(BuildContext context) => MaterialApp(
-    title: 'PassingTrace',
-    debugShowCheckedModeBanner: false,
-    theme: ThemeData(
-      colorScheme: ColorScheme.fromSeed(
-        seedColor: coral,
-        primary: coral,
-        secondary: sage,
-        surface: paper,
-      ),
-      scaffoldBackgroundColor: paper,
-      useMaterial3: true,
-      appBarTheme: const AppBarTheme(
-        backgroundColor: paper,
-        foregroundColor: ink,
-        surfaceTintColor: Colors.transparent,
-        elevation: 0,
-      ),
-      drawerTheme: const DrawerThemeData(
-        backgroundColor: paper,
-        surfaceTintColor: Colors.transparent,
-      ),
-      cardTheme: const CardThemeData(
-        color: Colors.white54,
-        surfaceTintColor: Colors.transparent,
-        elevation: 0,
-      ),
-      dividerColor: ink.withValues(alpha: 0.14),
-      inputDecorationTheme: const InputDecorationTheme(
-        border: OutlineInputBorder(),
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: appearance,
+    builder: (context, _) => AppearanceScope(
+      controller: appearance,
+      child: MaterialApp(
+        title: '星期八',
+        debugShowCheckedModeBanner: false,
+        theme: PassingTraceTheme.light(appearance.palette),
+        darkTheme: PassingTraceTheme.dark(appearance.palette),
+        themeMode: appearance.mode,
+        home: const AccountGate(),
       ),
     ),
-    home: const AccountGate(),
   );
 }
 
@@ -86,7 +75,7 @@ class _AccountGateState extends State<AccountGate> {
     if (_loading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
-    if (_session == null) {
+    if (_session == null || !_session!.hasToken) {
       return RegistrationPage(
         auth: _auth,
         onRegistered: (session) => setState(() => _session = session),
@@ -120,6 +109,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
   final _username = TextEditingController();
   final _password = TextEditingController();
   final _confirmPassword = TextEditingController();
+  final _bootstrapCode = TextEditingController();
   bool _busy = false;
   bool _obscure = true;
   bool _creating = false;
@@ -129,6 +119,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
     _username.dispose();
     _password.dispose();
     _confirmPassword.dispose();
+    _bootstrapCode.dispose();
     super.dispose();
   }
 
@@ -140,7 +131,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
         identityBaseUrl: AuthService.defaultIdentityUrl,
         username: _username.text.trim(),
         password: _password.text,
-        bootstrapCode: 'passingtrace-local-setup',
+        bootstrapCode: _bootstrapCode.text.trim(),
         deviceName: 'Android 手机',
       );
       widget.onRegistered(session);
@@ -171,221 +162,206 @@ class _RegistrationPageState extends State<RegistrationPage> {
 
   Future<void> _submit() => _creating ? _register() : _login();
 
+  void _switchMode(bool creating) {
+    if (_busy || creating == _creating) return;
+    FocusScope.of(context).unfocus();
+    setState(() => _creating = creating);
+    _formKey.currentState?.reset();
+  }
+
   void _showError(Object error) {
+    debugPrint('Mobile account action failed: $error');
     if (!mounted) return;
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text(error.toString())));
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    body: SafeArea(
-      child: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 440),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const Align(
-                    alignment: Alignment.centerLeft,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        _BrandMark(size: 36),
-                        SizedBox(width: 12),
-                        Text(
-                          'PassingTrace',
-                          style: TextStyle(
-                            color: PassingTraceApp.ink,
-                            fontSize: 20,
-                            fontWeight: FontWeight.w700,
+  Widget build(BuildContext context) {
+    final colors = context.traceColors;
+    return Scaffold(
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 440),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const PassingTraceMark(size: 36),
+                          const SizedBox(width: 12),
+                          Text(
+                            '星期八',
+                            style: TextStyle(
+                              color: colors.ink,
+                              fontSize: 20,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 48),
+                    Text(
+                      _creating ? '创建账号' : '欢迎回来',
+                      style: TextStyle(
+                        color: colors.ink,
+                        fontSize: 32,
+                        height: 1.25,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.8,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      _creating
+                          ? '第一次来到星期八，先为自己创建一个账号。'
+                          : '继续记录你的生活，也可以用手机批准网页端登录。',
+                      style: TextStyle(color: colors.inkSecondary, height: 1.6),
+                    ),
+                    const SizedBox(height: 32),
+                    const TraceFieldLabel('用户名'),
+                    TextFormField(
+                      controller: _username,
+                      decoration: _fieldDecoration('输入你的用户名'),
+                      autocorrect: false,
+                      autofillHints: [
+                        _creating
+                            ? AutofillHints.newUsername
+                            : AutofillHints.username,
+                      ],
+                      textInputAction: TextInputAction.next,
+                      validator: (value) =>
+                          RegExp(r'^[A-Za-z0-9_-]{3,32}$').hasMatch(value ?? '')
+                          ? null
+                          : '请输入 3～32 位字母、数字、_ 或 -',
+                    ),
+                    const SizedBox(height: 14),
+                    const TraceFieldLabel('密码'),
+                    TextFormField(
+                      controller: _password,
+                      obscureText: _obscure,
+                      autofillHints: [
+                        _creating
+                            ? AutofillHints.newPassword
+                            : AutofillHints.password,
+                      ],
+                      textInputAction: _creating
+                          ? TextInputAction.next
+                          : TextInputAction.done,
+                      onFieldSubmitted: _creating ? null : (_) => _submit(),
+                      decoration: _fieldDecoration(
+                        '输入你的密码',
+                        suffix: TextButton(
+                          onPressed: () => setState(() => _obscure = !_obscure),
+                          child: Text(_obscure ? '显示' : '隐藏'),
+                        ),
+                      ),
+                      validator: (value) {
+                        if (value == null || value.isEmpty) return '请输入密码';
+                        if (_creating && value.length < minimumPasswordLength) {
+                          return '密码至少需要 $minimumPasswordLength 个字符';
+                        }
+                        return null;
+                      },
+                    ),
+                    if (_creating) ...[
+                      const SizedBox(height: 14),
+                      const TraceFieldLabel('确认密码'),
+                      TextFormField(
+                        controller: _confirmPassword,
+                        obscureText: true,
+                        textInputAction: TextInputAction.next,
+                        decoration: _fieldDecoration('再次输入密码'),
+                        validator: (value) =>
+                            value != _password.text ? '两次密码不一致' : null,
+                      ),
+                      const SizedBox(height: 14),
+                      const TraceFieldLabel('初始注册码'),
+                      TextFormField(
+                        controller: _bootstrapCode,
+                        obscureText: true,
+                        autocorrect: false,
+                        enableSuggestions: false,
+                        textInputAction: TextInputAction.done,
+                        onFieldSubmitted: (_) => _submit(),
+                        decoration: _fieldDecoration('输入部署者提供的注册码'),
+                        validator: (value) =>
+                            value == null || value.trim().isEmpty
+                            ? '请输入部署者提供的初始注册码'
+                            : null,
+                      ),
+                    ],
+                    const SizedBox(height: 26),
+                    FilledButton(
+                      onPressed: _busy ? null : _submit,
+                      style: FilledButton.styleFrom(
+                        minimumSize: const Size.fromHeight(54),
+                      ),
+                      child: _busy
+                          ? SizedBox.square(
+                              dimension: 20,
+                              child: CircularProgressIndicator(
+                                color: colors.onPrimary,
+                                strokeWidth: 2,
+                              ),
+                            )
+                          : Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(_creating ? '创建账号' : '登录'),
+                                const SizedBox(width: 10),
+                                TraceIcon(
+                                  TraceGlyph.chevronRight,
+                                  size: 18,
+                                  color: colors.onPrimary,
+                                ),
+                              ],
+                            ),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          _creating ? '已经有账号？' : '第一次使用？',
+                          style: TextStyle(color: colors.inkSecondary),
+                        ),
+                        TextButton(
+                          key: const Key('auth-mode-switch'),
+                          onPressed: _busy
+                              ? null
+                              : () => _switchMode(!_creating),
+                          child: Text(_creating ? '返回登录' : '创建账号'),
                         ),
                       ],
                     ),
-                  ),
-                  const SizedBox(height: 38),
-                  SegmentedButton<bool>(
-                    segments: const [
-                      ButtonSegment(
-                        value: false,
-                        label: Text('登录'),
-                        icon: Icon(Icons.login),
-                      ),
-                      ButtonSegment(
-                        value: true,
-                        label: Text('创建账号'),
-                        icon: Icon(Icons.person_add_alt_1),
-                      ),
-                    ],
-                    selected: {_creating},
-                    onSelectionChanged: _busy
-                        ? null
-                        : (selection) {
-                            setState(() => _creating = selection.first);
-                            _formKey.currentState?.reset();
-                          },
-                    showSelectedIcon: false,
-                  ),
-                  const SizedBox(height: 38),
-                  const Text(
-                    'YOUR LIFE, IN CONTEXT',
-                    style: TextStyle(
-                      color: PassingTraceApp.coral,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 2.1,
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  Text(
-                    _creating ? '开始记录你的时间。' : '欢迎回到你的时间线。',
-                    style: const TextStyle(
-                      color: PassingTraceApp.ink,
-                      fontFamily: 'serif',
-                      fontSize: 34,
-                      height: 1.25,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    _creating
-                        ? '创建账号后，这台手机也可以安全批准网页端登录。'
-                        : '登录后即可进入主页，并使用手机批准其他客户端登录。',
-                    style: TextStyle(
-                      color: PassingTraceApp.ink.withValues(alpha: 0.58),
-                      height: 1.6,
-                    ),
-                  ),
-                  const SizedBox(height: 34),
-                  TextFormField(
-                    controller: _username,
-                    decoration: _fieldDecoration(
-                      label: '用户名',
-                      icon: Icons.person_outline,
-                    ),
-                    autocorrect: false,
-                    autofillHints: [
-                      _creating
-                          ? AutofillHints.newUsername
-                          : AutofillHints.username,
-                    ],
-                    textInputAction: TextInputAction.next,
-                    validator: (value) =>
-                        RegExp(r'^[A-Za-z0-9_-]{3,32}$').hasMatch(value ?? '')
-                        ? null
-                        : '请输入 3～32 位字母、数字、_ 或 -',
-                  ),
-                  const SizedBox(height: 14),
-                  TextFormField(
-                    controller: _password,
-                    obscureText: _obscure,
-                    autofillHints: [
-                      _creating
-                          ? AutofillHints.newPassword
-                          : AutofillHints.password,
-                    ],
-                    textInputAction: _creating
-                        ? TextInputAction.next
-                        : TextInputAction.done,
-                    onFieldSubmitted: _creating ? null : (_) => _submit(),
-                    decoration: _fieldDecoration(
-                      label: '密码',
-                      icon: Icons.lock_outline,
-                      suffix: IconButton(
-                        onPressed: () => setState(() => _obscure = !_obscure),
-                        icon: Icon(
-                          _obscure ? Icons.visibility : Icons.visibility_off,
-                        ),
-                      ),
-                    ),
-                    validator: (value) {
-                      if (value == null || value.isEmpty) return '请输入密码';
-                      if (_creating && value.length < 12) {
-                        return '密码至少需要 12 个字符';
-                      }
-                      return null;
-                    },
-                  ),
-                  if (_creating) ...[
-                    const SizedBox(height: 14),
-                    TextFormField(
-                      controller: _confirmPassword,
-                      obscureText: true,
-                      onFieldSubmitted: (_) => _submit(),
-                      decoration: _fieldDecoration(
-                        label: '确认密码',
-                        icon: Icons.lock_reset_outlined,
-                      ),
-                      validator: (value) =>
-                          value != _password.text ? '两次密码不一致' : null,
+                    const SizedBox(height: 4),
+                    Text(
+                      _creating ? '账号信息仅发送给星期八的账号服务。' : '新手机登录后会自动绑定为可信设备。',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: colors.inkTertiary, fontSize: 12),
                     ),
                   ],
-                  const SizedBox(height: 26),
-                  FilledButton(
-                    onPressed: _busy ? null : _submit,
-                    style: FilledButton.styleFrom(
-                      minimumSize: const Size.fromHeight(54),
-                      shape: const RoundedRectangleBorder(),
-                    ),
-                    child: _busy
-                        ? const SizedBox.square(
-                            dimension: 20,
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 2,
-                            ),
-                          )
-                        : Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(_creating ? '创建账号' : '登录'),
-                              const SizedBox(width: 10),
-                              const Icon(Icons.arrow_forward, size: 18),
-                            ],
-                          ),
-                  ),
-                  const SizedBox(height: 18),
-                  Text(
-                    _creating
-                        ? '账号信息仅发送给你的 PassingTrace Identity 服务。'
-                        : '新手机登录后会自动绑定为可信设备。',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: PassingTraceApp.ink.withValues(alpha: 0.46),
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
           ),
         ),
       ),
-    ),
-  );
+    );
+  }
 
-  InputDecoration _fieldDecoration({
-    required String label,
-    required IconData icon,
-    Widget? suffix,
-  }) => InputDecoration(
-    labelText: label,
-    prefixIcon: Icon(icon),
-    suffixIcon: suffix,
-    filled: true,
-    fillColor: Colors.white.withValues(alpha: 0.6),
-    enabledBorder: OutlineInputBorder(
-      borderSide: BorderSide(
-        color: PassingTraceApp.ink.withValues(alpha: 0.18),
-      ),
-    ),
-  );
+  InputDecoration _fieldDecoration(String hint, {Widget? suffix}) =>
+      InputDecoration(hintText: hint, suffixIcon: suffix);
 }
 
 class AccountHome extends StatefulWidget {
@@ -408,6 +384,71 @@ class AccountHome extends StatefulWidget {
 
 class _AccountHomeState extends State<AccountHome> {
   bool _busy = false;
+  int _section = 1;
+
+  @override
+  void initState() {
+    super.initState();
+    if (BuildEnvironment.current.isProduction) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _checkForUpdate());
+    }
+  }
+
+  Future<void> _checkForUpdate() async {
+    try {
+      final service = AppUpdateService();
+      final update = await service.check();
+      if (!mounted || update == null || !update.updateAvailable) return;
+      final accepted = await showDialog<bool>(
+        context: context,
+        barrierDismissible: !update.required,
+        builder: (dialogContext) => AlertDialog(
+          title: Text('发现新版本 ${update.versionName}'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('安装包大小：${_formatBytes(update.size)}'),
+              if (update.notes case final notes?
+                  when notes.trim().isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Text(notes),
+              ],
+            ],
+          ),
+          actions: [
+            if (!update.required)
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('稍后'),
+              ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('下载更新'),
+            ),
+          ],
+        ),
+      );
+      if (accepted == true) {
+        await service.download(update);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('已在 App 内开始下载，完成后会打开系统安装界面')),
+          );
+        }
+      }
+    } catch (error) {
+      // 更新检查不影响用户进入主界面。
+      debugPrint('App update check failed: $error');
+    }
+  }
+
+  String _formatBytes(int bytes) {
+    if (bytes >= 1024 * 1024) {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    }
+    return '${(bytes / 1024).toStringAsFixed(1)} KB';
+  }
 
   Future<void> _scanFromDrawer() async {
     Navigator.of(context).pop();
@@ -415,26 +456,31 @@ class _AccountHomeState extends State<AccountHome> {
     if (mounted) await _scan();
   }
 
-  Future<void> _openTimeline() async {
-    final navigator = Navigator.of(context);
-    if (navigator.canPop()) {
-      navigator.pop();
-    }
-    await Future<void>.delayed(const Duration(milliseconds: 180));
+  void _selectSection(int section) {
+    Navigator.of(context).pop();
+    if (_section == section) return;
+    setState(() => _section = section);
+  }
+
+  Future<void> _openSettings() async {
+    Navigator.of(context).pop();
+    await Future<void>.delayed(const Duration(milliseconds: 160));
     if (!mounted) return;
-    await navigator.push(
-      MaterialPageRoute(
-        builder: (_) => EventsListView(auth: widget.auth, session: widget.session),
-      ),
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(builder: (_) => SettingsView(onSignOut: _clear)),
     );
   }
 
-  Future<void> _login() async {
-    await _run(() async {
-      final session = await widget.auth.login(widget.session);
-      widget.onSessionChanged(session);
-      _message('登录成功，Token 已安全保存。');
-    });
+  Future<void> _restoreAfterSessionExpiry(bool? sessionExpired) async {
+    if (sessionExpired != true) return;
+    final restored = await widget.auth.restore();
+    if (!mounted) return;
+    if (restored == null) {
+      widget.onReset();
+      return;
+    }
+    widget.onSessionChanged(restored);
+    _message('登录状态已过期，请重新登录。');
   }
 
   Future<void> _scan() async {
@@ -506,6 +552,9 @@ class _AccountHomeState extends State<AccountHome> {
     setState(() => _busy = true);
     try {
       await action();
+    } on DeviceCredentialsInvalidException {
+      await widget.auth.clearLocalAccount();
+      if (mounted) widget.onReset();
     } catch (error, stackTrace) {
       debugPrint('Account action failed: $error');
       debugPrintStack(stackTrace: stackTrace);
@@ -521,444 +570,164 @@ class _AccountHomeState extends State<AccountHome> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    drawer: _buildDrawer(),
-    appBar: AppBar(
-      titleSpacing: 0,
-      title: const Row(
-        children: [
-          _BrandMark(size: 30),
-          SizedBox(width: 10),
-          Text(
-            'PassingTrace',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-          ),
-        ],
-      ),
-      actions: [
-        IconButton(
-          tooltip: '时间线',
-          onPressed: _busy ? null : _openTimeline,
-          icon: const Icon(Icons.timeline_outlined),
+  Widget build(BuildContext context) => Stack(
+    children: [
+      if (_section == 0)
+        AssistantView(
+          auth: widget.auth,
+          session: widget.session,
+          drawer: _buildDrawer(),
+          bottomNavigationBar: _buildPrimaryNavigation(),
+          onSessionExpired: () => _restoreAfterSessionExpiry(true),
+        )
+      else if (_section == 1)
+        EventsListView(
+          auth: widget.auth,
+          session: widget.session,
+          drawer: _buildDrawer(),
+          bottomNavigationBar: _buildPrimaryNavigation(),
+          onSessionExpired: () => _restoreAfterSessionExpiry(true),
+        )
+      else if (_section == 3)
+        StorylinesListView(
+          auth: widget.auth,
+          session: widget.session,
+          drawer: _buildDrawer(),
+          bottomNavigationBar: _buildPrimaryNavigation(),
+          onSessionExpired: () => _restoreAfterSessionExpiry(true),
+        )
+      else
+        MemoriesView(
+          auth: widget.auth,
+          session: widget.session,
+          drawer: _buildDrawer(),
+          onSessionExpired: () => _restoreAfterSessionExpiry(true),
         ),
-        const SizedBox(width: 4),
-      ],
-      bottom: const PreferredSize(
-        preferredSize: Size.fromHeight(1),
-        child: Divider(height: 1),
-      ),
-    ),
-    body: Stack(
-      children: [
-        const _PassingTraceHome(),
-        if (_busy)
-          const Positioned(
-            left: 0,
-            right: 0,
-            top: 0,
-            child: LinearProgressIndicator(minHeight: 3),
-          ),
-      ],
-    ),
+      if (_busy)
+        const Positioned(
+          left: 0,
+          right: 0,
+          top: 0,
+          child: LinearProgressIndicator(minHeight: 3),
+        ),
+    ],
+  );
+
+  Widget _buildPrimaryNavigation() => TraceBottomNavigation(
+    selectedIndex: _section == 1
+        ? 0
+        : _section == 3
+        ? 1
+        : 2,
+    onSelected: (index) {
+      final section = index == 0
+          ? 1
+          : index == 1
+          ? 3
+          : 0;
+      if (_section != section) setState(() => _section = section);
+    },
   );
 
   Widget _buildDrawer() => Drawer(
     width: 304,
     child: SafeArea(
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(24, 22, 18, 18),
-            child: Row(
-              children: [
-                const _BrandMark(size: 38),
-                const SizedBox(width: 12),
-                const Expanded(
-                  child: Text(
-                    'PassingTrace',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
-                  ),
-                ),
-                IconButton(
-                  tooltip: '关闭菜单',
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.close),
-                ),
-              ],
-            ),
-          ),
-          const Divider(height: 1),
-          const SizedBox(height: 10),
-          const _DrawerDestination(
-            icon: Icons.home_outlined,
-            selectedIcon: Icons.home,
-            label: '首页',
-            selected: true,
-          ),
-          _DrawerDestination(
-            icon: Icons.timeline_outlined,
-            selectedIcon: Icons.timeline,
-            label: '时间线',
-            onTap: _busy ? null : _openTimeline,
-          ),
-          const _DrawerDestination(
-            icon: Icons.auto_graph_outlined,
-            selectedIcon: Icons.auto_graph,
-            label: '生活洞察',
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-            child: Material(
-              color: PassingTraceApp.coral.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(16),
-              child: InkWell(
-                onTap: _busy ? null : _scanFromDrawer,
-                borderRadius: BorderRadius.circular(16),
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 48,
-                        height: 48,
-                        decoration: BoxDecoration(
-                          color: PassingTraceApp.coral,
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        child: const Icon(
-                          Icons.qr_code_scanner,
-                          color: Colors.white,
-                          size: 27,
-                        ),
-                      ),
-                      const SizedBox(width: 14),
-                      const Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '扫一扫',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            SizedBox(height: 3),
-                            Text('扫描电脑端登录二维码', style: TextStyle(fontSize: 12)),
-                          ],
-                        ),
-                      ),
-                      const Icon(Icons.chevron_right),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-          const Spacer(),
-          const Divider(height: 1),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(22, 16, 22, 10),
-            child: Row(
-              children: [
-                Icon(
-                  widget.session.hasToken
-                      ? Icons.verified_user_outlined
-                      : Icons.phonelink_lock_outlined,
-                  color: PassingTraceApp.sage,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        widget.session.hasToken ? '手机账号已登录' : '设备凭据已建立',
-                        style: const TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                      Text(
-                        '设备 ${widget.session.deviceId}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: PassingTraceApp.ink.withValues(alpha: 0.58),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          if (!widget.session.hasToken)
-            ListTile(
-              leading: const Icon(Icons.login),
-              title: const Text('登录账号'),
-              onTap: _busy
-                  ? null
-                  : () {
-                      Navigator.of(context).pop();
-                      _login();
-                    },
-            ),
-          ListTile(
-            leading: const Icon(Icons.logout),
-            title: const Text('退出此设备'),
-            onTap: _busy
-                ? null
-                : () {
-                    Navigator.of(context).pop();
-                    _clear();
-                  },
-          ),
-          const SizedBox(height: 12),
-        ],
-      ),
-    ),
-  );
-}
-
-class _BrandMark extends StatelessWidget {
-  const _BrandMark({required this.size});
-
-  final double size;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    width: size,
-    height: size,
-    alignment: Alignment.center,
-    decoration: const BoxDecoration(
-      color: PassingTraceApp.coral,
-      shape: BoxShape.circle,
-    ),
-    child: Text(
-      'P',
-      style: TextStyle(
-        color: Colors.white,
-        fontFamily: 'serif',
-        fontSize: size * 0.55,
-        fontStyle: FontStyle.italic,
-        fontWeight: FontWeight.w700,
-      ),
-    ),
-  );
-}
-
-class _DrawerDestination extends StatelessWidget {
-  const _DrawerDestination({
-    required this.icon,
-    required this.selectedIcon,
-    required this.label,
-    this.selected = false,
-    this.onTap,
-  });
-
-  final IconData icon;
-  final IconData selectedIcon;
-  final String label;
-  final bool selected;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final handler = onTap;
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 24),
-      leading: Icon(selected ? selectedIcon : icon),
-      title: Text(label),
-      selected: selected,
-      selectedColor: PassingTraceApp.coral,
-      onTap: handler ?? () => Navigator.of(context).pop(),
-    );
-  }
-}
-
-class _PassingTraceHome extends StatelessWidget {
-  const _PassingTraceHome();
-
-  @override
-  Widget build(BuildContext context) {
-    void openTimeline() {
-      final home = context.findAncestorStateOfType<_AccountHomeState>();
-      home?._openTimeline();
-    }
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(24, 38, 24, 48),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'YOUR LIFE, IN CONTEXT',
-            style: TextStyle(
-              color: PassingTraceApp.coral,
-              fontSize: 12,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 2.3,
-            ),
-          ),
-          const SizedBox(height: 22),
-          const Text(
-            '把生活留下来，',
-            style: TextStyle(
-              color: PassingTraceApp.ink,
-              fontFamily: 'serif',
-              fontSize: 38,
-              height: 1.15,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const Text(
-            '看见时间的形状。',
-            style: TextStyle(
-              color: PassingTraceApp.coral,
-              fontFamily: 'serif',
-              fontSize: 38,
-              height: 1.15,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(height: 20),
-          Text(
-            '记录经历，也写下计划。PassingTrace 会将零散的文字整理成只属于你的时间线与生活洞察。',
-            style: TextStyle(
-              color: PassingTraceApp.ink.withValues(alpha: 0.62),
-              height: 1.8,
-              fontSize: 15,
-            ),
-          ),
-          const SizedBox(height: 34),
-          const _PrivateSpaceCard(),
-          const SizedBox(height: 36),
-          Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: openTimeline,
-              borderRadius: BorderRadius.circular(20),
-              child: Container(
-                padding: const EdgeInsets.all(22),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.55),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: PassingTraceApp.ink.withValues(alpha: 0.12),
-                  ),
-                ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 20, 14, 12),
+        child: Column(
+          children: [
+            SizedBox(
+              height: 72,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(10, 2, 2, 14),
                 child: Row(
                   children: [
-                    Container(
-                      width: 48,
-                      height: 48,
-                      alignment: Alignment.center,
-                      decoration: const BoxDecoration(
-                        color: PassingTraceApp.coral,
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.timeline,
-                        color: Colors.white,
-                        size: 24,
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    const Expanded(
+                    Expanded(
                       child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            '我的时间线',
+                            '我的星期八',
                             style: TextStyle(
-                              fontFamily: 'serif',
-                              fontSize: 20,
-                              fontWeight: FontWeight.w600,
+                              color: context.traceColors.ink,
+                              fontSize: 17,
+                              fontWeight: FontWeight.w700,
                             ),
                           ),
-                          SizedBox(height: 4),
+                          const SizedBox(height: 3),
                           Text(
-                            '查看、记录、编辑你留下的痕迹和计划',
-                            style: TextStyle(fontSize: 12, color: Colors.black54),
+                            '仅自己可见的生活档案',
+                            style: TextStyle(
+                              color: context.traceColors.inkTertiary,
+                              fontSize: 11,
+                            ),
                           ),
                         ],
                       ),
                     ),
-                    const Icon(Icons.arrow_forward, size: 18),
+                    SizedBox.square(
+                      dimension: 48,
+                      child: TraceIconButton(
+                        glyph: TraceGlyph.scan,
+                        tooltip: '扫一扫',
+                        onPressed: _busy ? null : _scanFromDrawer,
+                        color: context.traceColors.primaryStrong,
+                        backgroundColor: context.traceColors.primarySoft,
+                        borderColor: context.traceColors.lineStrong,
+                      ),
+                    ),
                   ],
                 ),
               ),
             ),
-          ),
-          const SizedBox(height: 28),
-          Container(
-            padding: const EdgeInsets.all(24),
-            color: PassingTraceApp.ink,
-            child: const Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(Icons.auto_awesome, color: PassingTraceApp.coral),
-                SizedBox(height: 16),
-                Text(
-                  '“你在这个月去过 3 个新地点，步行记录比上月同期多了 28%。”',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontFamily: 'serif',
-                    fontSize: 21,
-                    height: 1.6,
-                  ),
-                ),
-                SizedBox(height: 14),
-                Text(
-                  '基于你的私人数据生成',
-                  style: TextStyle(color: Colors.white54, fontSize: 12),
-                ),
-              ],
+            Divider(height: 1, color: context.traceColors.line),
+            const SizedBox(height: 12),
+            TraceDrawerItem(
+              glyph: TraceGlyph.journal,
+              label: '我的记录',
+              selected: _section == 1,
+              onTap: () => _selectSection(1),
             ),
-          ),
-        ],
+            TraceDrawerItem(
+              glyph: TraceGlyph.sparkle,
+              label: '问问记录',
+              selected: _section == 0,
+              onTap: () => _selectSection(0),
+            ),
+            TraceDrawerItem(
+              glyph: TraceGlyph.storyline,
+              label: '故事线',
+              selected: _section == 3,
+              onTap: () => _selectSection(3),
+            ),
+            TraceDrawerItem(
+              glyph: TraceGlyph.memory,
+              label: '我的记忆',
+              selected: _section == 2,
+              onTap: () => _selectSection(2),
+            ),
+            const Spacer(),
+            Divider(height: 1, color: context.traceColors.line),
+            const SizedBox(height: 10),
+            TraceDrawerItem(
+              glyph: TraceGlyph.settings,
+              label: '设置',
+              onTap: _busy ? null : _openSettings,
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+              child: Text(
+                '点击菜单外的区域即可收起',
+                style: TextStyle(
+                  color: context.traceColors.inkTertiary,
+                  fontSize: 10,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
-    );
-  }
-}
-
-class _PrivateSpaceCard extends StatelessWidget {
-  const _PrivateSpaceCard();
-
-  @override
-  Widget build(BuildContext context) => Container(
-    width: double.infinity,
-    padding: const EdgeInsets.all(26),
-    color: PassingTraceApp.sage,
-    child: const Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('私人空间', style: TextStyle(color: Colors.white70, fontSize: 12)),
-        SizedBox(height: 34),
-        Text(
-          '01',
-          style: TextStyle(
-            color: Colors.white54,
-            fontFamily: 'serif',
-            fontSize: 28,
-            fontStyle: FontStyle.italic,
-          ),
-        ),
-        SizedBox(height: 18),
-        Text(
-          '一个账号，连接所有\nPassingTrace 客户端。',
-          style: TextStyle(
-            color: Colors.white,
-            fontFamily: 'serif',
-            fontSize: 24,
-            height: 1.45,
-          ),
-        ),
-        SizedBox(height: 14),
-        Text(
-          '通过左上角菜单使用“扫一扫”，即可批准网页和桌面端登录。',
-          style: TextStyle(color: Colors.white70, height: 1.6),
-        ),
-      ],
     ),
   );
 }
@@ -995,30 +764,52 @@ class _QrScannerPageState extends State<QrScannerPage> {
   @override
   Widget build(BuildContext context) => Scaffold(
     backgroundColor: Colors.black,
-    extendBodyBehindAppBar: true,
-    appBar: AppBar(
-      backgroundColor: Colors.transparent,
-      foregroundColor: Colors.white,
-      title: const Text('扫一扫'),
-      actions: [
-        Padding(
-          padding: const EdgeInsets.only(right: 8),
-          child: IconButton.filledTonal(
-            tooltip: '打开手电筒',
-            onPressed: _controller.toggleTorch,
-            style: IconButton.styleFrom(
-              backgroundColor: Colors.black.withValues(alpha: 0.38),
-              foregroundColor: Colors.white,
-            ),
-            icon: const Icon(Icons.flashlight_on_outlined),
-          ),
-        ),
-      ],
-    ),
     body: Stack(
       fit: StackFit.expand,
       children: [
         MobileScanner(controller: _controller, onDetect: _detected),
+        Positioned(
+          left: 10,
+          right: 10,
+          top: 0,
+          child: SafeArea(
+            bottom: false,
+            child: SizedBox(
+              height: 64,
+              child: Row(
+                children: [
+                  TraceIconButton(
+                    glyph: TraceGlyph.chevronLeft,
+                    tooltip: '返回',
+                    color: Colors.white,
+                    backgroundColor: Colors.black.withValues(alpha: 0.36),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                  const Expanded(
+                    child: Text(
+                      '扫一扫',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: _controller.toggleTorch,
+                    style: TextButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      backgroundColor: Colors.black.withValues(alpha: 0.36),
+                      minimumSize: const Size(48, 48),
+                    ),
+                    child: const Text('照明'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
         Center(
           child: SizedBox(
             width: 260,

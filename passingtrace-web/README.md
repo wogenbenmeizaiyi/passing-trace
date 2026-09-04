@@ -1,6 +1,10 @@
-# PassingTrace Web
+# 星期八 Web 客户端
 
-PassingTrace 的 Vue 3 第一方 Web 客户端。它不接收用户名或密码，而是通过 PassingTrace Identity 使用 OpenID Connect Authorization Code + PKCE 完成登录。
+星期八的 Vue 3 第一方 Web 客户端。它不接收用户名或密码，而是通过内部 Identity 服务使用 OpenID Connect Authorization Code + PKCE 完成登录。
+
+默认路由 `/` 是无需登录的产品介绍页，提供 Android 安装包下载和 Web 登录入口。记录、AI 问答、附件上传、分类标签与地点等交互保留在 `/events`、`/assistant` 等应用路由中。
+
+Android 下载按钮访问匿名接口 `GET /api/v1/app-updates/android/latest/download`。Events API 从私有 S3 的 `releases/android/latest.json` 读取当前发布清单，生成短效预签名 URL 后重定向到 APK；前端不保存 S3 Key、Access Key 或长期下载地址。
 
 ## 本地运行
 
@@ -34,7 +38,3 @@ corepack pnpm type-check
 corepack pnpm test:unit
 corepack pnpm build
 ```
-
-## 可视化验证 SSO
-
-仓库根目录的 `passingtrace-sso-demo` 是另一个独立客户端，运行在 `http://localhost:5174`。先在本主站登录，再到验证站点击“发起 SSO 授权”；如果不再出现密码页并直接显示相同用户，说明 Identity SSO 生效。两个站点不会共享各自的 Token 存储。

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 
 import { eventsApi } from '@/api/events'
@@ -13,8 +13,8 @@ import {
   type EventResponse,
   type EventStatus as EventStatusT,
 } from '@/api/events-types'
+import WebAppHeader from '@/components/WebAppHeader.vue'
 import { useAuthStore } from '@/stores/auth'
-import { formatLocal } from '@/utils/datetime'
 
 const auth = useAuthStore()
 const items = ref<EventResponse[]>([])
@@ -22,28 +22,99 @@ const nextCursor = ref<number | null>(null)
 const loading = ref(false)
 const loadingMore = ref(false)
 const error = ref<string | null>(null)
-
 const filterKind = ref<EventKindT | ''>('')
 const filterStatus = ref<EventStatusT | ''>('')
-
+const collapsedYears = ref(new Set<number>())
+const collapsedMonths = ref(new Set<string>())
+const knownYears = new Set<number>()
+const knownMonths = new Set<string>()
 let activeController: AbortController | null = null
+
+interface DayGroup {
+  key: string
+  title: string
+  subtitle: string
+  items: EventResponse[]
+}
+
+interface MonthGroup {
+  key: string
+  year: number
+  month: number
+  title: string
+  count: number
+  days: DayGroup[]
+}
+
+interface YearGroup {
+  year: number
+  count: number
+  months: MonthGroup[]
+}
 
 const canLoadMore = computed(
   () => nextCursor.value !== null && !loading.value && !loadingMore.value,
 )
 const isEmpty = computed(() => !loading.value && items.value.length === 0)
+const archiveGroups = computed<YearGroup[]>(() => {
+  const years = new Map<number, Map<number, Map<string, DayGroup>>>()
+  const sorted = [...items.value].sort(
+    (left, right) => eventDate(right).getTime() - eventDate(left).getTime(),
+  )
+  for (const item of sorted) {
+    const date = eventDate(item)
+    const key = Number.isNaN(date.getTime()) ? 'unknown' : date.toLocaleDateString('en-CA')
+    const year = Number.isNaN(date.getTime()) ? 0 : date.getFullYear()
+    const month = Number.isNaN(date.getTime()) ? 0 : date.getMonth() + 1
+    const months = years.get(year) ?? new Map<number, Map<string, DayGroup>>()
+    years.set(year, months)
+    const days = months.get(month) ?? new Map<string, DayGroup>()
+    months.set(month, days)
+    let group = days.get(key)
+    if (!group) {
+      group = {
+        key,
+        title: dayTitle(date),
+        subtitle: Number.isNaN(date.getTime())
+          ? '未指定日期'
+          : date.toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'short' }),
+        items: [],
+      }
+      days.set(key, group)
+    }
+    group.items.push(item)
+  }
+  return [...years.entries()].map(([year, months]) => {
+    const monthGroups = [...months.entries()].map(([month, days]) => {
+      const dayGroups = [...days.values()]
+      return {
+        key: monthKey(year, month),
+        year,
+        month,
+        title: month === 0 ? '时间未定' : `${month} 月`,
+        count: dayGroups.reduce((sum, day) => sum + day.items.length, 0),
+        days: dayGroups,
+      }
+    })
+    return {
+      year,
+      count: monthGroups.reduce((sum, month) => sum + month.count, 0),
+      months: monthGroups,
+    }
+  })
+})
 
 function buildQuery(cursor: number | null) {
   return {
     limit: 20,
     cursor: cursor ?? undefined,
-    kind: filterKind.value === '' ? undefined : (filterKind.value as EventKindT),
-    status: filterStatus.value === '' ? undefined : (filterStatus.value as EventStatusT),
+    kind: filterKind.value === '' ? undefined : filterKind.value,
+    status: filterStatus.value === '' ? undefined : filterStatus.value,
   }
 }
 
 async function reload() {
-  if (activeController) activeController.abort()
+  activeController?.abort()
   const controller = new AbortController()
   activeController = controller
   loading.value = true
@@ -53,13 +124,15 @@ async function reload() {
     if (controller.signal.aborted) return
     items.value = page.items
     nextCursor.value = page.nextCursor
+    syncArchiveState(true)
   } catch (reason) {
     if (controller.signal.aborted) return
-    if (reason instanceof HttpError && reason.status === 401) {
-      error.value = '会话已失效，请重新登录。'
-    } else {
-      error.value = reason instanceof Error ? reason.message : '加载记录失败。'
-    }
+    error.value =
+      reason instanceof HttpError && reason.status === 401
+        ? '会话已失效，请重新登录。'
+        : reason instanceof Error
+          ? reason.message
+          : '加载记录失败。'
     items.value = []
     nextCursor.value = null
   } finally {
@@ -78,88 +151,133 @@ async function loadMore() {
     if (controller.signal.aborted) return
     items.value = [...items.value, ...page.items]
     nextCursor.value = page.nextCursor
+    syncArchiveState(false)
   } catch (reason) {
-    if (controller.signal.aborted) return
-    error.value = reason instanceof Error ? reason.message : '加载更多失败。'
+    if (!controller.signal.aborted)
+      error.value = reason instanceof Error ? reason.message : '加载更多失败。'
   } finally {
     if (!controller.signal.aborted) loadingMore.value = false
   }
 }
 
-function summary(item: EventResponse): string {
-  if (item.rawContent) return item.rawContent
-  if (item.title) return item.title
-  return '（无正文）'
+function eventDate(item: EventResponse) {
+  return new Date(
+    (item.kind === EventKind.Plan ? item.plannedAt : item.happenedAt) ?? item.createdAt,
+  )
 }
 
-function timeLabel(item: EventResponse): string {
-  if (item.kind === EventKind.Plan) return `计划：${formatLocal(item.plannedAt)}`
-  return `发生：${formatLocal(item.happenedAt)}`
+function dayTitle(date: Date) {
+  if (Number.isNaN(date.getTime())) return '未定'
+  const today = new Date()
+  const candidate = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+  const current = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+  const difference = Math.round((current.getTime() - candidate.getTime()) / 86_400_000)
+  if (difference === 0) return '今天'
+  if (difference === 1) return '昨天'
+  return `${date.getDate()} 日`
+}
+
+function timeLabel(item: EventResponse) {
+  const date = eventDate(item)
+  return Number.isNaN(date.getTime())
+    ? '时间未定'
+    : date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+}
+
+function summary(item: EventResponse) {
+  return item.rawContent || '这条记录没有填写正文。'
+}
+
+function monthKey(year: number, month: number) {
+  return `${year}-${String(month).padStart(2, '0')}`
+}
+
+function syncArchiveState(reset: boolean) {
+  if (reset) {
+    knownYears.clear()
+    knownMonths.clear()
+    collapsedYears.value = new Set()
+    collapsedMonths.value = new Set()
+  }
+  if (items.value.length === 0) return
+  const newest = items.value
+    .map(eventDate)
+    .reduce((left, right) => (left.getTime() >= right.getTime() ? left : right))
+  const nextYears = new Set(collapsedYears.value)
+  const nextMonths = new Set(collapsedMonths.value)
+  for (const item of items.value) {
+    const date = eventDate(item)
+    const year = Number.isNaN(date.getTime()) ? 0 : date.getFullYear()
+    const month = Number.isNaN(date.getTime()) ? 0 : date.getMonth() + 1
+    if (!knownYears.has(year)) {
+      knownYears.add(year)
+      if (year !== newest.getFullYear()) nextYears.add(year)
+    }
+    const key = monthKey(year, month)
+    if (!knownMonths.has(key)) {
+      knownMonths.add(key)
+      if (year !== newest.getFullYear() || month !== newest.getMonth() + 1) nextMonths.add(key)
+    }
+  }
+  collapsedYears.value = nextYears
+  collapsedMonths.value = nextMonths
+}
+
+function toggleYear(year: number) {
+  const next = new Set(collapsedYears.value)
+  if (!next.delete(year)) next.add(year)
+  collapsedYears.value = next
+}
+
+function toggleMonth(key: string) {
+  const next = new Set(collapsedMonths.value)
+  if (!next.delete(key)) next.add(key)
+  collapsedMonths.value = next
 }
 
 onMounted(() => {
-  if (auth.isAuthenticated) reload()
+  if (auth.isAuthenticated) void reload()
 })
-onUnmounted(() => {
-  if (activeController) activeController.abort()
-})
+watch(
+  () => auth.isAuthenticated,
+  (authenticated) => {
+    if (authenticated && items.value.length === 0) void reload()
+  },
+)
+onUnmounted(() => activeController?.abort())
 </script>
 
 <template>
   <div class="app-shell">
-    <header class="topbar">
-      <RouterLink class="brand" to="/" aria-label="PassingTrace 首页"
-        ><span class="brand-mark">P</span><span>PassingTrace</span></RouterLink
-      >
-      <nav class="nav-links" aria-label="主导航">
-        <RouterLink to="/events">记录</RouterLink>
-      </nav>
-      <div class="account-actions">
-        <template v-if="auth.isAuthenticated"
-          ><span class="signed-user"><i></i>{{ auth.username }}</span
-          ><button class="text-button" :disabled="auth.busy" @click="auth.logout">
-            退出
-          </button></template
-        >
-        <template v-else
-          ><button
-            class="button button-dark compact-button"
-            :disabled="auth.busy"
-            @click="auth.login"
-          >
-            登录
-          </button></template
-        >
-      </div>
-    </header>
+    <WebAppHeader />
 
-    <main class="events-page">
-      <section class="events-header">
+    <main class="records-page">
+      <header class="records-heading">
         <div>
-          <p class="eyebrow">EVENTS</p>
-          <h1>我的记录</h1>
-          <p class="events-lede">按时间倒序展示。点击进入可编辑、删除。</p>
+          <p class="eyebrow">YOUR TIMELINE</p>
+          <h1>时间里的生活</h1>
+          <p>按年份和月份展开，回看记录与未来安排。</p>
         </div>
-        <RouterLink
-          v-if="auth.isAuthenticated"
-          class="button button-accent compact-button"
-          to="/events/new"
-          >+ 新建记录</RouterLink
-        >
-      </section>
+        <RouterLink v-if="auth.isAuthenticated" class="button button-primary" to="/events/new">
+          <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+          记一笔
+        </RouterLink>
+      </header>
 
-      <section class="events-filters" aria-label="筛选">
-        <label class="filter-field"
-          ><span>类型</span>
-          <select v-model="filterKind" @change="reload">
+      <section class="record-toolbar" aria-label="记录筛选">
+        <label
+          ><span>类型</span
+          ><select v-model="filterKind" @change="reload">
             <option value="">全部</option>
             <option :value="EventKind.Trace">{{ EventKindLabel[EventKind.Trace] }}</option>
             <option :value="EventKind.Plan">{{ EventKindLabel[EventKind.Plan] }}</option>
-          </select>
-        </label>
-        <label class="filter-field"
-          ><span>状态</span>
-          <select v-model="filterStatus" @change="reload">
+          </select></label
+        >
+        <label
+          ><span>状态</span
+          ><select v-model="filterStatus" @change="reload">
             <option value="">全部</option>
             <option :value="EventStatus.Planned">
               {{ EventStatusLabel[EventStatus.Planned] }}
@@ -170,215 +288,455 @@ onUnmounted(() => {
             <option :value="EventStatus.Cancelled">
               {{ EventStatusLabel[EventStatus.Cancelled] }}
             </option>
-          </select>
-        </label>
-        <button class="text-button refresh" :disabled="loading" @click="reload">刷新</button>
+          </select></label
+        >
+        <button class="toolbar-refresh" :disabled="loading" @click="reload">
+          <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M20 11a8 8 0 1 0-2.3 5.7M20 5v6h-6" />
+          </svg>
+          刷新
+        </button>
       </section>
 
-      <p v-if="!auth.isAuthenticated" class="empty-state">
-        请先
-        <button class="inline-link inline-login" @click="auth.login">登录</button> 后查看你的记录。
-      </p>
-      <p v-else-if="error" class="error-banner" role="alert">
-        {{ error }}<button @click="reload">重试</button>
-      </p>
-      <p v-else-if="loading && items.length === 0" class="empty-state">正在加载记录…</p>
-      <p v-else-if="isEmpty" class="empty-state">
-        还没有记录。<RouterLink to="/events/new">写下第一条</RouterLink>。
-      </p>
+      <section v-if="!auth.isAuthenticated" class="empty-panel">
+        <h2>登录后查看你的时间线</h2>
+        <p>网页端会跳转到安全登录页，并支持手机扫码批准。</p>
+        <button class="button button-primary" @click="auth.login('/events')">扫码登录</button>
+      </section>
+      <section v-else-if="error" class="error-banner" role="alert">
+        <span>{{ error }}</span
+        ><button @click="reload">重试</button>
+      </section>
+      <section v-else-if="loading && items.length === 0" class="empty-panel" aria-live="polite">
+        <span class="loading-ring" aria-hidden="true"></span>
+        <h2>正在整理时间线</h2>
+      </section>
+      <section v-else-if="isEmpty" class="empty-panel">
+        <h2>记忆盒还是空的</h2>
+        <p>从一段文字、一张照片或一个地点开始。</p>
+        <RouterLink class="button button-primary" to="/events/new">写下第一条</RouterLink>
+      </section>
 
-      <ul v-else class="event-list">
-        <li v-for="item in items" :key="item.id" class="event-item">
-          <RouterLink :to="`/events/${item.id}`" class="event-link">
-            <div class="event-meta">
-              <span class="badge kind" :data-kind="item.kind">{{ EventKindLabel[item.kind] }}</span>
-              <span class="badge status" :data-status="item.status">{{
-                EventStatusLabel[item.status]
-              }}</span>
-              <time class="event-time">{{ timeLabel(item) }}</time>
-            </div>
-            <h2 class="event-title">{{ item.title ?? '（无标题）' }}</h2>
-            <p class="event-summary">{{ summary(item) }}</p>
-            <span class="event-foot">
-              <span>#{{ item.id }}</span>
-              <span>{{ item.timezone }}</span>
-            </span>
-          </RouterLink>
-        </li>
-      </ul>
+      <div v-else class="archive-groups">
+        <section v-for="year in archiveGroups" :key="year.year" class="year-group">
+          <button
+            class="year-heading"
+            :aria-expanded="!collapsedYears.has(year.year)"
+            @click="toggleYear(year.year)"
+          >
+            <strong>{{ year.year || '时间未定' }}<template v-if="year.year"> 年</template></strong>
+            <span>{{ year.count }} 条记录</span>
+            <svg class="ui-icon archive-chevron" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="m6 9 6 6 6-6" />
+            </svg>
+          </button>
+          <div v-if="!collapsedYears.has(year.year)" class="month-groups">
+            <section v-for="month in year.months" :key="month.key" class="month-group">
+              <button
+                class="month-heading"
+                :aria-expanded="!collapsedMonths.has(month.key)"
+                @click="toggleMonth(month.key)"
+              >
+                <strong>{{ month.title }}</strong>
+                <span>{{ month.count }} 条</span>
+                <svg class="ui-icon archive-chevron" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="m6 9 6 6 6-6" />
+                </svg>
+              </button>
+              <div v-if="!collapsedMonths.has(month.key)" class="day-groups">
+                <section v-for="group in month.days" :key="group.key" class="day-group">
+                  <header class="day-heading">
+                    <strong>{{ group.title }}</strong
+                    ><span>{{ group.subtitle }}</span>
+                  </header>
+                  <ul class="record-timeline">
+                    <li v-for="item in group.items" :key="item.id">
+                      <RouterLink class="record-card" :to="`/events/${item.id}`">
+                        <div class="record-card__meta">
+                          <span>{{ timeLabel(item) }}</span>
+                          <span
+                            >{{ EventKindLabel[item.kind] }} ·
+                            {{ EventStatusLabel[item.status] }}</span
+                          >
+                        </div>
+                        <h2>{{ item.title || '未命名记录' }}</h2>
+                        <p>{{ summary(item) }}</p>
+                        <footer class="record-card__footer">
+                          <span class="record-tags">
+                            <span
+                              v-if="item.effectiveClassification.primaryCategory"
+                              class="record-tag record-tag--category"
+                              >{{ item.effectiveClassification.primaryCategory.displayName }}</span
+                            >
+                            <span
+                              v-for="tag in item.effectiveClassification.tags.slice(0, 2)"
+                              :key="tag.taxonomyKey ?? tag.displayName"
+                              class="record-tag"
+                              >{{ tag.origin === 'ai' ? '✦ ' : '' }}{{ tag.displayName }}</span
+                            >
+                          </span>
+                          <span class="record-context">
+                            <span v-if="item.locations[0]">{{ item.locations[0].name }}</span>
+                            <span v-if="item.media.length">{{ item.media.length }} 个附件</span>
+                          </span>
+                        </footer>
+                      </RouterLink>
+                    </li>
+                  </ul>
+                </section>
+              </div>
+            </section>
+          </div>
+        </section>
+      </div>
 
-      <div v-if="items.length > 0" class="events-footer">
+      <div v-if="items.length" class="load-more">
         <button
           v-if="canLoadMore"
-          class="button button-dark compact-button"
+          class="button button-secondary"
           :disabled="loadingMore"
           @click="loadMore"
         >
           {{ loadingMore ? '加载中…' : '加载更多' }}
         </button>
-        <p v-else class="end-note">已经到底了。</p>
+        <p v-else>已经看到这段时间线的起点。</p>
       </div>
     </main>
 
-    <footer>
-      <span>PassingTrace © 2026</span>
-      <span>记录 · 个人时间线</span>
-    </footer>
+    <footer><span>星期八 © 2026</span><span>记录 · 理解 · 回望</span></footer>
   </div>
 </template>
 
 <style scoped>
-.events-page {
-  max-width: 1280px;
+.records-page {
+  width: min(1040px, calc(100% - 48px));
   margin: 0 auto;
-  padding: 64px 42px 96px;
+  padding: 64px 0 104px;
 }
-.events-header {
+.records-heading {
+  margin-bottom: 34px;
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
   gap: 24px;
-  margin-bottom: 36px;
 }
-.events-header h1 {
-  margin: 4px 0 8px;
-  font-family: 'Noto Serif SC', serif;
-  font-size: 38px;
-  font-weight: 500;
-  letter-spacing: -0.02em;
-}
-.events-lede {
+.records-heading h1 {
   margin: 0;
-  color: rgba(36, 35, 31, 0.55);
-  font-size: 13px;
+  font-size: clamp(36px, 5vw, 54px);
+  line-height: 1.12;
+  letter-spacing: -0.055em;
 }
-.events-filters {
+.records-heading div > p:last-child {
+  margin: 10px 0 0;
+  color: var(--ink-secondary);
+}
+.record-toolbar {
+  min-height: 72px;
+  margin-bottom: 44px;
+  padding: 12px 16px;
   display: flex;
   align-items: center;
-  gap: 18px;
-  margin-bottom: 18px;
-  padding-bottom: 18px;
-  border-bottom: 1px solid var(--line);
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-1);
 }
-.filter-field {
+.record-toolbar label {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 13px;
-  color: rgba(36, 35, 31, 0.7);
+  color: var(--ink-tertiary);
+  font-size: 12px;
 }
-.filter-field select {
+.record-toolbar select {
+  min-height: 42px;
+  padding: 0 36px 0 12px;
   border: 1px solid var(--line);
-  background: var(--paper);
-  padding: 6px 10px;
-  font: inherit;
-  font-size: 13px;
-  min-width: 110px;
+  border-radius: var(--radius-md);
+  color: var(--ink);
+  background: var(--surface-soft);
 }
-.refresh {
+.toolbar-refresh {
+  min-height: 44px;
   margin-left: auto;
-  color: var(--red);
-  font-size: 13px;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border: 0;
+  border-radius: var(--radius-md);
+  color: var(--primary-strong);
+  background: transparent;
 }
-.event-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  border-top: 1px solid var(--line);
+.toolbar-refresh:hover {
+  background: var(--primary-soft);
 }
-.event-item {
-  border-bottom: 1px solid var(--line);
+.toolbar-refresh .ui-icon {
+  width: 18px;
+  height: 18px;
 }
-.event-link {
-  display: block;
-  padding: 22px 4px;
-  transition: background 0.18s;
+.archive-groups {
+  display: grid;
+  gap: 30px;
 }
-.event-link:hover {
-  background: rgba(245, 240, 230, 0.55);
-}
-.event-meta {
+.year-heading,
+.month-heading {
+  width: 100%;
+  min-height: 48px;
   display: flex;
   align-items: center;
   gap: 10px;
+  color: var(--ink);
+  cursor: pointer;
+  text-align: left;
+}
+.year-heading {
+  padding: 0 4px 10px;
+  border: 0;
+  border-bottom: 1px solid var(--line-strong);
+  background: transparent;
+}
+.year-heading strong {
+  flex: 1;
+  font-size: 26px;
+  letter-spacing: -0.04em;
+}
+.year-heading span,
+.month-heading span {
+  color: var(--ink-tertiary);
   font-size: 11px;
-  color: rgba(36, 35, 31, 0.55);
-  margin-bottom: 8px;
 }
-.event-time {
-  margin-left: auto;
+.month-groups {
+  margin-top: 12px;
+  display: grid;
+  gap: 16px;
+}
+.month-heading {
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-soft);
+}
+.month-heading strong {
+  flex: 1;
+  font-size: 15px;
+}
+.archive-chevron {
+  width: 18px;
+  height: 18px;
+  color: var(--ink-tertiary);
+  transition: transform var(--motion-fast) var(--ease-out);
+}
+.year-heading[aria-expanded='true'] .archive-chevron,
+.month-heading[aria-expanded='true'] .archive-chevron {
+  transform: rotate(180deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .archive-chevron {
+    transition: none;
+  }
+}
+.day-groups {
+  margin-top: 22px;
+  display: grid;
+  gap: 42px;
+}
+.day-heading {
+  margin: 0 0 14px 26px;
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+}
+.day-heading strong {
+  font-size: 17px;
+}
+.day-heading span {
+  color: var(--ink-tertiary);
   font-size: 12px;
-  color: rgba(36, 35, 31, 0.6);
 }
-.badge {
-  display: inline-block;
-  padding: 2px 8px;
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  border: 1px solid currentColor;
-  border-radius: 999px;
-}
-.badge.kind {
-  color: var(--red);
-}
-.badge.status[data-status='0'] {
-  color: var(--sage);
-}
-.badge.status[data-status='1'] {
-  color: #2e6a4a;
-}
-.badge.status[data-status='2'] {
-  color: rgba(36, 35, 31, 0.4);
-}
-.event-title {
-  margin: 0 0 4px;
-  font-family: 'Noto Serif SC', serif;
-  font-size: 19px;
-  font-weight: 500;
-}
-.event-summary {
+.record-timeline {
   margin: 0;
-  color: rgba(36, 35, 31, 0.62);
+  padding: 0 0 0 26px;
+  position: relative;
+  display: grid;
+  gap: 14px;
+  list-style: none;
+}
+.record-timeline::before {
+  content: '';
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  left: 5px;
+  width: 1px;
+  background: var(--line-strong);
+}
+.record-timeline li {
+  position: relative;
+}
+.record-timeline li::before {
+  content: '';
+  position: absolute;
+  z-index: 1;
+  top: 25px;
+  left: -25px;
+  width: 9px;
+  height: 9px;
+  border: 3px solid var(--canvas);
+  border-radius: 50%;
+  background: var(--primary);
+  box-shadow: 0 0 0 1px var(--primary);
+}
+.record-card {
+  padding: 20px 22px;
+  display: block;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-1);
+  transition:
+    border-color var(--motion-fast),
+    background var(--motion-fast);
+}
+.record-card:hover {
+  border-color: color-mix(in srgb, var(--primary) 45%, var(--line));
+  background: var(--surface-tint);
+}
+.record-card__meta {
+  margin-bottom: 9px;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  color: var(--ink-tertiary);
+  font-size: 11px;
+}
+.record-card h2 {
+  margin: 0;
+  font-size: 18px;
+  letter-spacing: -0.02em;
+}
+.record-card > p {
+  margin: 8px 0 0;
+  overflow: hidden;
+  color: var(--ink-secondary);
   font-size: 13px;
-  line-height: 1.7;
+  line-height: 1.65;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
-  overflow: hidden;
 }
-.event-foot {
+.record-card__footer {
+  width: auto;
+  min-height: 0;
+  margin: 15px 0 0;
+  padding: 0;
   display: flex;
+  align-items: flex-end;
   justify-content: space-between;
-  margin-top: 8px;
-  font-size: 11px;
-  color: rgba(36, 35, 31, 0.4);
+  gap: 16px;
+  border: 0;
 }
-.events-footer {
+.record-tags {
+  min-width: 0;
   display: flex;
-  justify-content: center;
-  margin-top: 32px;
+  flex-wrap: wrap;
+  gap: 6px;
 }
-.end-note {
-  color: rgba(36, 35, 31, 0.4);
+.record-tag {
+  min-height: 26px;
+  padding: 3px 9px;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink-secondary);
+  background: var(--surface-soft);
+  font-size: 10px;
+}
+.record-tag--category {
+  border-color: transparent;
+  color: var(--primary-strong);
+  background: var(--primary-soft);
+  font-weight: 700;
+}
+.record-context {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+  color: var(--ink-tertiary);
+  font-size: 10px;
+}
+.empty-panel {
+  min-height: 300px;
+  padding: 48px 24px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 10px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-xl);
+  text-align: center;
+  background: color-mix(in srgb, var(--surface) 68%, transparent);
+}
+.empty-panel h2,
+.empty-panel p {
+  margin: 0;
+}
+.empty-panel h2 {
+  font-size: 22px;
+}
+.empty-panel p {
+  margin-bottom: 12px;
+  color: var(--ink-secondary);
+}
+.loading-ring {
+  width: 38px;
+  height: 38px;
+  margin-bottom: 8px;
+  border: 2px solid var(--primary-soft);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+.load-more {
+  margin-top: 40px;
+  text-align: center;
+}
+.load-more p {
+  color: var(--ink-tertiary);
   font-size: 12px;
 }
-.empty-state {
-  text-align: center;
-  padding: 48px 0;
-  color: rgba(36, 35, 31, 0.55);
-  font-size: 14px;
-}
-.inline-login {
-  border-bottom: 1px solid currentColor;
-  color: var(--red);
-}
-@media (max-width: 800px) {
-  .events-page {
-    padding: 40px 20px 60px;
+@media (max-width: 700px) {
+  .records-page {
+    width: calc(100% - 32px);
+    padding: 40px 0 72px;
   }
-  .events-header {
-    flex-direction: column;
+  .records-heading {
     align-items: flex-start;
+    flex-direction: column;
+  }
+  .record-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .record-toolbar label {
+    justify-content: space-between;
+  }
+  .record-toolbar select {
+    flex: 1;
+  }
+  .toolbar-refresh {
+    margin-left: 0;
+    justify-content: center;
+  }
+  .record-card__footer {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .record-context {
+    justify-content: flex-start;
   }
 }
 </style>
