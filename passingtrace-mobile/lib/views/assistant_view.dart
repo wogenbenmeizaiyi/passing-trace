@@ -8,6 +8,7 @@ import '../events/events_api.dart';
 import '../theme/passingtrace_theme.dart';
 import '../theme/quiet_trace_components.dart';
 import '../theme/quiet_trace_icons.dart';
+import '../user_facing_error.dart';
 import 'event_detail_view.dart';
 
 class AssistantView extends StatefulWidget {
@@ -27,6 +28,76 @@ class AssistantView extends StatefulWidget {
 
   @override
   State<AssistantView> createState() => _AssistantViewState();
+}
+
+class AssistantErrorNotice extends StatelessWidget {
+  const AssistantErrorNotice({
+    super.key,
+    required this.message,
+    required this.onDismiss,
+  });
+
+  final String message;
+  final VoidCallback onDismiss;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.traceColors;
+    return Semantics(
+      liveRegion: true,
+      container: true,
+      label: '回答失败：$message',
+      child: Material(
+        color: colors.surface,
+        shape: RoundedRectangleBorder(
+          side: BorderSide(color: colors.danger),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 10, 4, 10),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '这次没有完成',
+                      style: TextStyle(
+                        color: colors.ink,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      message,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: colors.inkSecondary,
+                        fontSize: 12,
+                        height: 1.4,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox.square(
+                dimension: 48,
+                child: TraceIconButton(
+                  glyph: TraceGlyph.close,
+                  tooltip: '关闭提示',
+                  onPressed: onDismiss,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _AssistantViewState extends State<AssistantView> {
@@ -144,8 +215,10 @@ class _AssistantViewState extends State<AssistantView> {
             });
           }
         } else if (chunk.type == 'error') {
-          throw StateError(
-            (chunk.data as Map<String, dynamic>)['message'] as String,
+          final raw = chunk.data as Map<String, dynamic>;
+          throw EventApiException(
+            status: 503,
+            message: raw['message'] as String? ?? '暂时没能完成这次回答，请稍后重试。',
           );
         }
       }
@@ -331,7 +404,10 @@ class _AssistantViewState extends State<AssistantView> {
       }
       return;
     }
-    setState(() => _error = error.toString());
+    setState(
+      () =>
+          _error = userFacingErrorMessage(error, fallback: '暂时没能完成这次回答，请稍后重试。'),
+    );
   }
 
   @override
@@ -393,21 +469,9 @@ class _AssistantViewState extends State<AssistantView> {
             left: 16,
             right: 16,
             bottom: 88,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.errorContainer,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Text(
-                _error!,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.onErrorContainer,
-                  fontSize: 12,
-                ),
-              ),
+            child: AssistantErrorNotice(
+              message: _error!,
+              onDismiss: () => setState(() => _error = null),
             ),
           ),
         Positioned(left: 10, right: 10, bottom: 10, child: _buildComposer()),
@@ -1102,7 +1166,7 @@ class _MemoriesViewState extends State<MemoriesView> {
       }
       setState(() {
         _loading = false;
-        _error = error.toString();
+        _error = userFacingErrorMessage(error, fallback: '暂时无法加载记忆，请稍后重试。');
       });
     }
   }

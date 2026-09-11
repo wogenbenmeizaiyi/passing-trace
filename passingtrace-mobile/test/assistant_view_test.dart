@@ -8,6 +8,28 @@ import 'package:passingtrace_mobile/theme/quiet_trace_icons.dart';
 import 'package:passingtrace_mobile/views/assistant_view.dart';
 
 void main() {
+  testWidgets('回答失败用文字说明并可关闭', (tester) async {
+    var dismissed = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: PassingTraceTheme.light(PassingTracePalette.pine),
+        home: Scaffold(
+          body: AssistantErrorNotice(
+            message: 'AI 服务刚才返回了不完整结果，请重新发送一次。',
+            onDismiss: () => dismissed = true,
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('这次没有完成'), findsOneWidget);
+    expect(find.textContaining('请重新发送一次'), findsOneWidget);
+    expect(find.byTooltip('关闭提示'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('关闭提示'));
+    expect(dismissed, isTrue);
+  });
+
   testWidgets('AI 回答按 Markdown 渲染标题、粗体和列表', (tester) async {
     await tester.pumpWidget(
       const MaterialApp(

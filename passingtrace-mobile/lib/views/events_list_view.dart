@@ -6,6 +6,7 @@ import '../events/events_api.dart';
 import '../theme/passingtrace_theme.dart';
 import '../theme/quiet_trace_components.dart';
 import '../theme/quiet_trace_icons.dart';
+import '../user_facing_error.dart';
 import 'event_detail_view.dart';
 import 'event_filter_sheet.dart';
 import 'event_form_view.dart';
@@ -120,10 +121,16 @@ class _EventsListViewState extends State<EventsListView> {
         await _handleSessionExpired();
         return;
       }
-      setState(() => _error = error.message);
+      setState(
+        () =>
+            _error = userFacingErrorMessage(error, fallback: '暂时无法加载记录，请稍后重试。'),
+      );
     } catch (error) {
       if (!mounted) return;
-      setState(() => _error = '加载失败：$error');
+      setState(
+        () =>
+            _error = userFacingErrorMessage(error, fallback: '暂时无法加载记录，请稍后重试。'),
+      );
     } finally {
       if (mounted) setState(() => _initialLoading = false);
     }
@@ -159,10 +166,20 @@ class _EventsListViewState extends State<EventsListView> {
         await _handleSessionExpired();
         return;
       }
-      setState(() => _error = error.message);
+      setState(
+        () => _error = userFacingErrorMessage(
+          error,
+          fallback: '暂时无法加载更多记录，请稍后重试。',
+        ),
+      );
     } catch (error) {
       if (!mounted) return;
-      setState(() => _error = '加载更多失败：$error');
+      setState(
+        () => _error = userFacingErrorMessage(
+          error,
+          fallback: '暂时无法加载更多记录，请稍后重试。',
+        ),
+      );
     } finally {
       if (mounted) setState(() => _loadingMore = false);
     }

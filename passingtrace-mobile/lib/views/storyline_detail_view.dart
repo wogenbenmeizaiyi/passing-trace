@@ -10,6 +10,7 @@ import '../storylines/storyline_model.dart';
 import '../theme/passingtrace_theme.dart';
 import '../theme/quiet_trace_components.dart';
 import '../theme/quiet_trace_icons.dart';
+import '../user_facing_error.dart';
 import 'event_detail_view.dart';
 
 class StorylineDetailView extends StatefulWidget {
@@ -98,7 +99,14 @@ class _StorylineDetailViewState extends State<StorylineDetailView> {
         });
       }
     } catch (error) {
-      if (mounted) setState(() => _error = '$error');
+      if (mounted) {
+        setState(
+          () => _error = userFacingErrorMessage(
+            error,
+            fallback: '暂时无法加载故事线，请稍后重试。',
+          ),
+        );
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -130,8 +138,13 @@ class _StorylineDetailViewState extends State<StorylineDetailView> {
     } on EventApiException catch (error) {
       if (error.status == 409) await _load();
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(error.message)));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              userFacingErrorMessage(error, fallback: '暂时无法更新故事线，请稍后重试。'),
+            ),
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _changing = false);
@@ -152,8 +165,13 @@ class _StorylineDetailViewState extends State<StorylineDetailView> {
       if (mounted) setState(() => _story = result.storyline);
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('无法撤销：$error')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              userFacingErrorMessage(error, fallback: '暂时无法撤销，请刷新后重试。'),
+            ),
+          ),
+        );
       }
     }
   }

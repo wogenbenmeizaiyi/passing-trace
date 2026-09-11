@@ -9,6 +9,7 @@ import 'theme/quiet_trace_components.dart';
 import 'theme/quiet_trace_icons.dart';
 import 'build_environment.dart';
 import 'update_service.dart';
+import 'user_facing_error.dart';
 import 'views/assistant_view.dart';
 import 'views/events_list_view.dart';
 import 'views/settings_view.dart';
@@ -172,8 +173,13 @@ class _RegistrationPageState extends State<RegistrationPage> {
   void _showError(Object error) {
     debugPrint('Mobile account action failed: $error');
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(error.toString())));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          userFacingErrorMessage(error, fallback: '登录没有完成，请检查网络后重试。'),
+        ),
+      ),
+    );
   }
 
   @override
@@ -558,7 +564,7 @@ class _AccountHomeState extends State<AccountHome> {
     } catch (error, stackTrace) {
       debugPrint('Account action failed: $error');
       debugPrintStack(stackTrace: stackTrace);
-      _message(error.toString());
+      _message(userFacingErrorMessage(error, fallback: '操作没有完成，请稍后重试。'));
     } finally {
       if (mounted) setState(() => _busy = false);
     }

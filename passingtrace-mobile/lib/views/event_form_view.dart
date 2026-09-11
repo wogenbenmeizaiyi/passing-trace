@@ -18,6 +18,7 @@ import '../events/location_service.dart';
 import '../theme/passingtrace_theme.dart';
 import '../theme/quiet_trace_components.dart';
 import '../theme/quiet_trace_icons.dart';
+import '../user_facing_error.dart';
 import 'nearby_place_sheet.dart';
 
 class EventFormView extends StatefulWidget {
@@ -143,10 +144,14 @@ class _EventFormViewState extends State<EventFormView> {
       });
     } on EventApiException catch (e) {
       if (!mounted) return;
-      setState(() => _error = e.message);
+      setState(
+        () => _error = userFacingErrorMessage(e, fallback: '暂时无法加载这条记录，请稍后重试。'),
+      );
     } catch (e) {
       if (!mounted) return;
-      setState(() => _error = '加载失败：$e');
+      setState(
+        () => _error = userFacingErrorMessage(e, fallback: '暂时无法加载这条记录，请稍后重试。'),
+      );
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -259,7 +264,12 @@ class _EventFormViewState extends State<EventFormView> {
       });
     } catch (error) {
       if (!mounted) return;
-      setState(() => item.error = error.toString());
+      setState(
+        () => item.error = userFacingErrorMessage(
+          error,
+          fallback: '附件上传没有完成，请检查网络后重试。',
+        ),
+      );
     } finally {
       if (mounted) setState(() => item.uploading = false);
     }
@@ -374,7 +384,9 @@ class _EventFormViewState extends State<EventFormView> {
       setState(() => _error = message);
     } catch (e) {
       if (!mounted) return;
-      setState(() => _error = '保存失败：$e');
+      setState(
+        () => _error = userFacingErrorMessage(e, fallback: '暂时无法保存，请检查网络后重试。'),
+      );
     } finally {
       if (mounted) setState(() => _submitting = false);
     }

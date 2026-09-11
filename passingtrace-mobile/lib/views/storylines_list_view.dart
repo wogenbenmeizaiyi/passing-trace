@@ -7,6 +7,7 @@ import '../events/media_api.dart';
 import '../theme/passingtrace_theme.dart';
 import '../theme/quiet_trace_components.dart';
 import '../theme/quiet_trace_icons.dart';
+import '../user_facing_error.dart';
 import 'storyline_create_view.dart';
 import 'storyline_detail_view.dart';
 
@@ -104,7 +105,14 @@ class _StorylinesListViewState extends State<StorylinesListView> {
         });
       }
     } catch (error) {
-      if (mounted) setState(() => _error = '$error');
+      if (mounted) {
+        setState(
+          () => _error = userFacingErrorMessage(
+            error,
+            fallback: '暂时无法加载故事线，请稍后重试。',
+          ),
+        );
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }

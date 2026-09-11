@@ -12,6 +12,7 @@ import '../events/media_api.dart';
 import '../theme/passingtrace_theme.dart';
 import '../theme/quiet_trace_components.dart';
 import '../theme/quiet_trace_icons.dart';
+import '../user_facing_error.dart';
 import 'event_form_view.dart';
 import 'event_widgets.dart';
 
@@ -89,10 +90,14 @@ class _EventDetailViewState extends State<EventDetailView> {
       setState(() => _event = event);
     } on EventApiException catch (e) {
       if (!mounted) return;
-      setState(() => _error = e.message);
+      setState(
+        () => _error = userFacingErrorMessage(e, fallback: '暂时无法加载这条记录，请稍后重试。'),
+      );
     } catch (e) {
       if (!mounted) return;
-      setState(() => _error = '加载失败：$e');
+      setState(
+        () => _error = userFacingErrorMessage(e, fallback: '暂时无法加载这条记录，请稍后重试。'),
+      );
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -162,8 +167,13 @@ class _EventDetailViewState extends State<EventDetailView> {
           .showSnackBar(SnackBar(content: Text(message)));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('删除失败：$e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            userFacingErrorMessage(e, fallback: '暂时无法删除这条记录，请稍后重试。'),
+          ),
+        ),
+      );
     } finally {
       if (mounted) setState(() => _deleting = false);
     }
@@ -419,8 +429,13 @@ class _EventDetailViewState extends State<EventDetailView> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('导航失败：$e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              userFacingErrorMessage(e, fallback: '暂时无法打开导航，请稍后重试。'),
+            ),
+          ),
+        );
       }
     }
   }
@@ -703,8 +718,13 @@ class _EventDetailViewState extends State<EventDetailView> {
       }
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('打开附件失败：$error')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              userFacingErrorMessage(error, fallback: '暂时无法打开这个附件，请稍后重试。'),
+            ),
+          ),
+        );
       }
     }
   }

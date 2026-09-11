@@ -7,7 +7,9 @@ namespace PassingTrace.Events.Api.Ai;
 [ApiController]
 [Authorize]
 [Route("api/v1/ai/conversations")]
-public sealed class AssistantController(AssistantService service) : ControllerBase
+public sealed class AssistantController(
+    AssistantService service,
+    ILogger<AssistantController> logger) : ControllerBase
 {
     private static readonly JsonSerializerOptions SseJsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -60,7 +62,8 @@ public sealed class AssistantController(AssistantService service) : ControllerBa
         }
         catch (Exception exception)
         {
-            await WriteEventAsync("error", new { message = exception.Message }, cancellationToken);
+            logger.LogWarning(exception, "AI conversation {ConversationId} failed while streaming a response.", id);
+            await WriteEventAsync("error", AssistantErrorPresenter.Present(exception), cancellationToken);
         }
     }
 

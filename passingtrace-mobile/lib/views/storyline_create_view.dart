@@ -9,6 +9,7 @@ import '../storylines/storyline_model.dart';
 import '../theme/passingtrace_theme.dart';
 import '../theme/quiet_trace_components.dart';
 import '../theme/quiet_trace_icons.dart';
+import '../user_facing_error.dart';
 
 class StorylineCreateView extends StatefulWidget {
   const StorylineCreateView({
@@ -81,7 +82,14 @@ class _StorylineCreateViewState extends State<StorylineCreateView> {
       );
       if (mounted) setState(() => _events = page.items);
     } catch (error) {
-      if (mounted) setState(() => _error = '$error');
+      if (mounted) {
+        setState(
+          () => _error = userFacingErrorMessage(
+            error,
+            fallback: '暂时无法加载记录，请稍后重试。',
+          ),
+        );
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -172,7 +180,14 @@ class _StorylineCreateViewState extends State<StorylineCreateView> {
       }, newStorylineKey());
       if (mounted) Navigator.pop(context, result.storyline.id);
     } catch (error) {
-      if (mounted) setState(() => _error = '$error');
+      if (mounted) {
+        setState(
+          () => _error = userFacingErrorMessage(
+            error,
+            fallback: '暂时无法创建故事线，请检查网络后重试。',
+          ),
+        );
+      }
     } finally {
       if (mounted) setState(() => _saving = false);
     }
