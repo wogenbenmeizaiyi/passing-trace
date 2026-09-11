@@ -155,6 +155,48 @@ void main() {
     expect(find.bySemanticsLabel('聊天记录'), findsOneWidget);
   });
 
+  testWidgets('聊天记录按月份分组且旧月份默认收起', (tester) async {
+    final conversations = [
+      AiConversationModel(
+        id: 'september',
+        title: '九月的新对话',
+        updatedAt: DateTime(2026, 9, 11, 13, 19),
+      ),
+      AiConversationModel(
+        id: 'august',
+        title: '八月的旧对话',
+        updatedAt: DateTime(2026, 8, 21, 18, 30),
+      ),
+    ];
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: PassingTraceTheme.light(PassingTracePalette.pine),
+        home: Scaffold(
+          body: SizedBox(
+            height: 500,
+            child: AssistantConversationHistory(
+              conversations: conversations,
+              selectedConversationId: 'september',
+              onOpen: (_) async {},
+              onDelete: (_) async {},
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('2026年9月'), findsOneWidget);
+    expect(find.text('2026年8月'), findsOneWidget);
+    expect(find.text('九月的新对话'), findsOneWidget);
+    expect(find.text('八月的旧对话'), findsNothing);
+
+    await tester.tap(find.text('2026年8月'));
+    await tester.pump();
+
+    expect(find.text('八月的旧对话'), findsOneWidget);
+  });
+
   testWidgets('高德动作卡明确区分外部结果和个人记录地点', (tester) async {
     await tester.pumpWidget(
       MaterialApp(

@@ -260,6 +260,7 @@ class _AssistantViewState extends State<AssistantView> {
   Future<void> _showConversations() async {
     await showModalBottomSheet<void>(
       context: context,
+      showDragHandle: true,
       backgroundColor: context.traceColors.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -268,33 +269,30 @@ class _AssistantViewState extends State<AssistantView> {
         final colors = sheetContext.traceColors;
         return SafeArea(
           child: SizedBox(
-            height: MediaQuery.sizeOf(context).height * 0.68,
+            height: MediaQuery.sizeOf(context).height * 0.52,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Center(
-                  child: Container(
-                    width: 36,
-                    height: 4,
-                    margin: const EdgeInsets.only(top: 10, bottom: 18),
-                    decoration: BoxDecoration(
-                      color: colors.lineStrong,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Text(
-                    '聊天记录',
-                    style: TextStyle(
-                      color: colors.ink,
-                      fontSize: 20,
-                      fontWeight: FontWeight.w700,
-                    ),
+                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 14),
+                  child: Row(
+                    children: [
+                      Text(
+                        '聊天记录',
+                        style: TextStyle(
+                          color: colors.ink,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        '按月份整理',
+                        style: TextStyle(color: colors.inkMuted, fontSize: 12),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 8),
                 Divider(height: 1, color: colors.line),
                 Expanded(
                   child: _conversations.isEmpty
@@ -304,86 +302,13 @@ class _AssistantViewState extends State<AssistantView> {
                             style: TextStyle(color: colors.inkSecondary),
                           ),
                         )
-                      : ListView.separated(
-                          padding: const EdgeInsets.symmetric(vertical: 8),
-                          itemCount: _conversations.length,
-                          separatorBuilder: (_, _) => Divider(
-                            height: 1,
-                            indent: 20,
-                            endIndent: 20,
-                            color: colors.line,
-                          ),
-                          itemBuilder: (_, index) {
-                            final conversation = _conversations[index];
-                            final selected = conversation.id == _conversationId;
-                            return InkWell(
-                              onTap: () => _openConversation(conversation),
-                              child: ConstrainedBox(
-                                constraints: const BoxConstraints(
-                                  minHeight: 64,
-                                ),
-                                child: Padding(
-                                  padding: const EdgeInsets.only(
-                                    left: 20,
-                                    right: 8,
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      TraceIcon(
-                                        TraceGlyph.sparkle,
-                                        size: 20,
-                                        color: selected
-                                            ? colors.primary
-                                            : colors.inkSecondary,
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: Column(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.center,
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              conversation.title,
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: TextStyle(
-                                                color: colors.ink,
-                                                fontWeight: selected
-                                                    ? FontWeight.w700
-                                                    : FontWeight.w500,
-                                              ),
-                                            ),
-                                            const SizedBox(height: 3),
-                                            Text(
-                                              _formatConversationTime(
-                                                conversation.updatedAt,
-                                              ),
-                                              style: TextStyle(
-                                                color: colors.inkMuted,
-                                                fontSize: 12,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      TraceIconButton(
-                                        glyph: TraceGlyph.delete,
-                                        tooltip: '删除对话',
-                                        color: colors.inkMuted,
-                                        onPressed: () async {
-                                          Navigator.of(sheetContext).pop();
-                                          await _deleteConversation(
-                                            conversation,
-                                          );
-                                        },
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            );
+                      : AssistantConversationHistory(
+                          conversations: _conversations,
+                          selectedConversationId: _conversationId,
+                          onOpen: _openConversation,
+                          onDelete: (conversation) async {
+                            Navigator.of(sheetContext).pop();
+                            await _deleteConversation(conversation);
                           },
                         ),
                 ),
@@ -393,13 +318,6 @@ class _AssistantViewState extends State<AssistantView> {
         );
       },
     );
-  }
-
-  String _formatConversationTime(DateTime value) {
-    final local = value.toLocal();
-    return '${local.month}月${local.day}日 '
-        '${local.hour.toString().padLeft(2, '0')}:'
-        '${local.minute.toString().padLeft(2, '0')}';
   }
 
   void _handleError(Object error) {
@@ -736,6 +654,231 @@ class _AssistantViewState extends State<AssistantView> {
       ],
     );
   }
+}
+
+class AssistantConversationHistory extends StatefulWidget {
+  const AssistantConversationHistory({
+    super.key,
+    required this.conversations,
+    required this.selectedConversationId,
+    required this.onOpen,
+    required this.onDelete,
+  });
+
+  final List<AiConversationModel> conversations;
+  final String? selectedConversationId;
+  final Future<void> Function(AiConversationModel conversation) onOpen;
+  final Future<void> Function(AiConversationModel conversation) onDelete;
+
+  @override
+  State<AssistantConversationHistory> createState() =>
+      _AssistantConversationHistoryState();
+}
+
+class _AssistantConversationHistoryState
+    extends State<AssistantConversationHistory> {
+  late final Set<String> _expandedMonths;
+
+  @override
+  void initState() {
+    super.initState();
+    final groups = _groupConversations(widget.conversations);
+    _expandedMonths = {
+      if (groups.isNotEmpty) groups.first.key,
+      for (final group in groups)
+        if (group.conversations.any(
+          (conversation) => conversation.id == widget.selectedConversationId,
+        ))
+          group.key,
+    };
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.traceColors;
+    final groups = _groupConversations(widget.conversations);
+    final entries = <Object>[
+      for (final group in groups) ...[
+        group,
+        if (_expandedMonths.contains(group.key)) ...group.conversations,
+      ],
+    ];
+
+    return ListView.builder(
+      padding: EdgeInsets.zero,
+      itemCount: entries.length,
+      itemBuilder: (context, index) {
+        final entry = entries[index];
+        if (entry is _ConversationMonthGroup) {
+          final expanded = _expandedMonths.contains(entry.key);
+          return Semantics(
+            button: true,
+            expanded: expanded,
+            label: '${entry.label}，${entry.conversations.length}个会话',
+            child: Ink(
+              decoration: BoxDecoration(
+                color: colors.surfaceSoft,
+                border: Border(bottom: BorderSide(color: colors.line)),
+              ),
+              child: InkWell(
+                onTap: () => setState(() {
+                  if (expanded) {
+                    _expandedMonths.remove(entry.key);
+                  } else {
+                    _expandedMonths.add(entry.key);
+                  }
+                }),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 52),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            entry.label,
+                            style: TextStyle(
+                              color: colors.ink,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          '${entry.conversations.length} 个',
+                          style: TextStyle(
+                            color: colors.inkMuted,
+                            fontSize: 12,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        TraceIcon(
+                          expanded
+                              ? TraceGlyph.chevronUp
+                              : TraceGlyph.chevronDown,
+                          size: 18,
+                          color: colors.inkMuted,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
+
+        final conversation = entry as AiConversationModel;
+        final selected = conversation.id == widget.selectedConversationId;
+        return Ink(
+          key: ValueKey(conversation.id),
+          decoration: BoxDecoration(
+            color: selected ? colors.primarySoft : Colors.transparent,
+            border: Border(bottom: BorderSide(color: colors.line)),
+          ),
+          child: InkWell(
+            onTap: () => widget.onOpen(conversation),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 64),
+              child: Padding(
+                padding: const EdgeInsets.only(left: 20, right: 8),
+                child: Row(
+                  children: [
+                    TraceIcon(
+                      TraceGlyph.sparkle,
+                      size: 20,
+                      color: selected ? colors.primary : colors.inkSecondary,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            conversation.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: colors.ink,
+                              fontWeight: selected
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            _formatConversationTime(conversation.updatedAt),
+                            style: TextStyle(
+                              color: colors.inkMuted,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    TraceIconButton(
+                      glyph: TraceGlyph.delete,
+                      tooltip: '删除对话',
+                      color: colors.inkMuted,
+                      onPressed: () => widget.onDelete(conversation),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _ConversationMonthGroup {
+  const _ConversationMonthGroup({
+    required this.year,
+    required this.month,
+    required this.conversations,
+  });
+
+  final int year;
+  final int month;
+  final List<AiConversationModel> conversations;
+
+  String get key => '$year-${month.toString().padLeft(2, '0')}';
+  String get label => '$year年$month月';
+}
+
+List<_ConversationMonthGroup> _groupConversations(
+  List<AiConversationModel> conversations,
+) {
+  final sorted = [...conversations]
+    ..sort((left, right) => right.updatedAt.compareTo(left.updatedAt));
+  final grouped = <String, List<AiConversationModel>>{};
+  final monthValues = <String, ({int year, int month})>{};
+  for (final conversation in sorted) {
+    final local = conversation.updatedAt.toLocal();
+    final key = '${local.year}-${local.month.toString().padLeft(2, '0')}';
+    grouped.putIfAbsent(key, () => []).add(conversation);
+    monthValues[key] = (year: local.year, month: local.month);
+  }
+  return grouped.entries
+      .map((entry) {
+        final value = monthValues[entry.key]!;
+        return _ConversationMonthGroup(
+          year: value.year,
+          month: value.month,
+          conversations: entry.value,
+        );
+      })
+      .toList(growable: false);
+}
+
+String _formatConversationTime(DateTime value) {
+  final local = value.toLocal();
+  return '${local.month}月${local.day}日 '
+      '${local.hour.toString().padLeft(2, '0')}:'
+      '${local.minute.toString().padLeft(2, '0')}';
 }
 
 class AssistantEvidenceDisclosure extends StatefulWidget {
