@@ -297,12 +297,17 @@ watch(
 .assistant-shell {
   min-height: 100dvh;
 }
+.assistant-shell :deep(.site-header__inner) {
+  width: 100%;
+  max-width: none;
+  padding-right: clamp(24px, 3vw, 56px);
+  padding-left: clamp(24px, 3vw, 56px);
+}
 .assistant-page {
-  width: min(1440px, 100%);
+  width: 100%;
   min-height: calc(100dvh - 72px);
-  margin: 0 auto;
   display: grid;
-  grid-template-columns: minmax(16rem, 22%) minmax(0, 1fr);
+  grid-template-columns: clamp(17rem, 19vw, 22rem) minmax(0, 1fr);
   background: var(--surface);
 }
 .conversation-panel {
@@ -376,15 +381,13 @@ watch(
 .chat {
   min-width: 0;
   min-height: calc(100dvh - 72px);
-  padding: 36px clamp(28px, 5vw, 72px) 24px;
+  padding: 36px clamp(24px, 3vw, 56px) 24px;
   display: flex;
   flex-direction: column;
   background: var(--surface);
 }
 .chat > * {
-  width: min(900px, 100%);
-  margin-right: auto;
-  margin-left: auto;
+  width: 100%;
 }
 .chat-heading {
   padding-bottom: 24px;
@@ -486,12 +489,15 @@ watch(
   height: 17px;
 }
 .message {
-  max-width: 86%;
+  width: 100%;
+  max-width: none;
   display: flex;
   align-items: flex-start;
   gap: 10px;
 }
 .message.user {
+  width: auto;
+  max-width: min(72%, 58rem);
   align-self: flex-end;
 }
 .message-mark {
@@ -505,6 +511,9 @@ watch(
   border: 1px solid var(--line);
   border-radius: 5px 18px 18px;
   background: var(--surface-soft);
+}
+.message.assistant .message-body {
+  width: 100%;
 }
 .message.user .message-body {
   border-color: var(--primary);
@@ -762,6 +771,10 @@ watch(
   border: 0;
 }
 @media (max-width: 820px) {
+  .assistant-shell :deep(.site-header__inner) {
+    padding-right: 20px;
+    padding-left: 20px;
+  }
   .assistant-page {
     grid-template-columns: 1fr;
   }
@@ -780,6 +793,11 @@ watch(
     padding-top: 24px;
   }
   .message {
+    width: 100%;
+    max-width: none;
+  }
+  .message.user {
+    width: auto;
     max-width: 94%;
   }
   .composer {

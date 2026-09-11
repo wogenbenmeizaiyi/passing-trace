@@ -4,6 +4,7 @@ import { RouterLink } from 'vue-router'
 import BrandMark from '@/components/BrandMark.vue'
 import AppearanceMenu from '@/components/AppearanceMenu.vue'
 import { useAuthStore } from '@/stores/auth'
+import { defaultWebEntry } from '@/utils/device'
 
 const props = withDefaults(
   defineProps<{ variant?: 'marketing' | 'app'; downloadUrl?: string; downloadBusy?: boolean }>(),
@@ -18,7 +19,7 @@ const emit = defineEmits<{ download: [] }>()
 const auth = useAuthStore()
 
 function login() {
-  const destination = props.variant === 'marketing' ? '/events' : window.location.pathname
+  const destination = props.variant === 'marketing' ? defaultWebEntry() : window.location.pathname
   void auth.login(destination)
 }
 
@@ -31,7 +32,11 @@ function download(event: MouseEvent) {
 <template>
   <header class="site-header" :class="`site-header--${variant}`">
     <div class="site-header__inner">
-      <RouterLink class="site-brand" to="/" aria-label="星期八产品首页">
+      <RouterLink
+        class="site-brand"
+        :to="variant === 'marketing' ? '/product' : '/'"
+        aria-label="星期八首页"
+      >
         <span class="site-brand__mark"><BrandMark /></span>
         <span class="site-brand__copy"><strong>星期八</strong><small>把生活收进记忆盒</small></span>
       </RouterLink>
@@ -46,7 +51,8 @@ function download(event: MouseEvent) {
       <nav v-else class="site-nav site-nav--app" aria-label="应用导航">
         <RouterLink to="/events">我的记录</RouterLink
         ><RouterLink to="/storylines">故事线</RouterLink
-        ><RouterLink to="/assistant">问问 AI</RouterLink>
+        ><RouterLink to="/assistant">问问 AI</RouterLink
+        ><RouterLink to="/product">下载产品</RouterLink>
       </nav>
 
       <div class="site-header__actions">

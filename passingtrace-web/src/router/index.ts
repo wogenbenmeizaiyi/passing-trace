@@ -1,9 +1,12 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
+import { defaultWebEntry } from '@/utils/device'
+
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
-    { path: '/', name: 'home', component: () => import('@/views/HomeView.vue') },
+    { path: '/', name: 'entry', redirect: () => defaultWebEntry() },
+    { path: '/product', name: 'product', component: () => import('@/views/HomeView.vue') },
     { path: '/events', name: 'events', component: () => import('@/views/EventsListView.vue') },
     {
       path: '/events/new',

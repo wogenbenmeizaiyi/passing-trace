@@ -6,11 +6,13 @@ import BrandMark from '@/components/BrandMark.vue'
 import WebAppHeader from '@/components/WebAppHeader.vue'
 import { getLatestAndroidDownloadUrl } from '@/api/app-updates'
 import { useAuthStore } from '@/stores/auth'
+import { defaultWebEntry } from '@/utils/device'
 
 const auth = useAuthStore()
 const eventsApiBase = (import.meta.env.VITE_EVENTS_API_BASE_URL ?? '').replace(/\/$/, '')
 const androidDownloadUrl = `${eventsApiBase}/api/v1/app-updates/android/latest/download`
 const webActionLabel = computed(() => (auth.isAuthenticated ? '打开我的记录' : '在网页端登录'))
+const loginDestination = defaultWebEntry()
 const downloadBusy = ref(false)
 const downloadError = ref<string | null>(null)
 
@@ -78,7 +80,7 @@ async function downloadAndroid(event?: MouseEvent) {
               v-else
               class="button button-secondary"
               :disabled="auth.busy"
-              @click="auth.login('/events')"
+              @click="auth.login(loginDestination)"
             >
               {{ auth.busy ? '正在打开…' : webActionLabel }}
             </button>
@@ -376,7 +378,7 @@ async function downloadAndroid(event?: MouseEvent) {
     </main>
 
     <footer class="landing-footer">
-      <RouterLink class="site-brand" to="/">
+      <RouterLink class="site-brand" to="/product">
         <span class="site-brand__mark"><BrandMark /></span>
         <span class="site-brand__copy"><strong>星期八</strong><small>私人生活档案</small></span>
       </RouterLink>

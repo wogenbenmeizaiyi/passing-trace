@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import HomeView from '@/views/HomeView.vue'
 
-describe('星期八 Web 首页', () => {
+describe('星期八 Web 产品介绍页', () => {
   afterEach(() => vi.unstubAllGlobals())
 
   it('默认展示产品介绍、Android 下载和 Web 登录入口', () => {
