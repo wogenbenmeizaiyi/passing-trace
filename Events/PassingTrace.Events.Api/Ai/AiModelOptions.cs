@@ -45,7 +45,7 @@ public sealed class AiModelOptions
         };
 
     public string PipelineVersion { get; set; } = "semantic-v2";
-    public string PromptVersion { get; set; } = "passingtrace-zh-v2";
+    public string PromptVersion { get; set; } = "passingtrace-zh-v3";
 }
 
 public sealed class ChatModelSelection
