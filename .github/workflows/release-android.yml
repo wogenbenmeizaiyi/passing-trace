@@ -98,7 +98,6 @@ jobs:
         shell: bash
         env:
           AMAP_ANDROID_KEY: ${{ secrets.AMAP_ANDROID_KEY }}
-          PUB_HOSTED_URL: https://pub.flutter-io.cn
         run: |
           set -euo pipefail
           flutter pub get --enforce-lockfile
