@@ -417,6 +417,42 @@ small {
   line-height: 1.5;
 }
 
+.qr-download {
+  margin-top: 24px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+  color: var(--ink-secondary);
+}
+
+.qr-download p {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 8px;
+  margin: 0;
+}
+
+.qr-download a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--primary-strong);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.qr-download a:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.qr-download small {
+  display: block;
+  line-height: 1.6;
+}
+
 .security-note {
   margin-top: 26px;
   padding-top: 20px;

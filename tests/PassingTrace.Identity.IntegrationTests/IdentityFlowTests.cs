@@ -100,6 +100,10 @@ public sealed partial class IdentityFlowTests(IdentityWebApplicationFactory fact
         Assert.Contains("class=\"qr-login__visual\"", qrHtml, StringComparison.Ordinal);
         Assert.Contains("data-state=\"waiting\"", qrHtml, StringComparison.Ordinal);
         Assert.Contains("role=\"status\"", qrHtml, StringComparison.Ordinal);
+        Assert.Contains("class=\"qr-download\"", qrHtml, StringComparison.Ordinal);
+        Assert.Contains("href=\"http://localhost:5173/product\"", qrHtml, StringComparison.Ordinal);
+        Assert.Contains("target=\"_blank\" rel=\"noopener noreferrer\"", qrHtml, StringComparison.Ordinal);
+        Assert.Contains("无需登录即可下载", qrHtml, StringComparison.Ordinal);
         var antiforgery = ExtractAntiforgeryToken(qrHtml);
         var parsedQr = ParseQrLocation(qrLocation);
 
@@ -306,7 +310,8 @@ public sealed partial class IdentityFlowTests(IdentityWebApplicationFactory fact
     }
 
     [Fact]
-    public async Task WebClient_LogoutAcceptsRegisteredCallbackAndReturnsState()    {
+    public async Task WebClient_LogoutAcceptsRegisteredCallbackAndReturnsState()
+    {
         using var client = CreateBrowserClient();
         await RegisterMobileAsync(client, Unique("logout"));
         var grant = await AuthorizeWithCookieAsync(

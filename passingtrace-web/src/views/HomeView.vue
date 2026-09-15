@@ -105,7 +105,7 @@ async function downloadAndroid(event?: MouseEvent) {
               <path d="M12 3 5 6v5c0 4.6 2.8 8.1 7 10 4.2-1.9 7-5.4 7-10V6l-7-3Z" />
               <path d="m9.2 12 1.8 1.8 3.8-4" />
             </svg>
-            私有对象存储 · 故事线保留原始记录 · AI 回答附带可点击证据
+            记录不公开，AI 回答里的相关记录可以点开查看。
           </p>
           <p v-if="auth.error" class="inline-error" role="alert">
             {{ auth.error }}
@@ -151,8 +151,8 @@ async function downloadAndroid(event?: MouseEvent) {
                   <path d="m18.5 14 .7 2.3 2.3.7-2.3.7-.7 2.3-.7-2.3-2.3-.7 2.3-.7.7-2.3Z" />
                 </svg>
                 <div>
-                  <strong>这两条记录可以接入“西湖周末”故事线</strong>
-                  <span>AI 已整理标签，原始内容保持不变</span>
+                  <strong>把这两条记录串成“西湖周末”</strong>
+                  <span>标签已整理好，你写下的内容不会改变</span>
                 </div>
               </aside>
             </div>
@@ -186,7 +186,7 @@ async function downloadAndroid(event?: MouseEvent) {
               <circle cx="16" cy="16" r="6" />
             </svg>
             <h3>自动整理线索</h3>
-            <p>AI 理解正文与图片，补充分类、行为标签和检索线索；人工选择始终优先。</p>
+            <p>帮你整理照片和文字，补充分类与标签；你也可以按自己的习惯调整。</p>
           </article>
           <article>
             <span class="feature-index">03</span>
@@ -239,7 +239,7 @@ async function downloadAndroid(event?: MouseEvent) {
             </div>
           </div>
           <footer class="storyline-demo__footer">
-            <span>4 个节点</span><span>2 个阶段</span><span>记录与计划共同组成</span>
+            <span>4 条记录与计划</span><span>2 个阶段</span><span>从准备出发，到尽兴而归</span>
           </footer>
         </div>
 
@@ -247,8 +247,8 @@ async function downloadAndroid(event?: MouseEvent) {
           <p class="section-kicker">故事线</p>
           <h2 id="storyline-title">散装的记录，终于可以讲清一件事。</h2>
           <p>
-            一次旅行、一个项目、一只宠物的成长，往往不是一条记录能说完的。故事线保留每条原始记录，
-            只描述它们之间的阶段、先后、分支与汇合。
+            一次旅行、一个项目、一只宠物的成长，往往不是一条记录能说完的。把相关的记录串起来，
+            从最初的计划到后来的变化，回看时都能接得上。
           </p>
           <ul class="storyline-benefits">
             <li>
@@ -265,8 +265,7 @@ async function downloadAndroid(event?: MouseEvent) {
                 <path d="m5 12 4 4L19 6" />
               </svg>
               <span
-                ><strong>复杂关系交给网页整理</strong
-                >大屏编辑分支与阶段，手机继续负责随时记录和查看。</span
+                ><strong>在电脑上慢慢整理</strong>拖动记录，安排先后；在手机上随时补充和查看。</span
               >
             </li>
             <li>
@@ -274,8 +273,8 @@ async function downloadAndroid(event?: MouseEvent) {
                 <path d="m5 12 4 4L19 6" />
               </svg>
               <span
-                ><strong>原始内容不会被复制或改写</strong
-                >节点固定到记录修订，过去的证据依然清楚。</span
+                ><strong>当时写下的，都还在</strong
+                >串联故事时不会改写原来的记录，想回看时随时打开。</span
               >
             </li>
           </ul>
@@ -293,32 +292,30 @@ async function downloadAndroid(event?: MouseEvent) {
           <p class="section-kicker">问问 AI</p>
           <h2 id="experience-title">它不是替你编故事，而是帮你找回故事。</h2>
           <p>
-            AI 能理解连续对话，也能检索记录、故事线和确认过的地点。回答中的记录标题可以直接打开；
-            问到曾经去过的地方，还能使用保存的坐标唤起高德导航。
+            你可以接着上一个问题聊，也可以问起某次经历。点开回答里的记录，就能回看当时写了什么；
+            想再去一次，还能打开高德导航。
           </p>
           <ol class="experience-steps">
+            <li><strong>找回你记过的事</strong><span>从你的记录和故事线里找答案。</span></li>
             <li>
-              <strong>先找你的记录</strong><span>经历类问题优先从私人记录与故事线里检索证据。</span>
+              <strong>也能帮你找地方</strong><span>查询地点、路线和天气，准备下一次出门。</span>
             </li>
             <li>
-              <strong>再补实时地点能力</strong
-              ><span>需要路线、天气或公共地点时，再调用高德能力。</span>
-            </li>
-            <li>
-              <strong>把结果交还给你</strong><span>回答、记录证据与导航动作各自标明来源。</span>
+              <strong>看得见答案的出处</strong
+              ><span>哪些来自你的记录，哪些来自高德地图，都会注明。</span>
             </li>
           </ol>
         </div>
         <article class="assistant-demo">
           <header>
             <span class="assistant-mark"><BrandMark /></span>
-            <div><strong>问问 AI</strong><small>只回答你的生活记录</small></div>
+            <div><strong>问问 AI</strong><small>找记录，也能找地方</small></div>
           </header>
           <div class="demo-question">定位出我最近吃过的一家烤肉店。</div>
           <div class="demo-answer">
             <p>找到了。你最近一次吃烤肉是在“周末和朋友去吃烤肉”这条记录里。</p>
             <div class="demo-evidence">
-              <span>周末和朋友去吃烤肉</span><small>8 月 31 日 · 美食 · 记录证据</small>
+              <span>周末和朋友去吃烤肉</span><small>8 月 31 日 · 美食 · 查看记录</small>
             </div>
             <div class="demo-place">
               <span class="demo-place__icon">
@@ -327,7 +324,7 @@ async function downloadAndroid(event?: MouseEvent) {
                   <circle cx="12" cy="9" r="2.2" />
                 </svg>
               </span>
-              <span><strong>山野炉端烧</strong><small>来自你的记录 · 已保存坐标</small></span>
+              <span><strong>山野炉端烧</strong><small>来自你的记录 · 可以导航</small></span>
               <span class="demo-place__action">高德导航</span>
             </div>
           </div>
@@ -343,18 +340,18 @@ async function downloadAndroid(event?: MouseEvent) {
       <section id="privacy" class="privacy-section" aria-labelledby="privacy-title">
         <span class="privacy-mark"><BrandMark /></span>
         <div>
-          <p class="section-kicker">属于你的数据边界</p>
-          <h2 id="privacy-title">记忆可以被理解，但不应该失去归属。</h2>
+          <p class="section-kicker">你的隐私</p>
+          <h2 id="privacy-title">你的生活，不必公开。</h2>
           <p>
-            附件保持私有，访问地址短时有效；搜索与 AI
-            工具从登录身份取得用户范围，不能请求其他人的数据。外部地图结果和私人记录证据也会分开标注。
+            记录和照片不会公开展示。问答只查找你自己的记录，不会读取其他人的内容。AI
+            记住了什么，你可以随时查看、修改或删除。
           </p>
         </div>
         <ul>
-          <li>私有 S3 对象存储</li>
-          <li>每个回答保留证据</li>
-          <li>AI 只读检索，不修改故事线</li>
-          <li>长期记忆可确认、修正或遗忘</li>
+          <li>记录和照片不公开展示</li>
+          <li>回答里的相关记录可点开查看</li>
+          <li>AI 不会改动你的记录和故事线</li>
+          <li>AI 记住的内容可查看、修改或删除</li>
         </ul>
       </section>
 

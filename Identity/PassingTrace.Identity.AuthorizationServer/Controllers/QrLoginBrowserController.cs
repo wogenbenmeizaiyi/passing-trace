@@ -37,7 +37,8 @@ public sealed class QrLoginBrowserController(
             renderer.GetGraphic(8),
             clients.GetRequired(transaction.ClientId).DisplayName,
             transaction.ExpiresAt,
-            options.Value.PollIntervalSeconds);
+            options.Value.PollIntervalSeconds,
+            clients.GetWebProductUrl());
         return View(model);
     }
 
@@ -82,4 +83,5 @@ public sealed record QrLoginPageModel(
     string Svg,
     string ClientDisplayName,
     DateTimeOffset ExpiresAt,
-    int PollIntervalSeconds);
+    int PollIntervalSeconds,
+    string? ProductUrl);

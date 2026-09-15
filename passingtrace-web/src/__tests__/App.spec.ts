@@ -19,10 +19,37 @@ describe('星期八 Web 产品介绍页', () => {
     expect(wrapper.text()).toContain('问回自己的生活')
     expect(wrapper.text()).toContain('周末去看海')
     expect(wrapper.text()).toContain('高德导航')
-    expect(wrapper.text()).toContain('私有 S3 对象存储')
+    expect(wrapper.text()).toContain('记录和照片不公开展示')
     expect(wrapper.find('a[href$="/api/v1/app-updates/android/latest/download"]').exists()).toBe(
       true,
     )
+    wrapper.unmount()
+  })
+
+  it('宣传文案说明使用体验和隐私控制，不展示实现术语或夸大隐私承诺', () => {
+    const wrapper = mount(HomeView, {
+      global: { plugins: [createPinia()], stubs: { RouterLink: { template: '<a><slot /></a>' } } },
+    })
+    const copy = wrapper.text()
+    for (const term of [
+      'S3',
+      '对象存储',
+      '记录修订',
+      '只读检索',
+      '检索证据',
+      '导航动作',
+      '用户范围',
+      '访问地址短时有效',
+      '已保存坐标',
+      '端到端加密',
+      '绝对安全',
+    ]) {
+      expect(copy).not.toContain(term)
+    }
+    expect(wrapper.get('.hero-note').text()).toContain('相关记录可以点开查看')
+    expect(wrapper.get('#privacy').text()).toContain('AI 记住的内容可查看、修改或删除')
+    expect(wrapper.get('#assistant').text()).toContain('哪些来自高德地图，都会注明')
+    wrapper.unmount()
   })
 
   it('下载服务失败时留在主页并提供重试', async () => {

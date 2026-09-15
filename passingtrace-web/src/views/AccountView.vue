@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
+import { RouterLink, onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import WebAppHeader from '@/components/WebAppHeader.vue'
 import AccountAvatar from '@/components/AccountAvatar.vue'
 import AvatarCropper from '@/components/AvatarCropper.vue'
@@ -193,46 +193,77 @@ onBeforeUnmount(() => {
       <p v-if="success" role="status" class="account-success">{{ success }}</p>
       <p v-if="loading && !account.profile" role="status">正在加载个人资料…</p>
       <div v-if="account.profile" class="account-layout">
-        <aside class="account-panel profile-summary">
-          <AccountAvatar
-            :src="editing ? (remove ? '' : preview || account.avatarUrl) : account.avatarUrl"
-            :size="112"
-          />
-          <h2>{{ account.nickname }}</h2>
-          <p class="profile-bio">{{ account.profile.bio || '在这里，慢慢收集属于你的生活。' }}</p>
-          <span class="profile-private">仅本人可见</span>
-          <button
-            v-if="!editing"
-            class="button button-primary"
-            :disabled="loading"
-            @click="startEdit"
-          >
-            编辑个人资料
-          </button>
-          <template v-else>
-            <input
-              ref="input"
-              class="visually-hidden"
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              tabindex="-1"
-              aria-label="选择头像图片"
-              :disabled="saving"
-              @change="choose"
+        <div class="account-sidebar">
+          <aside class="account-panel profile-summary">
+            <AccountAvatar
+              :src="editing ? (remove ? '' : preview || account.avatarUrl) : account.avatarUrl"
+              :size="112"
             />
-            <button class="button button-secondary" :disabled="saving" @click="input?.click()">
-              更换头像
-            </button>
+            <h2>{{ account.nickname }}</h2>
+            <p class="profile-bio">{{ account.profile.bio || '在这里，慢慢收集属于你的生活。' }}</p>
+            <span class="profile-private">仅本人可见</span>
             <button
-              class="text-button"
-              :disabled="saving || (!account.profile.hasAvatar && !avatar) || remove"
-              @click="resetAvatar"
+              v-if="!editing"
+              class="button button-primary"
+              :disabled="loading"
+              @click="startEdit"
             >
-              恢复默认头像
+              编辑个人资料
             </button>
-            <small>JPG、PNG、WebP · 不超过 5MB<br />裁剪后预览，保存修改后生效</small>
-          </template>
-        </aside>
+            <template v-else>
+              <input
+                ref="input"
+                class="visually-hidden"
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                tabindex="-1"
+                aria-label="选择头像图片"
+                :disabled="saving"
+                @change="choose"
+              />
+              <button class="button button-secondary" :disabled="saving" @click="input?.click()">
+                更换头像
+              </button>
+              <button
+                class="text-button"
+                :disabled="saving || (!account.profile.hasAvatar && !avatar) || remove"
+                @click="resetAvatar"
+              >
+                恢复默认头像
+              </button>
+              <small>JPG、PNG、WebP · 不超过 5MB<br />裁剪后预览，保存修改后生效</small>
+            </template>
+          </aside>
+          <section class="account-companion" aria-label="手机版">
+            <RouterLink to="/product" class="account-companion__link">
+              <svg
+                class="account-companion__icon"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.6"
+                aria-hidden="true"
+              >
+                <rect x="6.5" y="2.5" width="11" height="19" rx="2.5" />
+                <path d="M10 5h4M11 18.5h2" stroke-linecap="round" />
+              </svg>
+              <span class="account-companion__copy">
+                <strong>在手机上使用</strong>
+                <small>了解与下载手机 App</small>
+              </span>
+              <svg
+                class="account-companion__arrow"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.6"
+                aria-hidden="true"
+              >
+                <path d="m9 6 6 6-6 6" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </RouterLink>
+          </section>
+        </div>
         <section class="account-panel profile-details">
           <template v-if="!editing">
             <h2>账号资料</h2>
@@ -336,6 +367,51 @@ h1 {
   border: 1px solid var(--line);
   border-radius: 24px;
   background: var(--surface);
+}
+.account-sidebar {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+.account-companion__link {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 72px;
+  padding: 18px 22px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  color: var(--ink);
+  text-decoration: none;
+}
+.account-companion__link:hover {
+  background: var(--surface-soft);
+  border-color: var(--line-strong);
+}
+.account-companion__link:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 4px;
+}
+.account-companion__icon {
+  flex: 0 0 26px;
+  height: 26px;
+  color: var(--primary-strong);
+}
+.account-companion__copy {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.account-companion__copy strong {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 15px;
+  font-weight: 600;
+}
+.account-companion__arrow {
+  flex: 0 0 18px;
+  height: 18px;
+  color: var(--ink-secondary);
 }
 .profile-summary {
   display: flex;

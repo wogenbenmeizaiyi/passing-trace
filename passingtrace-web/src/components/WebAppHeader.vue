@@ -55,12 +55,18 @@ function download(event: MouseEvent) {
       <nav v-else class="site-nav site-nav--app" aria-label="应用导航">
         <RouterLink to="/events">我的记录</RouterLink
         ><RouterLink to="/storylines">故事线</RouterLink
-        ><RouterLink to="/assistant">问问 AI</RouterLink
-        ><RouterLink to="/product">下载产品</RouterLink>
+        ><RouterLink to="/assistant">问问 AI</RouterLink>
       </nav>
 
       <div class="site-header__actions">
         <AppearanceMenu />
+        <RouterLink
+          v-if="variant === 'app' && !auth.isAuthenticated"
+          class="app-download-link"
+          to="/product"
+        >
+          下载 App
+        </RouterLink>
         <template v-if="auth.isAuthenticated">
           <RouterLink
             class="account-entry"
@@ -97,6 +103,27 @@ function download(event: MouseEvent) {
 </template>
 
 <style scoped>
+.app-download-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding-inline: 2px;
+  color: var(--ink-secondary);
+  font-size: 13px;
+  white-space: nowrap;
+  text-decoration: none;
+}
+.app-download-link:hover {
+  color: var(--primary-strong);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.app-download-link:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
 .account-entry {
   display: inline-flex;
   align-items: center;

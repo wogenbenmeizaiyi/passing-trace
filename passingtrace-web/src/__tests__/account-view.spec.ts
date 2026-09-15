@@ -51,6 +51,7 @@ async function open() {
     routes: [
       { path: '/account', component: AccountView },
       { path: '/assistant', component: { template: '<p>原聊天</p>' } },
+      { path: '/product', component: { template: '<p>产品介绍与下载</p>' } },
     ],
   })
   await router.push('/account?from=%2Fassistant%3Fconversation%3Dabc')
@@ -65,6 +66,26 @@ function button(label: string) {
 }
 
 describe('用户中心', () => {
+  it('从独立的手机入口进入产品介绍，不触发保存或直接下载', async () => {
+    const router = await open()
+    const link = wrapper.get('.account-companion__link')
+    expect(link.text()).toContain('在手机上使用')
+    expect(link.attributes('href')).toBe('/product')
+    await link.trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.path).toBe('/product')
+    expect(profileApi.save).not.toHaveBeenCalled()
+  })
+  it('通过手机入口离开时仍保护未保存的资料', async () => {
+    const router = await open()
+    await button('编辑个人资料').trigger('click')
+    await wrapper.get('#profile-nickname').setValue('还没保存')
+    await wrapper.get('.account-companion__link').trigger('click')
+    await flushPromises()
+    expect(window.confirm).toHaveBeenCalled()
+    expect(router.currentRoute.value.path).toBe('/account')
+    expect((wrapper.get('#profile-nickname').element as HTMLInputElement).value).toBe('还没保存')
+  })
   it('从资料总览进入编辑，保存昵称与简介而不改登录名', async () => {
     await open()
     expect(wrapper.text()).toContain('login_user')
