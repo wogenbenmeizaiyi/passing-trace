@@ -52,6 +52,10 @@ var identity = builder.AddProject<Projects.PassingTrace_Identity_AuthorizationSe
     // 手机内部测试包使用固定 HTTP 端口，避免每次重启 Aspire 后旧登录令牌和 APK 指向失效。
     .WithEndpoint("http", endpoint => endpoint.Port = 56229)
     .WithReference(identityDatabase)
+    .WithEnvironment("ObjectStorage__Endpoint", minio.GetEndpoint("api"))
+    .WithEnvironment("ObjectStorage__AccessKey", minioAccessKey)
+    .WithEnvironment("ObjectStorage__SecretKey", minioSecretKey)
+    .WaitFor(minio)
     .WaitFor(identityDatabase);
 
 // 业务 API 使用独立数据库，并通过 Identity 的发现文档离线验证 Access Token。
@@ -110,6 +114,19 @@ else
         .WaitFor(api)
         .WithExternalHttpEndpoints();
 
+    if (builder.Environment.IsDevelopment() &&
+        !string.Equals(builder.Configuration["DevelopmentDemo:Enabled"], "false", StringComparison.OrdinalIgnoreCase))
+    {
+        // One-shot, idempotent local fixture bootstrap; uses the same automatic dev login
+        // as the Web client, without storing or forwarding a password/token in AppHost.
+        builder.AddExecutable("development-demo-data",
+                OperatingSystem.IsWindows() ? "python" : "python3", "../tools",
+                "seed_development_demo.py")
+            .WithEnvironment("DEVELOPMENT_IDENTITY_URL", identity.GetEndpoint("http"))
+            .WithEnvironment("DEVELOPMENT_API_URL", api.GetEndpoint("http"))
+            .WaitFor(identity)
+            .WaitFor(api);
+    }
 }
 
 

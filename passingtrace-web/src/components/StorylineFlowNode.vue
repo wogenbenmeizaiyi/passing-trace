@@ -15,6 +15,18 @@ interface StoryNodeData extends Record<string, unknown> {
   stageTitle?: string
 }
 defineProps<NodeProps<StoryNodeData>>()
+
+function activateHandle(event: KeyboardEvent) {
+  const handle = event.currentTarget as HTMLElement
+  const bounds = handle.getBoundingClientRect()
+  handle.dispatchEvent(
+    new MouseEvent('click', {
+      bubbles: true,
+      clientX: bounds.left + bounds.width / 2,
+      clientY: bounds.top + bounds.height / 2,
+    }),
+  )
+}
 </script>
 <template>
   <article
@@ -25,7 +37,18 @@ defineProps<NodeProps<StoryNodeData>>()
       'flow-record--temporary': data.temporary,
     }"
   >
-    <Handle type="target" :position="Position.Left" />
+    <Handle
+      type="target"
+      :position="Position.Left"
+      class="flow-record__handle"
+      role="button"
+      tabindex="0"
+      :aria-label="`连接到：${data.title}`"
+      title="连接到这里 · 点击或拖动连线"
+      @click.stop
+      @keydown.enter.prevent.stop="activateHandle"
+      @keydown.space.prevent.stop="activateHandle"
+    />
     <div v-if="data.imageUrl" class="flow-record__image">
       <img :src="data.imageUrl" :alt="`${data.title} 的记录图片`" />
     </div>
@@ -44,14 +67,25 @@ defineProps<NodeProps<StoryNodeData>>()
         ><span v-for="tag in data.tags?.slice(0, 2)" :key="tag">{{ tag }}</span>
       </div>
     </div>
-    <Handle type="source" :position="Position.Right" />
+    <Handle
+      type="source"
+      :position="Position.Right"
+      class="flow-record__handle"
+      role="button"
+      tabindex="0"
+      :aria-label="`从这里连接：${data.title}`"
+      title="从这里连接 · 点击后选择下一个节点"
+      @click.stop
+      @keydown.enter.prevent.stop="activateHandle"
+      @keydown.space.prevent.stop="activateHandle"
+    />
   </article>
 </template>
 <style scoped>
 .flow-record {
   width: 260px;
   min-height: 126px;
-  overflow: hidden;
+  overflow: visible;
   border: 1px solid var(--line-strong);
   border-radius: 16px;
   background: var(--surface);
@@ -72,6 +106,7 @@ defineProps<NodeProps<StoryNodeData>>()
 .flow-record__image {
   height: 104px;
   overflow: hidden;
+  border-radius: 15px 15px 0 0;
   background: var(--surface-soft);
 }
 .flow-record__image img {
@@ -122,5 +157,58 @@ defineProps<NodeProps<StoryNodeData>>()
   color: var(--ink-tertiary);
   background: var(--surface-soft);
   font-size: 8px;
+}
+.flow-record__handle {
+  /* Keep a generous hit area without covering the card's text. */
+  --connection-dot-size: calc(20px * 2 / 3);
+  width: var(--connection-dot-size);
+  height: var(--connection-dot-size);
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  cursor: crosshair;
+  display: grid;
+  place-items: center;
+}
+.flow-record__handle::before {
+  content: '';
+  position: absolute;
+  width: 40px;
+  height: 40px;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  pointer-events: all;
+}
+.flow-record__handle::after {
+  content: '';
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  border: calc(2px * 2 / 3) solid var(--surface);
+  border-radius: 50%;
+  background: var(--primary);
+  box-shadow: 0 0 0 1px var(--primary-strong);
+  pointer-events: none;
+  transition:
+    box-shadow 150ms ease,
+    background 150ms ease;
+}
+.flow-record__handle:hover::after,
+.flow-record__handle:focus-visible::after,
+.flow-record__handle.connecting::after,
+.flow-record__handle.valid::after {
+  background: var(--primary-strong);
+  box-shadow: 0 0 0 3px var(--focus-color);
+}
+.flow-record__handle:focus-visible {
+  outline: 2px solid var(--primary-strong);
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .flow-record__handle::after {
+    transition: none;
+  }
 }
 </style>

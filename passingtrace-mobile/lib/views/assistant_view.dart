@@ -10,6 +10,7 @@ import '../theme/quiet_trace_components.dart';
 import '../theme/quiet_trace_icons.dart';
 import '../user_facing_error.dart';
 import 'event_detail_view.dart';
+import 'storyline_detail_view.dart';
 
 class AssistantView extends StatefulWidget {
   const AssistantView({
@@ -141,6 +142,7 @@ class _AssistantViewState extends State<AssistantView> {
                   role: message.role,
                   text: message.content,
                   evidenceRecords: message.evidenceRecords,
+                  evidenceStorylines: message.evidenceStorylines,
                   amapPlaces: message.amapPlaces,
                   actions: message.actions,
                 ),
@@ -190,11 +192,16 @@ class _AssistantViewState extends State<AssistantView> {
         } else if (chunk.type == 'evidence') {
           final raw = chunk.data as Map<String, dynamic>;
           final records = AiEvidenceRecord.fromEnvelope(raw);
+          final storylines = AiEvidenceStoryline.fromEnvelope(raw);
           final places = AmapPlaceModel.fromEnvelope(raw);
           final actions = AssistantActionModel.fromEnvelope(raw);
           setState(() {
             answer.eventTitles = {
               for (final record in records) record.eventId: record.displayTitle,
+            };
+            answer.storylineTitles = {
+              for (final storyline in storylines)
+                storyline.storylineId.toLowerCase(): storyline.displayTitle,
             };
             answer.amapPlaces = places;
             answer.actions = actions;
@@ -284,6 +291,7 @@ class _AssistantViewState extends State<AssistantView> {
                 role: message.role,
                 text: message.content,
                 evidenceRecords: message.evidenceRecords,
+                evidenceStorylines: message.evidenceStorylines,
                 amapPlaces: message.amapPlaces,
                 actions: message.actions,
               ),
@@ -320,6 +328,7 @@ class _AssistantViewState extends State<AssistantView> {
                 role: message.role,
                 text: message.content,
                 evidenceRecords: message.evidenceRecords,
+                evidenceStorylines: message.evidenceStorylines,
                 amapPlaces: message.amapPlaces,
                 actions: message.actions,
               ),
@@ -519,7 +528,9 @@ class _AssistantViewState extends State<AssistantView> {
               text: message.text,
               isUser: mine,
               eventTitles: message.eventTitles,
+              storylineTitles: message.storylineTitles,
               onOpenEvent: _openEvent,
+              onOpenStoryline: _openStoryline,
             ),
             if (message.eventTitles.isNotEmpty)
               AssistantEvidenceDisclosure(
@@ -545,6 +556,19 @@ class _AssistantViewState extends State<AssistantView> {
           auth: widget.auth,
           session: widget.session,
           eventId: id,
+        ),
+      ),
+    );
+  }
+
+  void _openStoryline(String id) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => StorylineDetailView(
+          auth: widget.auth,
+          session: widget.session,
+          storylineId: id,
         ),
       ),
     );
@@ -1326,17 +1350,24 @@ class _ChatBubble {
     required this.role,
     required this.text,
     List<AiEvidenceRecord>? evidenceRecords,
+    List<AiEvidenceStoryline>? evidenceStorylines,
     List<AmapPlaceModel>? amapPlaces,
     List<AssistantActionModel>? actions,
   }) : eventTitles = {
          for (final record in evidenceRecords ?? const <AiEvidenceRecord>[])
            record.eventId: record.displayTitle,
        },
+       storylineTitles = {
+         for (final storyline
+             in evidenceStorylines ?? const <AiEvidenceStoryline>[])
+           storyline.storylineId.toLowerCase(): storyline.displayTitle,
+       },
        amapPlaces = amapPlaces ?? [],
        actions = actions ?? [];
   final String role;
   String text;
   Map<int, String> eventTitles;
+  Map<String, String> storylineTitles;
   List<AmapPlaceModel> amapPlaces;
   List<AssistantActionModel> actions;
 }
@@ -1589,13 +1620,17 @@ class AssistantMessageContent extends StatelessWidget {
     required this.text,
     required this.isUser,
     this.eventTitles = const {},
+    this.storylineTitles = const {},
     this.onOpenEvent,
+    this.onOpenStoryline,
   });
 
   final String text;
   final bool isUser;
   final Map<int, String> eventTitles;
+  final Map<String, String> storylineTitles;
   final ValueChanged<int>? onOpenEvent;
+  final ValueChanged<String>? onOpenStoryline;
 
   @override
   Widget build(BuildContext context) {
@@ -1608,13 +1643,18 @@ class AssistantMessageContent extends StatelessWidget {
     }
 
     return MarkdownBody(
-      data: _replaceEventCitations(text, eventTitles),
+      data: _replaceCitations(text, eventTitles, storylineTitles),
       selectable: true,
       onTapLink: (_, href, _) {
         final uri = Uri.tryParse(href ?? '');
-        if (uri?.scheme != 'passingtrace' || uri?.host != 'event') return;
-        final eventId = int.tryParse(uri!.pathSegments.firstOrNull ?? '');
-        if (eventId != null) onOpenEvent?.call(eventId);
+        if (uri?.scheme != 'passingtrace') return;
+        final id = uri!.pathSegments.firstOrNull;
+        if (uri.host == 'event') {
+          final eventId = int.tryParse(id ?? '');
+          if (eventId != null) onOpenEvent?.call(eventId);
+        } else if (uri.host == 'storyline' && id != null) {
+          onOpenStoryline?.call(id);
+        }
       },
       styleSheet: MarkdownStyleSheet(
         p: TextStyle(color: colors.ink, fontSize: 13, height: 1.7),
@@ -1657,20 +1697,36 @@ class AssistantMessageContent extends StatelessWidget {
     );
   }
 
-  static String _replaceEventCitations(
+  static String _replaceCitations(
     String source,
-    Map<int, String> titles,
-  ) => source.replaceAllMapped(
-    RegExp(r'\[Event\s*#(\d+)\]', caseSensitive: false),
-    (match) {
-      final id = int.parse(match.group(1)!);
-      final title = titles[id]?.trim();
-      final label = title == null || title.isEmpty ? '查看记录' : title;
-      final escaped = label
-          .replaceAll(r'\', r'\\')
-          .replaceAll('[', r'\[')
-          .replaceAll(']', r'\]');
-      return '[$escaped](passingtrace://event/$id)';
-    },
-  );
+    Map<int, String> eventTitles,
+    Map<String, String> storylineTitles,
+  ) {
+    final withEvents = source.replaceAllMapped(
+      RegExp(r'\[Event\s*#(\d+)\]', caseSensitive: false),
+      (match) {
+        final id = int.parse(match.group(1)!);
+        final title = eventTitles[id]?.trim();
+        final label = title == null || title.isEmpty ? '查看记录' : title;
+        return '[${_escapeMarkdownLabel(label)}](passingtrace://event/$id)';
+      },
+    );
+    return withEvents.replaceAllMapped(
+      RegExp(
+        r'\[Storyline\s*#([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\]',
+        caseSensitive: false,
+      ),
+      (match) {
+        final id = match.group(1)!.toLowerCase();
+        final title = storylineTitles[id]?.trim();
+        final label = title == null || title.isEmpty ? '查看故事线' : title;
+        return '[${_escapeMarkdownLabel(label)}](passingtrace://storyline/$id)';
+      },
+    );
+  }
+
+  static String _escapeMarkdownLabel(String label) => label
+      .replaceAll(r'\', r'\\')
+      .replaceAll('[', r'\[')
+      .replaceAll(']', r'\]');
 }

@@ -39,6 +39,8 @@ public sealed class IdentityWebApplicationFactory : WebApplicationFactory<Progra
 
         builder.ConfigureServices(services =>
         {
+            services.RemoveAll<PassingTrace.Identity.AuthorizationServer.Profile.IAvatarStorage>();
+            services.AddSingleton<PassingTrace.Identity.AuthorizationServer.Profile.IAvatarStorage, TestAvatarStorage>();
             services.AddDataProtection().UseEphemeralDataProtectionProvider();
 
             services.RemoveAll<DbContextOptions<IdentityDbContext>>();

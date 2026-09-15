@@ -7,7 +7,7 @@
 //      同时把业务状态码（400/401/403/404/409/428/500）原样保留给上层处理。
 //   4. 把 `version` 头（后端乐观并发令牌）原样回传给上层，不在这里做并发控制。
 
-import { oidc } from '@/auth/oidc'
+import { identityAuthority, oidc } from '@/auth/oidc'
 import { useAuthStore } from '@/stores/auth'
 import type { ProblemDetails } from '@/api/events-types'
 
@@ -28,6 +28,7 @@ export class HttpError extends Error {
 }
 
 interface RequestOptions {
+  service?: 'identity'
   body?: unknown
   query?: Record<string, string | number | null | undefined>
   headers?: Record<string, string>
@@ -47,8 +48,10 @@ interface BinaryUploadOptions {
   retryOn401?: boolean
 }
 
-function buildUrl(path: string, query: RequestOptions['query']): string {
-  const base = (import.meta.env.VITE_EVENTS_API_BASE_URL ?? '').replace(/\/$/, '')
+function buildUrl(path: string, query: RequestOptions['query'], service?: 'identity'): string {
+  const base = (
+    service === 'identity' ? identityAuthority : (import.meta.env.VITE_EVENTS_API_BASE_URL ?? '')
+  ).replace(/\/$/, '')
   if (!path.startsWith('/')) path = `/${path}`
   if (!query) return `${base}${path}`
   const search = new URLSearchParams()
@@ -116,7 +119,8 @@ function buildHeaders(opts: RequestOptions, token: string | undefined): Record<s
     ...authHeader(token),
     ...opts.headers,
   }
-  if (opts.body !== undefined) headers['Content-Type'] = CONTENT_TYPE
+  if (opts.body !== undefined && !(opts.body instanceof FormData))
+    headers['Content-Type'] = CONTENT_TYPE
   if (typeof opts.ifMatch === 'number' && Number.isFinite(opts.ifMatch) && opts.ifMatch >= 0) {
     headers['If-Match'] = String(opts.ifMatch)
   }
@@ -125,7 +129,7 @@ function buildHeaders(opts: RequestOptions, token: string | undefined): Record<s
 }
 
 async function send<T>(method: string, path: string, opts: RequestOptions): Promise<T> {
-  const url = buildUrl(path, opts.query)
+  const url = buildUrl(path, opts.query, opts.service)
   const token = await readAccessToken()
   if (!token) {
     throw new HttpError(401, '未登录或会话已失效，请重新登录。')
@@ -133,7 +137,12 @@ async function send<T>(method: string, path: string, opts: RequestOptions): Prom
   const init: RequestInit = {
     method,
     headers: buildHeaders(opts, token),
-    body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
+    body:
+      opts.body instanceof FormData
+        ? opts.body
+        : opts.body === undefined
+          ? undefined
+          : JSON.stringify(opts.body),
     signal: opts.signal ?? null,
     credentials: 'omit',
   }
@@ -232,7 +241,7 @@ async function uploadBinary(
 }
 
 async function downloadBlob(path: string, opts: RequestOptions = {}): Promise<Blob> {
-  const url = buildUrl(path, opts.query)
+  const url = buildUrl(path, opts.query, opts.service)
   let token = await readAccessToken()
   if (!token) throw new HttpError(401, '未登录或会话已失效，请重新登录。')
   const init: RequestInit = {

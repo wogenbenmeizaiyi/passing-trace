@@ -1,4 +1,5 @@
 using System.ClientModel;
+using System.ClientModel.Primitives;
 using System.Runtime.CompilerServices;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Options;
@@ -11,6 +12,12 @@ namespace PassingTrace.Events.Api.Ai;
 /// </summary>
 public sealed class AiClientFactory : IDisposable
 {
+    private static readonly HttpClient CompatibleHttpClient = new(
+        new OpenAiCompatibleStreamingHandler(new SocketsHttpHandler
+        {
+            PooledConnectionLifetime = TimeSpan.FromMinutes(5),
+        })) { Timeout = Timeout.InfiniteTimeSpan };
+
     private readonly IChatClient _assistantChatClient;
     private readonly IChatClient _semanticChatClient;
     private readonly IEmbeddingGenerator<string, Embedding<float>> _embeddingGenerator;
@@ -75,7 +82,11 @@ public sealed class AiClientFactory : IDisposable
     private static OpenAIClient CreateOpenAiClient(OpenAiCompatibleProviderOptions provider) =>
         new(
             new ApiKeyCredential(provider.ApiKey),
-            new OpenAIClientOptions { Endpoint = new Uri(provider.Endpoint.TrimEnd('/') + "/") });
+            new OpenAIClientOptions
+            {
+                Endpoint = new Uri(provider.Endpoint.TrimEnd('/') + "/"),
+                Transport = new HttpClientPipelineTransport(CompatibleHttpClient),
+            });
 
     private static bool TryGetProvider(
         AiModelOptions options,

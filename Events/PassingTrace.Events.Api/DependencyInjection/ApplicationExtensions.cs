@@ -9,6 +9,7 @@ using PassingTrace.Events.Api.Media;
 using PassingTrace.Events.Api.Places;
 using PassingTrace.Events.Api.Updates;
 using PassingTrace.Events.Api.Storylines;
+using PassingTrace.Events.Api.Development;
 
 namespace PassingTrace.Events.Api.DependencyInjection;
 
@@ -41,6 +42,8 @@ public static class ApplicationExtensions
             }
         }));
         services.AddSingleton(TimeProvider.System);
+        services.Configure<DevelopmentDemoOptions>(configuration.GetSection(DevelopmentDemoOptions.SectionName));
+        services.AddScoped<DevelopmentDemoSeeder>();
         services.Configure<ObjectStorageOptions>(configuration.GetSection(ObjectStorageOptions.SectionName));
         services.Configure<AiModelOptions>(configuration.GetSection(AiModelOptions.SectionName));
         services.AddOptions<AmapOptions>()

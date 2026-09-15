@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using PassingTrace.Infrastructure;
+using PassingTrace.Events.Api.Development;
 
 namespace PassingTrace.Events.Api.DependencyInjection;
 
@@ -36,6 +37,7 @@ public static class WebApplicationExtensions
         app.UseAuthentication();
         app.UseAuthorization();
         app.MapControllers();
+        app.MapDevelopmentDemo();
 
         return app;
     }

@@ -18,6 +18,17 @@ export interface ConversationDetail extends ConversationSummary {
   }>
 }
 
+export interface ConversationPage {
+  items: ConversationSummary[]
+  nextCursor: string | null
+}
+
+export interface ConversationMessagePage {
+  items: ConversationDetail['messages']
+  hasMore: boolean
+  nextBeforeId: number | null
+}
+
 export interface UserMemory {
   id: number
   type: string
@@ -45,8 +56,23 @@ export interface EvidenceBundle {
   records: Array<{ eventId: number; title: string | null }>
   memories: Array<{ memoryId: number; content: string }>
   aggregate: string | null
+  storylines?: StorylineEvidence[]
   amapPlaces?: AmapPlaceEvidence[]
   actions?: AssistantAction[]
+}
+
+export interface StorylineEvidence {
+  storylineId: string
+  revision: number
+  title: string
+  category: string
+  status: string
+  snippet: string
+  rangeStart: string | null
+  rangeEnd: string | null
+  stages: Array<{ stageKey: string; title: string; nodeTitles: string[] }>
+  eventIds: number[]
+  score: number
 }
 
 export interface AmapPlaceEvidence {
@@ -97,6 +123,16 @@ function apiUrl(path: string) {
 
 export const aiApi = {
   listConversations: () => httpClient.get<ConversationSummary[]>('/api/v1/ai/conversations'),
+  listConversationsPage: (cursor?: string | null) =>
+    httpClient.get<ConversationPage>('/api/v1/ai/conversations/page', {
+      query: { limit: 20, cursor: cursor ?? undefined },
+    }),
+  getConversationSummary: (id: string) =>
+    httpClient.get<ConversationSummary>(`/api/v1/ai/conversations/${id}/summary`),
+  getConversationMessagesPage: (id: string, beforeId?: number | null) =>
+    httpClient.get<ConversationMessagePage>(`/api/v1/ai/conversations/${id}/messages-page`, {
+      query: { limit: 30, beforeId: beforeId ?? undefined },
+    }),
   createConversation: (title?: string) =>
     httpClient.post<ConversationSummary>('/api/v1/ai/conversations', { body: { title } }),
   getConversation: (id: string) =>
@@ -122,27 +158,39 @@ export const aiApi = {
         Accept: 'text/event-stream',
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ content }),
+      body: JSON.stringify({ content, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
     })
-    if (!response.ok || !response.body) throw new Error(`AI 请求失败 (${response.status})`)
+    if (!response.ok || !response.body) throw new Error('暂时无法连接 AI 服务，请稍后重试。')
     const reader = response.body.getReader()
     const decoder = new TextDecoder()
     let buffer = ''
-    while (true) {
-      const { value, done } = await reader.read()
-      buffer += decoder.decode(value, { stream: !done })
-      const blocks = buffer.split('\n\n')
-      buffer = blocks.pop() ?? ''
-      for (const block of blocks) {
-        let type = ''
-        let data = ''
-        for (const line of block.split('\n')) {
-          if (line.startsWith('event:')) type = line.slice(6).trim()
-          if (line.startsWith('data:')) data += line.slice(5).trim()
+    let completed = false
+    try {
+      while (true) {
+        const { value, done } = await reader.read()
+        buffer = (buffer + decoder.decode(value, { stream: !done })).replace(/\r\n/g, '\n')
+        if (done && buffer.trim()) buffer += '\n\n'
+        const blocks = buffer.split('\n\n')
+        buffer = blocks.pop() ?? ''
+        for (const block of blocks) {
+          let type = ''
+          let data = ''
+          for (const line of block.split('\n')) {
+            if (line.startsWith('event:')) type = line.slice(6).trim()
+            if (line.startsWith('data:')) data += line.slice(5).trim()
+          }
+          if (type && data) {
+            onEvent({ type, data: JSON.parse(data) } as StreamEvent)
+            if (type === 'done' || type === 'error') completed = true
+          }
         }
-        if (type && data) onEvent({ type, data: JSON.parse(data) } as StreamEvent)
+        if (done) break
       }
-      if (done) break
+      if (!completed) throw new Error('Incomplete response')
+    } catch {
+      throw new Error('这次回答中途断开了，请重新发送一次。')
+    } finally {
+      reader.releaseLock()
     }
   },
 }

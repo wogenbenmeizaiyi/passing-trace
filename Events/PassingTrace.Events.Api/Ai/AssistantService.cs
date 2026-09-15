@@ -67,6 +67,15 @@ public sealed class AssistantService(
             .Select(x => new AiConversationResponse(x.Id, x.Title, x.CreatedAt, x.UpdatedAt))
             .ToListAsync(cancellationToken);
 
+    public Task<AiConversationPageResponse> ListPageAsync(int limit, string? cursor, CancellationToken cancellationToken) =>
+        AssistantConversationHistory.ListPageAsync(db, currentUser.UserId, limit, cursor, cancellationToken);
+
+    public Task<AiConversationResponse?> GetSummaryAsync(Guid id, CancellationToken cancellationToken) =>
+        AssistantConversationHistory.GetSummaryAsync(db, currentUser.UserId, id, cancellationToken);
+
+    public Task<AiMessagePageResponse?> GetMessagesPageAsync(Guid id, int limit, long? beforeId, CancellationToken cancellationToken) =>
+        AssistantConversationHistory.GetMessagesPageAsync(db, currentUser.UserId, id, limit, beforeId, cancellationToken);
+
     public async Task<AiConversationResponse> CreateAsync(string? title, CancellationToken cancellationToken)
     {
         var now = clock.GetUtcNow();
@@ -108,15 +117,18 @@ public sealed class AssistantService(
     public async IAsyncEnumerable<AssistantStreamEvent> SendAsync(
         Guid conversationId,
         string content,
-        [EnumeratorCancellation] CancellationToken cancellationToken)
+        [EnumeratorCancellation] CancellationToken cancellationToken,
+        string? timezone = null)
     {
         content = content?.Trim() ?? string.Empty;
         if (content.Length == 0 || content.Length > 8000)
         {
-            throw new ArgumentException("消息长度必须在 1 到 8000 字符之间。", nameof(content));
+            throw new AssistantMessageValidationException();
         }
         var conversation = await FindOwnedAsync(conversationId, cancellationToken);
         var now = clock.GetUtcNow();
+        var calendar = AssistantCalendarContext.Create(now, timezone);
+        tools.ConfigureCalendarContext(calendar, content);
         var watermark = await db.UserDataWatermarks.AsNoTracking()
             .Where(x => x.UserId == currentUser.UserId)
             .Select(x => (long?)x.Version).FirstOrDefaultAsync(cancellationToken) ?? 0;
@@ -124,7 +136,7 @@ public sealed class AssistantService(
             db, currentUser.UserId, conversationId, long.MaxValue, now, cancellationToken);
         amapTools.SeedCandidates(conversationContext.RecentAmapPlaces);
         var cacheKey = BuildCacheKey(
-            currentUser.UserId, content, conversationContext.CacheValue, watermark, aiOptions.Value);
+            currentUser.UserId, content, conversationContext.CacheValue, watermark, aiOptions.Value, calendar);
         var cache = redis.GetDatabase();
         var bypassCache = LooksLikeLiveAmapQuestion(content);
         var cached = bypassCache ? RedisValue.Null : await cache.StringGetAsync(cacheKey);
@@ -142,9 +154,10 @@ public sealed class AssistantService(
         conversation.UpdatedAt = now;
         await db.SaveChangesAsync(cancellationToken);
 
-        if (cached.HasValue)
+        var cachedAnswer = ReadUsableCachedAnswer(cached);
+        if (cachedAnswer is not null)
         {
-            var value = JsonSerializer.Deserialize<CachedAnswer>(cached.ToString(), JsonOptions)!;
+            var value = cachedAnswer;
             await SaveAssistantAsync(conversation, value.Answer, value.Evidence, watermark, cancellationToken);
             yield return new AssistantStreamEvent("delta", new { text = value.Answer, cached = true });
             foreach (var action in value.Evidence.Actions ?? [])
@@ -164,10 +177,12 @@ public sealed class AssistantService(
             await tools.SearchMyRecordsAsync(content, limit: 5, cancellationToken: cancellationToken);
         if (LooksLikeStorylineQuestion(content))
             await tools.SearchMyStorylinesAsync(content, limit: 3, cancellationToken: cancellationToken);
-        var functions = capabilityPackages
-            .Where(package => package.IsAvailable)
-            .SelectMany(package => package.CreateTools())
-            .ToArray();
+        var availablePackages = capabilityPackages.Where(package => package.IsAvailable).ToArray();
+        await using var internalToolSession = await InternalMcpToolSession.CreateAsync(
+            availablePackages.Where(package => package.UsesInternalMcp)
+                .SelectMany(package => package.CreateTools()).Cast<AIFunction>(), cancellationToken);
+        var functions = internalToolSession.Tools.Concat(availablePackages
+            .Where(package => !package.UsesInternalMcp).SelectMany(package => package.CreateTools())).ToArray();
         var agent = new ChatClientAgent(chatClient, new ChatClientAgentOptions
         {
             Name = "PassingTraceAssistantAgent",
@@ -180,15 +195,20 @@ public sealed class AssistantService(
             },
             AIContextProviders =
             [
-                new ConversationContextProvider(conversationContext),
                 new UserMemoryContextProvider(tools, content),
+                new AssistantCalendarContextProvider(calendar),
             ],
             AllowConcurrentInvocation = false,
         }, loggerFactory, services);
         var session = await agent.CreateSessionAsync(cancellationToken);
         var answer = new StringBuilder();
-        await foreach (var update in agent.RunStreamingAsync(content, session, cancellationToken: cancellationToken))
+        var promptMessages = conversationContext.BuildPromptMessages(content);
+        await foreach (var update in agent.RunStreamingAsync(
+            promptMessages, session, cancellationToken: cancellationToken))
         {
+            AssistantStatisticsToolException.ThrowIfPresent(update.Contents);
+            AssistantToolInvocationException.ThrowIfPresent(update.Contents);
+            AssistantCompletionGuard.ThrowIfUnsuccessful(update.FinishReason);
             if (string.IsNullOrEmpty(update.Text)) continue;
             answer.Append(update.Text);
             yield return new AssistantStreamEvent("delta", new { text = update.Text, cached = false });
@@ -256,6 +276,7 @@ public sealed class AssistantService(
             finalAnswer = "我无法从你当前可检索的记录或记忆中找到足够证据，因此不作猜测。";
             yield return new AssistantStreamEvent("delta", new { text = finalAnswer, replacement = true });
         }
+        AssistantCompletionGuard.ThrowIfEmpty(finalAnswer);
         await SaveAssistantAsync(conversation, finalAnswer, evidence, watermark, cancellationToken);
         if (!bypassCache && !amapSnapshot.HasEvidence)
         {
@@ -276,7 +297,7 @@ public sealed class AssistantService(
     private async Task SaveAssistantAsync(AiConversation conversation, string answer, EvidenceBundle evidence, long watermark, CancellationToken cancellationToken)
     {
         var now = clock.GetUtcNow();
-        db.AiMessages.Add(new AiMessage
+        var message = new AiMessage
         {
             ConversationId = conversation.Id,
             UserId = currentUser.UserId,
@@ -288,11 +309,49 @@ public sealed class AssistantService(
             DataWatermark = watermark,
             CreatedAt = now,
             ExpiresAt = now.AddDays(30),
-        });
+        };
+        db.AiMessages.Add(message);
         conversation.UpdatedAt = now;
-        if (conversation.Title == "新的对话") conversation.Title = Limit(answer, 40);
         await db.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await TryCreateTitleAsync(conversation, message, cancellationToken);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            loggerFactory.CreateLogger<AssistantService>()
+                .LogWarning("会话 {ConversationId} 标题整理失败，不影响已保存的回答。", conversation.Id);
+        }
         await TryRefreshSummaryAsync(conversation.Id, cancellationToken);
+    }
+
+    private async Task TryCreateTitleAsync(AiConversation conversation, AiMessage answer, CancellationToken cancellationToken)
+    {
+        if (conversation.Title != AssistantConversationTitle.DefaultTitle) return;
+        var previousAnswerExists = await db.AiMessages.AsNoTracking().AnyAsync(
+            x => x.ConversationId == conversation.Id && x.UserId == currentUser.UserId &&
+                x.Role == AiMessageRole.Assistant && x.Id < answer.Id, cancellationToken);
+        if (previousAnswerExists) return;
+        var question = await db.AiMessages.AsNoTracking()
+            .Where(x => x.ConversationId == conversation.Id && x.UserId == currentUser.UserId &&
+                x.Role == AiMessageRole.User && x.Id < answer.Id)
+            .OrderByDescending(x => x.Id).Select(x => x.Content).FirstOrDefaultAsync(cancellationToken);
+        if (question is null) return;
+        // 先持久化安全回退标题，网络重试或后续聊天不会重复触发付费标题生成。
+        var fallback = AssistantConversationTitle.Fallback(question);
+        var claimed = await db.AiConversations.Where(x => x.Id == conversation.Id &&
+                x.UserId == currentUser.UserId && x.DeletedAt == null && x.Title == AssistantConversationTitle.DefaultTitle)
+            .ExecuteUpdateAsync(update => update.SetProperty(x => x.Title, fallback), cancellationToken);
+        if (claimed == 0) return;
+        conversation.Title = fallback;
+        db.Entry(conversation).Property(x => x.Title).OriginalValue = fallback;
+        var title = await AssistantConversationTitle.GenerateAsync(chatClient, question, answer.Content, cancellationToken);
+        if (title == fallback) return;
+        await db.AiConversations.Where(x => x.Id == conversation.Id && x.UserId == currentUser.UserId &&
+                x.DeletedAt == null && x.Title == fallback)
+            .ExecuteUpdateAsync(update => update.SetProperty(x => x.Title, title), cancellationToken);
+        conversation.Title = title;
+        db.Entry(conversation).Property(x => x.Title).OriginalValue = title;
     }
 
     private async Task TryRefreshSummaryAsync(Guid conversationId, CancellationToken cancellationToken)
@@ -351,10 +410,11 @@ public sealed class AssistantService(
         }
     }
 
-    private static string BuildCacheKey(long userId, string question, string conversationContext, long watermark, AiModelOptions options)
+    private static string BuildCacheKey(long userId, string question, string conversationContext, long watermark, AiModelOptions options,
+        AssistantCalendarContext calendar)
     {
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(
-            $"{userId}\n{question}\n{conversationContext}\n{watermark}\n{options.Assistant.Provider}\n{options.Assistant.PrimaryModel}\n{options.PromptVersion}"));
+            $"{userId}\n{question}\n{conversationContext}\n{watermark}\n{options.Assistant.Provider}\n{options.Assistant.PrimaryModel}\n{options.PromptVersion}\n{calendar.CacheValue}"));
         return $"passingtrace:ai:answer:{Convert.ToHexString(hash).ToLowerInvariant()}";
     }
 
@@ -382,5 +442,21 @@ public sealed class AssistantService(
     private static bool LooksLikeContextualFollowUp(string text) =>
         new[] { "再试", "重新", "刚才", "那个", "上一个", "第二个", "继续", "还是不行", "try again" }
             .Any(term => text.Contains(term, StringComparison.OrdinalIgnoreCase));
+    private static CachedAnswer? ReadUsableCachedAnswer(RedisValue cached)
+    {
+        if (!cached.HasValue) return null;
+        try
+        {
+            var value = JsonSerializer.Deserialize<CachedAnswer>(cached.ToString(), JsonOptions);
+            return !string.IsNullOrWhiteSpace(value?.Answer) && value.Evidence?.Records is not null &&
+                value.Evidence.Memories is not null ? value : null;
+        }
+        catch (JsonException)
+        {
+            // 旧缓存或不完整缓存不是一次成功回答；重新执行正常检索流程。
+            return null;
+        }
+    }
+
     private sealed record CachedAnswer(string Answer, EvidenceBundle Evidence);
 }

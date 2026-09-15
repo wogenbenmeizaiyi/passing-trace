@@ -13,7 +13,7 @@ using Xunit;
 
 namespace PassingTrace.Identity.IntegrationTests;
 
-public sealed class IdentityFlowTests(IdentityWebApplicationFactory factory)
+public sealed partial class IdentityFlowTests(IdentityWebApplicationFactory factory)
     : IClassFixture<IdentityWebApplicationFactory>
 {
     [Fact]

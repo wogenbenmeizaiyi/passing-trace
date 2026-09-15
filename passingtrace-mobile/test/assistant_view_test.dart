@@ -109,6 +109,33 @@ void main() {
     expect(text, isNot(contains('记录 #13')));
   });
 
+  testWidgets('Storyline 引用显示故事线标题并可点击', (tester) async {
+    String? openedStorylineId;
+    const storylineId = '9b31d202-7ad3-4b76-8677-5a711f245da0';
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: AssistantMessageContent(
+            isUser: false,
+            text: '这个月仍在执行 [Storyline #$storylineId]',
+            storylineTitles: const {storylineId: '从三公里慢慢跑到十公里'},
+            onOpenStoryline: (id) => openedStorylineId = id,
+          ),
+        ),
+      ),
+    );
+
+    expect(find.textContaining('Storyline #'), findsNothing);
+    final richText = tester
+        .widgetList<SelectableText>(find.byType(SelectableText))
+        .singleWhere(
+          (widget) => widget.textSpan!.toPlainText().contains('从三公里慢慢跑到十公里'),
+        );
+    final link = _findTappableSpan(richText.textSpan!)!;
+    (link.recognizer! as TapGestureRecognizer).onTap!.call();
+    expect(openedStorylineId, storylineId);
+  });
+
   testWidgets('回答依据默认收起，展开后才显示记录卡片', (tester) async {
     int? openedEventId;
     await tester.pumpWidget(

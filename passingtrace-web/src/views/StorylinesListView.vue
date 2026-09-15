@@ -78,7 +78,7 @@ watch(
 <template>
   <div class="app-shell">
     <WebAppHeader />
-    <main class="story-list-page">
+    <main class="workspace-main story-list-page">
       <header class="story-list-heading">
         <div>
           <p class="eyebrow">STORYLINES</p>
@@ -225,16 +225,11 @@ watch(
 </template>
 
 <style scoped>
-.story-list-page {
-  width: min(1180px, calc(100% - 48px));
-  margin: auto;
-  padding: 56px 0 88px;
-}
 .story-list-heading {
   display: flex;
   align-items: end;
   justify-content: space-between;
-  gap: 32px;
+  gap: var(--workspace-gap);
   margin-bottom: 28px;
 }
 .story-list-heading h1 {
@@ -247,6 +242,12 @@ watch(
 }
 .story-list-heading p:last-child {
   color: var(--ink-secondary);
+}
+.story-list-heading > div {
+  min-width: 0;
+}
+.story-list-heading > .button {
+  flex-shrink: 0;
 }
 .story-filter {
   padding: 18px 20px;
@@ -384,13 +385,14 @@ watch(
 }
 .story-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 18px;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 28rem), 1fr));
+  gap: var(--workspace-gap);
 }
 .story-card {
+  min-width: 0;
   min-height: 230px;
   display: grid;
-  grid-template-columns: 160px 1fr;
+  grid-template-columns: minmax(0, 28%) minmax(0, 1fr);
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
@@ -404,6 +406,8 @@ watch(
   box-shadow: var(--shadow-1);
 }
 .story-cover {
+  min-width: 0;
+  position: relative;
   display: grid;
   place-items: center;
   background: linear-gradient(145deg, var(--primary-soft), var(--surface-tint));
@@ -412,6 +416,8 @@ watch(
   font-weight: 800;
 }
 .story-cover img {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -426,13 +432,16 @@ watch(
   background: var(--surface-soft);
 }
 .story-card__body {
-  padding: 22px;
+  min-width: 0;
+  padding: clamp(16px, 1.5vw, 24px);
   display: flex;
   flex-direction: column;
+  overflow-wrap: anywhere;
 }
 .story-meta {
   margin: 0;
   display: flex;
+  flex-wrap: wrap;
   gap: 7px;
 }
 .story-meta span,
@@ -455,13 +464,16 @@ watch(
 .story-tags {
   margin-top: 13px;
   display: flex;
+  flex-wrap: wrap;
   gap: 5px;
 }
 .story-card footer {
   margin-top: auto;
   padding-top: 18px;
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
+  gap: 8px 16px;
   color: var(--ink-tertiary);
   font-size: 11px;
 }
@@ -489,10 +501,6 @@ watch(
   color: var(--ink-secondary);
 }
 @media (max-width: 800px) {
-  .story-list-page {
-    width: calc(100% - 32px);
-    padding-top: 36px;
-  }
   .story-list-heading {
     align-items: start;
     flex-direction: column;
@@ -503,14 +511,19 @@ watch(
   .story-grid {
     grid-template-columns: 1fr;
   }
-  .story-card {
-    grid-template-columns: 110px 1fr;
-  }
   .story-filter__controls {
     grid-template-columns: 1fr;
   }
   .clear-filter {
     justify-self: start;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .story-card {
+    transition: none;
+  }
+  .story-card:hover {
+    transform: none;
   }
 }
 .sr-only {

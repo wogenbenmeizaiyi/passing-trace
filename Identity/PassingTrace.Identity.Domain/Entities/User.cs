@@ -8,6 +8,12 @@ namespace PassingTrace.Identity.Domain.Entities;
 /// </summary>
 public sealed class User : IdentityUser<long>
 {
+    public string? Nickname { get; set; }
+    public string? Bio { get; set; }
+    /// <summary>私有头像对象键；不出现在令牌、日志或个人资料合同中。</summary>
+    public string? AvatarKey { get; set; }
+    public Guid ProfileVersion { get; set; }
+
     /// <summary>账号的业务状态；Disabled 用户即使凭据正确也不能继续授权。</summary>
     public UserStatus Status { get; set; } = UserStatus.Active;
 

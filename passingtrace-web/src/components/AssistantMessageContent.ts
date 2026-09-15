@@ -1,11 +1,13 @@
 import { defineComponent, h, type PropType, type VNodeChild } from 'vue'
 import { RouterLink } from 'vue-router'
+import { recordFromConversation, storylineFromConversation } from '@/utils/assistant-navigation'
 
 type InlineToken =
   | { type: 'text'; value: string }
   | { type: 'strong'; value: string }
   | { type: 'code'; value: string }
   | { type: 'event'; eventId: number; value: string }
+  | { type: 'storyline'; storylineId: string; value: string }
 
 type Block =
   | { type: 'heading'; level: number; content: string }
@@ -13,20 +15,36 @@ type Block =
   | { type: 'list'; ordered: boolean; items: string[] }
   | { type: 'rule' }
 
-function inlineTokens(source: string, titles: Map<number, string>): InlineToken[] {
+function inlineTokens(
+  source: string,
+  recordTitles: Map<number, string>,
+  storylineTitles: Map<string, string>,
+): InlineToken[] {
   const tokens: InlineToken[] = []
-  const pattern = /\[Event\s*#(\d+)\]|\*\*(.+?)\*\*|`([^`]+)`/gi
+  const pattern =
+    /\[Event\s*#(\d+)\]|\[Storyline\s*#([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\]|\*\*(.+?)\*\*|`([^`]+)`/gi
   let cursor = 0
   for (const match of source.matchAll(pattern)) {
     const index = match.index ?? 0
     if (index > cursor) tokens.push({ type: 'text', value: source.slice(cursor, index) })
     if (match[1]) {
       const eventId = Number(match[1])
-      tokens.push({ type: 'event', eventId, value: titles.get(eventId) || '查看记录' })
+      tokens.push({
+        type: 'event',
+        eventId,
+        value: recordTitles.get(eventId) || '查看记录',
+      })
     } else if (match[2] !== undefined) {
-      tokens.push({ type: 'strong', value: match[2] })
+      const storylineId = match[2].toLowerCase()
+      tokens.push({
+        type: 'storyline',
+        storylineId,
+        value: storylineTitles.get(storylineId) || '查看故事线',
+      })
+    } else if (match[3] !== undefined) {
+      tokens.push({ type: 'strong', value: match[3] })
     } else {
-      tokens.push({ type: 'code', value: match[3]! })
+      tokens.push({ type: 'code', value: match[4]! })
     }
     cursor = index + match[0].length
   }
@@ -86,23 +104,47 @@ export default defineComponent({
   name: 'AssistantMessageContent',
   props: {
     content: { type: String, required: true },
+    conversationId: { type: String as PropType<string | null>, default: null },
     records: {
       type: Array as PropType<Array<{ eventId: number; title: string | null }>>,
+      default: () => [],
+    },
+    storylines: {
+      type: Array as PropType<Array<{ storylineId: string; title: string | null }>>,
       default: () => [],
     },
   },
   setup(props) {
     const renderInline = (source: string): VNodeChild[] => {
-      const titles = new Map(
+      const recordTitles = new Map(
         props.records.map((record) => [record.eventId, record.title?.trim() || '']),
       )
-      return inlineTokens(source, titles).map((token) => {
+      const storylineTitles = new Map(
+        props.storylines.map((storyline) => [
+          storyline.storylineId.toLowerCase(),
+          storyline.title?.trim() || '',
+        ]),
+      )
+      return inlineTokens(source, recordTitles, storylineTitles).map((token) => {
         if (token.type === 'strong') return h('strong', token.value)
         if (token.type === 'code') return h('code', token.value)
         if (token.type === 'event') {
           return h(
             RouterLink,
-            { class: 'record-citation', to: `/events/${token.eventId}` },
+            {
+              class: 'record-citation',
+              to: recordFromConversation(token.eventId, props.conversationId),
+            },
+            { default: () => token.value },
+          )
+        }
+        if (token.type === 'storyline') {
+          return h(
+            RouterLink,
+            {
+              class: 'storyline-citation',
+              to: storylineFromConversation(token.storylineId, props.conversationId),
+            },
             { default: () => token.value },
           )
         }

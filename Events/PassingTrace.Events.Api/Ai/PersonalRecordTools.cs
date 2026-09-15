@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.ComponentModel.DataAnnotations;
 using System.Globalization;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
@@ -12,7 +13,7 @@ using Pgvector.EntityFrameworkCore;
 
 namespace PassingTrace.Events.Api.Ai;
 
-/// <summary>Agent 可调用的四个只读 Typed Tools。所有查询首先强制 user_id 过滤。</summary>
+/// <summary>通过内部 MCP 暴露的只读工具。所有查询首先强制当前用户过滤。</summary>
 public sealed class PersonalRecordTools(
     TraceDbContext db,
     CurrentUserContext currentUser,
@@ -22,11 +23,16 @@ public sealed class PersonalRecordTools(
     private readonly List<RecordEvidence> _recordEvidence = [];
     private readonly List<MemoryEvidence> _memoryEvidence = [];
     private string? _aggregateEvidence;
+    private string? _aggregateTimeRange;
+    private AssistantCalendarRange? _currentMonthRange;
     private readonly List<PlaceEvidence> _placeEvidence = [];
     private readonly HashSet<long> _retrievedLocationIds = [];
     private AssistantAction? _navigationTarget;
     private readonly List<StorylineEvidence> _storylineEvidence = [];
     private readonly HashSet<Guid> _retrievedStorylineIds = [];
+
+    public void ConfigureCalendarContext(AssistantCalendarContext calendar, string question) =>
+        _currentMonthRange = calendar.ResolveCurrentMonth(question);
 
     public long? ResolvePreferredNavigationLocationId(string answer)
     {
@@ -44,16 +50,17 @@ public sealed class PersonalRecordTools(
     public EvidenceBundle Snapshot => new(
         _recordEvidence.GroupBy(x => x.EventId).Select(x => x.First()).ToArray(),
         _memoryEvidence.GroupBy(x => x.MemoryId).Select(x => x.First()).ToArray(),
-        _aggregateEvidence, Places: _placeEvidence.GroupBy(x => x.LocationId).Select(x => x.First()).ToArray(),
+        _aggregateEvidence, TimeRange: _aggregateTimeRange,
+        Places: _placeEvidence.GroupBy(x => x.LocationId).Select(x => x.First()).ToArray(),
         NavigationTarget: _navigationTarget,
         Storylines: _storylineEvidence.GroupBy(x => x.StorylineId).Select(x => x.First()).ToArray());
 
     [Description("搜索当前登录用户自己的故事线，适合旅行过程、项目阶段、活动纪实和生命周期问题；不接受 userId。")]
     public async Task<IReadOnlyList<StorylineEvidence>> SearchMyStorylinesAsync(
-        [Description("自然语言关键词或问题")] string query,
+        [MaxLength(8000), Description("自然语言关键词或问题")] string query,
         [Description("故事线主分类 key，可空")] string? category = null,
-        [Description("Ongoing 或 Completed，可空")] string? status = null,
-        [Description("最多返回 1-10 条")] int limit = 5,
+        [RegularExpression("^(Ongoing|Completed)$"), Description("Ongoing 或 Completed，可空")] string? status = null,
+        [Range(1, 10), Description("最多返回 1-10 条")] int limit = 5,
         CancellationToken cancellationToken = default)
     {
         limit = Math.Clamp(limit, 1, 10);
@@ -156,19 +163,19 @@ public sealed class PersonalRecordTools(
 
     [Description("搜索当前登录用户自己的记录。支持关键词、时间、记录类型、状态、语义类别和地点；返回已排序的证据，不接受 userId。")]
     public async Task<EvidenceBundle> SearchMyRecordsAsync(
-        [Description("自然语言关键词或问题")] string query,
-        [Description("ISO-8601 起始时间，可空")] string? from = null,
-        [Description("ISO-8601 结束时间，可空")] string? to = null,
-        [Description("Trace 或 Plan，可空")] string? kind = null,
-        [Description("Completed、Planned、Cancelled 等状态，可空")] string? status = null,
+        [MaxLength(8000), Description("自然语言关键词或问题")] string query,
+        [DataType(DataType.DateTime), Description("ISO-8601 起始时间，带时区，可空")] string? from = null,
+        [DataType(DataType.DateTime), Description("ISO-8601 结束时间，带时区，可空")] string? to = null,
+        [RegularExpression("^(Trace|Plan)$"), Description("Trace 或 Plan，可空")] string? kind = null,
+        [RegularExpression("^(Completed|Planned|Cancelled)$"), Description("Completed、Planned、Cancelled，可空")] string? status = null,
         [Description("主分类 taxonomy key，可空")] string? category = null,
         [Description("行为标签 taxonomy key，可空")] string? tag = null,
         [Description("地点名称，可空")] string? location = null,
         [Description("行政区 adCode，可空")] string? adCode = null,
-        [Description("中心纬度，可空")] decimal? centerLatitude = null,
-        [Description("中心经度，可空")] decimal? centerLongitude = null,
-        [Description("半径米数，可空")] int? radiusMeters = null,
-        [Description("最多返回 1-20 条")] int limit = 10,
+        [Range(-90, 90), Description("中心纬度，可空")] decimal? centerLatitude = null,
+        [Range(-180, 180), Description("中心经度，可空")] decimal? centerLongitude = null,
+        [Range(100, 100000), Description("半径米数，可空")] int? radiusMeters = null,
+        [Range(1, 20), Description("最多返回 1-20 条")] int limit = 10,
         CancellationToken cancellationToken = default)
     {
         limit = Math.Clamp(limit, 1, 20);
@@ -311,16 +318,23 @@ public sealed class PersonalRecordTools(
         return new EvidenceBundle(records, [], TimeRange: BuildTimeRange(from, to), Places: places);
     }
 
-    [Description("对当前用户记录执行白名单统计。metric 仅允许 count、expense_total、trend、plan_completion_rate；不执行模型生成的 SQL。")]
+    [Description("对当前用户记录执行精确统计：金额或消费合计用 expense_total，记录数量用 count，月度趋势用 trend，计划完成率用 plan_completion_rate。不接受其他统计类型，不执行模型生成的 SQL。用户询问所有记录时不要添加时间范围；缺少金额事实不能解释为没有消费。")]
     public async Task<EvidenceBundle> AggregateMyRecordsAsync(
-        string metric,
-        string? from = null,
-        string? to = null,
-        string? currency = null,
-        string? category = null,
-        string? tag = null,
+        [Description("必填：金额合计 expense_total；数量 count；月度趋势 trend；计划完成率 plan_completion_rate。")] RecordAggregateMetric metric,
+        [DataType(DataType.DateTime), Description("时间范围起点，ISO 8601，带时区；统计全部时留空。")] string? from = null,
+        [DataType(DataType.DateTime), Description("时间范围终点，ISO 8601，带时区；统计全部时留空。")] string? to = null,
+        [RegularExpression("^[A-Za-z]{3}$"), Description("金额统计的币种代码，默认 CNY；不同币种不混合求和。")] string? currency = null,
+        [Description("已知记录主分类 key，可空，不猜测不存在的分类。")] string? category = null,
+        [Description("已知记录标签 key，可空。")] string? tag = null,
         CancellationToken cancellationToken = default)
     {
+        if (!Enum.IsDefined(metric)) throw new AssistantStatisticsToolException();
+        if (_currentMonthRange is not null)
+        {
+            // Never let a model substitute its training-date month for an explicit "this month".
+            from = _currentMonthRange.FromText;
+            to = _currentMonthRange.ToText;
+        }
         var userId = currentUser.UserId;
         var events = db.Events.AsNoTracking().Where(x => x.UserId == userId && x.DeletedAt == null);
         if (DateTimeOffset.TryParse(from, out var fromValue)) events = events.Where(x => (x.HappenedAt ?? x.CreatedAt) >= fromValue.ToUniversalTime());
@@ -338,21 +352,22 @@ public sealed class PersonalRecordTools(
                 x.Type == EventLabelType.BehaviorTag && x.TaxonomyKey == key));
         }
 
-        object result = metric.ToLowerInvariant() switch
+        object result = metric switch
         {
-            "count" => new { metric = "count", value = await events.LongCountAsync(cancellationToken) },
-            "expense_total" => await AggregateExpensesAsync(events, userId, currency, cancellationToken),
-            "plan_completion_rate" => await AggregateCompletionAsync(events, cancellationToken),
-            "trend" => await AggregateTrendAsync(events, cancellationToken),
-            _ => throw new ArgumentOutOfRangeException(nameof(metric), "只支持 count、expense_total、trend、plan_completion_rate。"),
+            RecordAggregateMetric.Count => new { metric = "count", value = await events.LongCountAsync(cancellationToken) },
+            RecordAggregateMetric.ExpenseTotal => await AggregateExpensesAsync(events, userId, currency, cancellationToken),
+            RecordAggregateMetric.PlanCompletionRate => await AggregateCompletionAsync(events, cancellationToken),
+            RecordAggregateMetric.Trend => await AggregateTrendAsync(events, cancellationToken),
+            _ => throw new AssistantStatisticsToolException(),
         };
         _aggregateEvidence = JsonSerializer.Serialize(result);
-        return new EvidenceBundle([], [], _aggregateEvidence, BuildTimeRange(from, to));
+        _aggregateTimeRange = BuildTimeRange(from, to);
+        return new EvidenceBundle([], [], _aggregateEvidence, _aggregateTimeRange);
     }
 
     [Description("读取 SearchMyRecords 已返回记录的原文、图片描述、时间和语义证据。不能读取未先检索的 Event。")]
     public async Task<IReadOnlyList<RecordEvidenceDetail>> GetMyRecordEvidenceAsync(
-        IReadOnlyList<long> eventIds,
+        [MaxLength(20)] IReadOnlyList<long> eventIds,
         CancellationToken cancellationToken = default)
     {
         var ids = eventIds.Distinct().Where(_retrievedEventIds.Contains).Take(20).ToArray();
@@ -381,8 +396,8 @@ public sealed class PersonalRecordTools(
 
     [Description("搜索当前用户有证据的长期记忆。拒绝状态不会返回；不接受 userId。")]
     public async Task<IReadOnlyList<MemoryEvidence>> SearchMyMemoriesAsync(
-        string query,
-        int limit = 5,
+        [MaxLength(8000)] string query,
+        [Range(1, 10)] int limit = 5,
         CancellationToken cancellationToken = default)
     {
         var userId = currentUser.UserId;
@@ -416,7 +431,7 @@ public sealed class PersonalRecordTools(
     }
 
     [Description("搜索当前用户已确认的历史地点，不接受 userId。")]
-    public async Task<IReadOnlyList<PlaceEvidence>> SearchMyPlacesAsync(string query, int limit = 10,
+    public async Task<IReadOnlyList<PlaceEvidence>> SearchMyPlacesAsync([MaxLength(8000)] string query, [Range(1, 20)] int limit = 10,
         CancellationToken cancellationToken = default)
     {
         var userId = currentUser.UserId;
@@ -437,7 +452,7 @@ public sealed class PersonalRecordTools(
     }
 
     [Description("读取本轮已经检索到的历史地点证据。")]
-    public Task<IReadOnlyList<PlaceEvidence>> GetMyPlaceEvidenceAsync(IReadOnlyList<long> locationIds,
+    public Task<IReadOnlyList<PlaceEvidence>> GetMyPlaceEvidenceAsync([MaxLength(20)] IReadOnlyList<long> locationIds,
         CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<PlaceEvidence>>(
             _placeEvidence.Where(x => locationIds.Contains(x.LocationId) && _retrievedLocationIds.Contains(x.LocationId)).ToArray());
 
@@ -474,14 +489,27 @@ public sealed class PersonalRecordTools(
     {
         currency = string.IsNullOrWhiteSpace(currency) ? "CNY" : currency.ToUpperInvariant();
         var ids = events.Select(x => new { x.Id, x.CurrentSourceRevision });
-        var total = await (
+        var amounts = (
             from expense in db.ExpenseFacts.AsNoTracking()
             join run in db.EventSemanticRuns.AsNoTracking() on expense.SemanticRunId equals run.Id
             join evt in ids on new { Id = run.EventId, CurrentSourceRevision = run.SourceRevision }
                 equals new { evt.Id, evt.CurrentSourceRevision }
             where expense.UserId == userId && run.UserId == userId && run.Status == SemanticRunStatus.Completed && expense.Currency == currency
-            select expense.Amount).SumAsync(cancellationToken);
-        return new { metric = "expense_total", value = total, currency };
+            select expense.Amount);
+        var total = await amounts.GroupBy(_ => 1)
+            .Select(group => new { Value = group.Sum(), Count = group.LongCount() })
+            .SingleOrDefaultAsync(cancellationToken);
+        return new
+        {
+            metric = "expense_total",
+            value = total is null ? (decimal?)null : total.Value,
+            currency,
+            amountFactCount = total?.Count ?? 0,
+            hasAmountData = total is not null,
+            explanation = total is null
+                ? "所选范围内没有可核实的金额，无法确认消费合计；不能解释为消费为零。"
+                : "仅汇总所选范围内已确认的金额，不代表没有记下的实际消费。",
+        };
     }
 
     private static async Task<object> AggregateCompletionAsync(IQueryable<Event> events, CancellationToken cancellationToken)
@@ -495,9 +523,10 @@ public sealed class PersonalRecordTools(
     private static async Task<object> AggregateTrendAsync(IQueryable<Event> events, CancellationToken cancellationToken)
     {
         var rows = await events.GroupBy(x => new { x.CreatedAt.Year, x.CreatedAt.Month })
-            .Select(x => new { month = $"{x.Key.Year:D4}-{x.Key.Month:D2}", count = x.LongCount() })
-            .OrderBy(x => x.month).Take(24).ToListAsync(cancellationToken);
-        return new { metric = "trend", points = rows };
+            .Select(x => new { x.Key.Year, x.Key.Month, count = x.LongCount() })
+            .OrderBy(x => x.Year).ThenBy(x => x.Month).Take(24).ToListAsync(cancellationToken);
+        // Formatting is a presentation step; PostgreSQL sorts the numeric buckets before materializing.
+        return new { metric = "trend", points = rows.Select(x => new { month = $"{x.Year:D4}-{x.Month:D2}", x.count }).ToArray() };
     }
 
     private static string Snippet(string text, string query)

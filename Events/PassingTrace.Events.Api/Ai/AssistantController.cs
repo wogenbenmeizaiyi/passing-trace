@@ -17,6 +17,36 @@ public sealed class AssistantController(
     public async Task<ActionResult<IReadOnlyList<AiConversationResponse>>> ListAsync(CancellationToken cancellationToken) =>
         Ok(await service.ListAsync(cancellationToken));
 
+    [HttpGet("page")]
+    public async Task<ActionResult<AiConversationPageResponse>> ListPageAsync(
+        CancellationToken cancellationToken, [FromQuery] int limit = 20, [FromQuery] string? cursor = null)
+    {
+        try
+        {
+            return Ok(await service.ListPageAsync(limit, cursor, cancellationToken));
+        }
+        catch (ArgumentException)
+        {
+            return BadRequest(new { message = "会话列表的位置已失效，请刷新后重试。" });
+        }
+    }
+
+    [HttpGet("{id:guid}/summary")]
+    public async Task<ActionResult<AiConversationResponse>> GetSummaryAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await service.GetSummaryAsync(id, cancellationToken);
+        return result is null ? NotFound() : Ok(result);
+    }
+
+    [HttpGet("{id:guid}/messages-page")]
+    public async Task<ActionResult<AiMessagePageResponse>> GetMessagesPageAsync(
+        Guid id, CancellationToken cancellationToken, [FromQuery] int limit = 30, [FromQuery] long? beforeId = null)
+    {
+        if (beforeId is <= 0) return BadRequest(new { message = "聊天记录的位置已失效，请重新打开对话。" });
+        var result = await service.GetMessagesPageAsync(id, limit, beforeId, cancellationToken);
+        return result is null ? NotFound() : Ok(result);
+    }
+
     [HttpPost]
     public async Task<ActionResult<AiConversationResponse>> CreateAsync(
         [FromBody] CreateConversationRequest request,
@@ -52,7 +82,7 @@ public sealed class AssistantController(
         Response.Headers.Append("X-Accel-Buffering", "no");
         try
         {
-            await foreach (var item in service.SendAsync(id, request.Content, cancellationToken))
+            await foreach (var item in service.SendAsync(id, request.Content, cancellationToken, request.Timezone))
             {
                 await WriteEventAsync(item.Type, item.Data, cancellationToken);
             }

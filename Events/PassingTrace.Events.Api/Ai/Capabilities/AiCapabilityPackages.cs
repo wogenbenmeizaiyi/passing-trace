@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization.Metadata;
 using Microsoft.Extensions.AI;
 using PassingTrace.Events.Api.Ai.Amap;
@@ -10,6 +11,7 @@ public interface IAiCapabilityPackage
     string Key { get; }
     bool IsAvailable { get; }
     IReadOnlyList<string> Capabilities { get; }
+    bool UsesInternalMcp => true;
     IReadOnlyList<AITool> CreateTools();
 }
 
@@ -20,9 +22,23 @@ internal static class AiFunctionToolFactory
         TypeInfoResolver = new DefaultJsonTypeInfoResolver(),
     };
 
-    public static AIFunction Create<T>(T target, string methodName, string name, string description)
+    public static AIFunction Create<T>(T target, string methodName, string name, string? description = null)
         where T : class =>
-        AIFunctionFactory.Create(typeof(T).GetMethod(methodName)!, target, name, description, JsonOptions);
+        AIFunctionFactory.Create(typeof(T).GetMethod(methodName)!, target, new AIFunctionFactoryOptions
+        {
+            Name = name,
+            Description = description,
+            SerializerOptions = JsonOptions,
+            JsonSchemaCreateOptions = new AIJsonSchemaCreateOptions
+            {
+                TransformSchemaNode = (context, schema) =>
+                {
+                    if (context.GetCustomAttribute<DataTypeAttribute>()?.DataType == DataType.DateTime)
+                        schema["format"] = "date-time";
+                    return schema;
+                },
+            },
+        });
 }
 
 public sealed class PersonalRecordsCapabilityPackage(PersonalRecordTools tools) : IAiCapabilityPackage
@@ -36,8 +52,8 @@ public sealed class PersonalRecordsCapabilityPackage(PersonalRecordTools tools) 
     [
         AiFunctionToolFactory.Create(tools, nameof(PersonalRecordTools.SearchMyRecordsAsync), "SearchMyRecords",
             "搜索当前用户自己的记录，返回按 RRF 排序的记录及其已确认地点；适合‘我最近吃过/去过’等语义查询。"),
-        AiFunctionToolFactory.Create(tools, nameof(PersonalRecordTools.AggregateMyRecordsAsync), "AggregateMyRecords",
-            "执行白名单次数、金额、趋势、完成率统计。"),
+        new StatisticsAIFunction(AiFunctionToolFactory.Create(tools,
+            nameof(PersonalRecordTools.AggregateMyRecordsAsync), "AggregateMyRecords")),
         AiFunctionToolFactory.Create(tools, nameof(PersonalRecordTools.GetMyRecordEvidenceAsync), "GetMyRecordEvidence",
             "获取已检索记录的原文和语义证据。"),
         AiFunctionToolFactory.Create(tools, nameof(PersonalRecordTools.SearchMyMemoriesAsync), "SearchMyMemories",
@@ -57,6 +73,8 @@ public sealed class PersonalRecordsCapabilityPackage(PersonalRecordTools tools) 
 
 public sealed class AmapCapabilityPackage(AmapAiTools tools) : IAiCapabilityPackage
 {
+    // This adapter already calls the external Amap MCP server and enforces its quota policy.
+    public bool UsesInternalMcp => false;
     public string Key => "amap";
     public bool IsAvailable => tools.IsAvailable;
     public IReadOnlyList<string> Capabilities { get; } =

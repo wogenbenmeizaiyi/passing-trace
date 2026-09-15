@@ -1,5 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+
+import 'profile/profile_api.dart';
+import 'profile/profile_controller.dart';
+import 'profile/account_avatar.dart';
+import 'profile/account_center_view.dart';
 
 import 'auth_service.dart';
 import 'theme/appearance_controller.dart';
@@ -388,16 +395,57 @@ class AccountHome extends StatefulWidget {
   State<AccountHome> createState() => _AccountHomeState();
 }
 
-class _AccountHomeState extends State<AccountHome> {
+class _AccountHomeState extends State<AccountHome> with WidgetsBindingObserver {
+  late final ProfileController _profile;
   bool _busy = false;
   int _section = 1;
 
   @override
   void initState() {
     super.initState();
+    _profile = ProfileController(
+      api: ProfileApi(widget.auth),
+      session: () => widget.session,
+    )..addListener(_profileChanged);
+    WidgetsBinding.instance.addObserver(this);
+    unawaited(_profile.refresh().catchError((Object _) {}));
     if (BuildEnvironment.current.isProduction) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _checkForUpdate());
     }
+  }
+
+  void _profileChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_profile.refresh().catchError((Object _) {}));
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _profile.dispose();
+    super.dispose();
+  }
+
+  Future<void> _openProfile({bool fromDrawer = true}) async {
+    if (fromDrawer) Navigator.of(context).pop();
+    if (!mounted) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => AccountCenterView(
+          controller: _profile,
+          onSignOut: () async {
+            Navigator.of(context).popUntil((route) => route.isFirst);
+            await _clear();
+          },
+        ),
+      ),
+    );
   }
 
   Future<void> _checkForUpdate() async {
@@ -473,7 +521,12 @@ class _AccountHomeState extends State<AccountHome> {
     await Future<void>.delayed(const Duration(milliseconds: 160));
     if (!mounted) return;
     await Navigator.of(context).push<void>(
-      MaterialPageRoute(builder: (_) => SettingsView(onSignOut: _clear)),
+      MaterialPageRoute(
+        builder: (_) => SettingsView(
+          onSignOut: _clear,
+          onOpenProfile: () => _openProfile(fromDrawer: false),
+        ),
+      ),
     );
   }
 
@@ -648,13 +701,25 @@ class _AccountHomeState extends State<AccountHome> {
                 padding: const EdgeInsets.fromLTRB(10, 2, 2, 14),
                 child: Row(
                   children: [
+                    Semantics(
+                      label: '进入用户中心',
+                      button: true,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(28),
+                        onTap: _openProfile,
+                        child: AccountAvatar(bytes: _profile.avatar),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
                     Expanded(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            '我的星期八',
+                            _profile.nickname,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               color: context.traceColors.ink,
                               fontSize: 17,

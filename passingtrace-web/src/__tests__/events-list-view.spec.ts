@@ -39,6 +39,7 @@ function event(id: number, title: string, happenedAt: string): EventResponse {
 
 describe('记录归档层级', () => {
   beforeEach(() => {
+    vi.clearAllMocks()
     setActivePinia(createPinia())
     useAuthStore().user = {
       access_token: 'token',
@@ -82,5 +83,37 @@ describe('记录归档层级', () => {
     expect(olderMonth.attributes('aria-expanded')).toBe('false')
     await olderMonth.trigger('click')
     expect(wrapper.text()).toContain('去年记录')
+  })
+
+  it('月份快捷入口展开对应年份和月份并聚焦标题', async () => {
+    const scrollIntoView = vi.fn<HTMLElement['scrollIntoView']>()
+    const original = HTMLElement.prototype.scrollIntoView
+    HTMLElement.prototype.scrollIntoView = scrollIntoView
+    const wrapper = mount(EventsListView, {
+      attachTo: document.body,
+      global: {
+        stubs: {
+          WebAppHeader: true,
+          RouterLink: { props: ['to'], template: '<a :href="to"><slot /></a>' },
+        },
+      },
+    })
+    try {
+      await flushPromises()
+      expect(wrapper.text()).not.toContain('去年记录')
+      await wrapper
+        .get('nav[aria-label="按月份查找记录"] button[aria-label="查看2025年12 月记录"]')
+        .trigger('click')
+      await flushPromises()
+      expect(wrapper.text()).toContain('去年记录')
+      const heading = wrapper.get('#archive-2025-12')
+      expect(heading.attributes('aria-expanded')).toBe('true')
+      expect(document.activeElement).toBe(heading.element)
+      expect(scrollIntoView).toHaveBeenCalledWith({ block: 'start' })
+      expect(eventsApi.list).toHaveBeenCalledTimes(1)
+    } finally {
+      wrapper.unmount()
+      HTMLElement.prototype.scrollIntoView = original
+    }
   })
 })

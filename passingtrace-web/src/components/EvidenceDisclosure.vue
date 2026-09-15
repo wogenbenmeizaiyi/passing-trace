@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { RouterLink } from 'vue-router'
+import { recordFromConversation } from '@/utils/assistant-navigation'
 
 defineProps<{
   records: Array<{ eventId: number; title: string | null }>
+  conversationId?: string | null
 }>()
 </script>
 
@@ -22,7 +24,11 @@ defineProps<{
       </svg>
     </summary>
     <div class="evidence-list">
-      <RouterLink v-for="record in records" :key="record.eventId" :to="`/events/${record.eventId}`">
+      <RouterLink
+        v-for="record in records"
+        :key="record.eventId"
+        :to="recordFromConversation(record.eventId, conversationId)"
+      >
         <strong>{{ record.title || '未命名记录' }}</strong>
         <small>打开记录</small>
       </RouterLink>

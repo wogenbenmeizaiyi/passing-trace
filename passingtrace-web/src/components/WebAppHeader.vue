@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { RouterLink } from 'vue-router'
+import { RouterLink, useRoute } from 'vue-router'
+import AccountAvatar from '@/components/AccountAvatar.vue'
+import { useProfileStore } from '@/stores/profile'
 
 import BrandMark from '@/components/BrandMark.vue'
 import AppearanceMenu from '@/components/AppearanceMenu.vue'
@@ -17,6 +19,8 @@ const props = withDefaults(
 const emit = defineEmits<{ download: [] }>()
 
 const auth = useAuthStore()
+const account = useProfileStore()
+const route = useRoute()
 
 function login() {
   const destination = props.variant === 'marketing' ? defaultWebEntry() : window.location.pathname
@@ -58,9 +62,17 @@ function download(event: MouseEvent) {
       <div class="site-header__actions">
         <AppearanceMenu />
         <template v-if="auth.isAuthenticated">
-          <span class="signed-user" :title="auth.username"
-            ><i aria-hidden="true"></i><span>{{ auth.username || '已登录' }}</span></span
+          <RouterLink
+            class="account-entry"
+            :to="{
+              path: '/account',
+              query: route.path === '/account' ? route.query : { from: route.fullPath },
+            }"
+            aria-label="进入用户中心"
+            :title="account.nickname"
           >
+            <AccountAvatar :src="account.avatarUrl" /><span>{{ account.nickname }}</span>
+          </RouterLink>
           <RouterLink
             v-if="variant === 'marketing'"
             class="button button-primary button-compact"
@@ -85,6 +97,25 @@ function download(event: MouseEvent) {
 </template>
 
 <style scoped>
+.account-entry {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  text-decoration: none;
+  color: var(--ink);
+}
+.account-entry > span:last-child {
+  max-width: 9em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (max-width: 760px) {
+  .account-entry > span:last-child {
+    display: none;
+  }
+}
 .site-nav a[aria-disabled='true'] {
   pointer-events: none;
   opacity: 0.55;

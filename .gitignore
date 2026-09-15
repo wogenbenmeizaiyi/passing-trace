@@ -20,6 +20,10 @@ coverage.*
 /output/
 /tmp/
 
+# Python development scripts and test caches
+__pycache__/
+*.py[cod]
+
 # Local tooling and temporary review artifacts
 .codex-tmp/
 .agents/

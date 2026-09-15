@@ -15,11 +15,17 @@ import {
   type EventResponse,
 } from '@/api/events-types'
 import { useAuthStore } from '@/stores/auth'
+import { conversationIdFromQuery } from '@/utils/assistant-navigation'
 import { formatLocal } from '@/utils/datetime'
 
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
+const conversationId = computed(() => conversationIdFromQuery(route.query.conversation))
+const conversationRoute = computed(() => ({
+  path: '/assistant',
+  query: { conversation: conversationId.value },
+}))
 
 const item = ref<EventResponse | null>(null)
 const loading = ref(false)
@@ -194,10 +200,26 @@ onUnmounted(() => {
   <div class="app-shell">
     <WebAppHeader />
 
-    <main class="detail-page">
-      <p class="back-link">
-        <RouterLink to="/events">← 返回记录列表</RouterLink>
-      </p>
+    <main class="detail-page workspace-main">
+      <nav class="back-link" aria-label="返回导航">
+        <RouterLink
+          v-if="conversationId"
+          class="conversation-return"
+          :to="conversationRoute"
+          replace
+        >
+          <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="m12 5-7 7 7 7M5 12h14" />
+          </svg>
+          返回原对话
+        </RouterLink>
+        <RouterLink to="/events" :class="{ 'secondary-return': conversationId }">
+          <svg v-if="!conversationId" class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="m12 5-7 7 7 7M5 12h14" />
+          </svg>
+          {{ conversationId ? '查看记录列表' : '返回记录列表' }}
+        </RouterLink>
+      </nav>
 
       <p v-if="!auth.isAuthenticated" class="empty-state">
         请先 <button class="inline-link inline-login" @click="auth.login()">登录</button> 后查看。
@@ -229,172 +251,191 @@ onUnmounted(() => {
           </div>
         </header>
 
-        <div class="detail-title-row">
-          <h1 class="detail-title">{{ item.title ?? '（无标题）' }}</h1>
-          <button
-            class="semantic-toggle"
-            :class="{ active: showSemantic }"
-            type="button"
-            :aria-label="showSemantic ? '收起 AI 分析' : '查看 AI 分析'"
-            :aria-expanded="showSemantic"
-            aria-controls="event-semantic-panel"
-            :title="showSemantic ? '收起 AI 分析' : '查看 AI 分析'"
-            @click="toggleSemantic"
-          >
-            <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
-              <path
-                d="M12 3c.8 4.5 2.5 6.2 7 7-4.5.8-6.2 2.5-7 7-.8-4.5-2.5-6.2-7-7 4.5-.8 6.2-2.5 7-7Z"
-              />
-              <path
-                d="M19 16c.3 1.8 1.2 2.7 3 3-1.8.3-2.7 1.2-3 3-.3-1.8-1.2-2.7-3-3 1.8-.3 2.7-1.2 3-3Z"
-              />
-            </svg>
-          </button>
-        </div>
-        <div
-          v-if="
-            item.effectiveClassification.primaryCategory || item.effectiveClassification.tags.length
-          "
-          class="label-row"
-        >
-          <span v-if="item.effectiveClassification.primaryCategory" class="badge kind">{{
-            item.effectiveClassification.primaryCategory.displayName
-          }}</span>
-          <span
-            v-for="tag in item.effectiveClassification.tags"
-            :key="tag.taxonomyKey ?? tag.displayName"
-            class="badge status"
-          >
-            {{ tag.origin === 'ai' ? '✦ ' : '' }}{{ tag.displayName }}
-          </span>
-        </div>
-
-        <Transition name="semantic-panel">
-          <section
-            v-if="showSemantic"
-            id="event-semantic-panel"
-            class="semantic-card"
-            :data-status="semantic?.status ?? item.semanticStatus"
-            aria-label="AI 分析详情"
-            aria-live="polite"
-          >
-            <div>
-              <p class="section-label">AI 分析 · {{ semantic?.status ?? item.semanticStatus }}</p>
-              <p v-if="semantic?.summary ?? item.semanticSummary">
-                {{ semantic?.summary ?? item.semanticSummary }}
-              </p>
-              <p v-else-if="semanticLoading">正在读取详细分析…</p>
-              <p v-else>Worker 会在后台分析正文与图片，记录保存不需要等待。</p>
-              <small v-if="semantic?.model"
-                >{{ semantic.model }} · {{ semantic.pipelineVersion }}</small
+        <div class="detail-workspace">
+          <article class="detail-content" aria-label="记录内容">
+            <div class="detail-title-row">
+              <h1 class="detail-title">{{ item.title ?? '（无标题）' }}</h1>
+              <button
+                class="semantic-toggle"
+                :class="{ active: showSemantic }"
+                type="button"
+                :aria-label="showSemantic ? '收起 AI 分析' : '查看 AI 分析'"
+                :aria-expanded="showSemantic"
+                aria-controls="event-semantic-panel"
+                :title="showSemantic ? '收起 AI 分析' : '查看 AI 分析'"
+                @click="toggleSemantic"
               >
-              <small v-if="semantic?.error" class="semantic-error">{{ semantic.error }}</small>
-              <small v-if="semanticError" class="semantic-error">{{ semanticError }}</small>
+                <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path
+                    d="M12 3c.8 4.5 2.5 6.2 7 7-4.5.8-6.2 2.5-7 7-.8-4.5-2.5-6.2-7-7 4.5-.8 6.2-2.5 7-7Z"
+                  />
+                  <path
+                    d="M19 16c.3 1.8 1.2 2.7 3 3-1.8.3-2.7 1.2-3 3-.3-1.8-1.2-2.7-3-3 1.8-.3 2.7-1.2 3-3Z"
+                  />
+                </svg>
+              </button>
             </div>
-            <button class="text-button" :disabled="reparsing || semanticLoading" @click="reparse">
-              {{ reparsing ? '已排队' : '重新分析' }}
-            </button>
-          </section>
-        </Transition>
-
-        <dl class="source">
-          <div v-if="item.kind === EventKind.Trace">
-            <dt>发生时间</dt>
-            <dd>{{ fmt(item.happenedAt) }}</dd>
-          </div>
-          <div v-if="item.kind === EventKind.Plan">
-            <dt>预定时间</dt>
-            <dd>{{ fmt(item.plannedAt) }}</dd>
-          </div>
-          <div v-if="item.completedAt">
-            <dt>完成时间</dt>
-            <dd>{{ fmt(item.completedAt) }}</dd>
-          </div>
-          <div v-if="item.status === EventStatus.Planned">
-            <dt>状态</dt>
-            <dd>待执行</dd>
-          </div>
-        </dl>
-
-        <section class="raw-content">
-          <p class="section-label">原始记录</p>
-          <p v-if="item.rawContent" class="raw-content-body">{{ item.rawContent }}</p>
-          <p v-else class="raw-content-empty">（未填写正文）</p>
-        </section>
-
-        <section v-if="item.media.length" class="media-section">
-          <p class="section-label">附件</p>
-          <div class="media-grid">
-            <figure v-for="media in item.media" :key="media.id" :class="{ file: media.kind === 3 }">
-              <img
-                v-if="media.kind === 1 && mediaUrls[media.id]"
-                :src="mediaUrls[media.id]"
-                :alt="media.fileName"
-              />
-              <video
-                v-else-if="media.kind === 2 && mediaUrls[media.id]"
-                :src="mediaUrls[media.id]"
-                controls
-                preload="metadata"
-              />
-              <a
-                v-else-if="mediaUrls[media.id]"
-                :href="mediaUrls[media.id]"
-                :download="media.fileName"
-                >下载文件</a
+            <div
+              v-if="
+                item.effectiveClassification.primaryCategory ||
+                item.effectiveClassification.tags.length
+              "
+              class="label-row"
+            >
+              <span v-if="item.effectiveClassification.primaryCategory" class="badge kind">{{
+                item.effectiveClassification.primaryCategory.displayName
+              }}</span>
+              <span
+                v-for="tag in item.effectiveClassification.tags"
+                :key="tag.taxonomyKey ?? tag.displayName"
+                class="badge status"
               >
-              <div v-else class="media-unavailable" role="status">
-                <span>附件暂时无法加载</span>
-                <button type="button" @click="load">重试</button>
+                {{ tag.origin === 'ai' ? '✦ ' : '' }}{{ tag.displayName }}
+              </span>
+            </div>
+
+            <Transition name="semantic-panel">
+              <section
+                v-if="showSemantic"
+                id="event-semantic-panel"
+                class="semantic-card"
+                :data-status="semantic?.status ?? item.semanticStatus"
+                aria-label="AI 分析详情"
+                aria-live="polite"
+              >
+                <div>
+                  <p class="section-label">
+                    AI 分析 · {{ semantic?.status ?? item.semanticStatus }}
+                  </p>
+                  <p v-if="semantic?.summary ?? item.semanticSummary">
+                    {{ semantic?.summary ?? item.semanticSummary }}
+                  </p>
+                  <p v-else-if="semanticLoading">正在读取详细分析…</p>
+                  <p v-else>Worker 会在后台分析正文与图片，记录保存不需要等待。</p>
+                  <small v-if="semantic?.model"
+                    >{{ semantic.model }} · {{ semantic.pipelineVersion }}</small
+                  >
+                  <small v-if="semantic?.error" class="semantic-error">{{ semantic.error }}</small>
+                  <small v-if="semanticError" class="semantic-error">{{ semanticError }}</small>
+                </div>
+                <button
+                  class="text-button"
+                  :disabled="reparsing || semanticLoading"
+                  @click="reparse"
+                >
+                  {{ reparsing ? '已排队' : '重新分析' }}
+                </button>
+              </section>
+            </Transition>
+
+            <section class="raw-content">
+              <p class="section-label">原始记录</p>
+              <p v-if="item.rawContent" class="raw-content-body">{{ item.rawContent }}</p>
+              <p v-else class="raw-content-empty">（未填写正文）</p>
+            </section>
+
+            <section v-if="item.media.length" class="media-section">
+              <p class="section-label">附件</p>
+              <div class="media-grid">
+                <figure
+                  v-for="media in item.media"
+                  :key="media.id"
+                  :class="{ file: media.kind === 3 }"
+                >
+                  <img
+                    v-if="media.kind === 1 && mediaUrls[media.id]"
+                    :src="mediaUrls[media.id]"
+                    :alt="media.fileName"
+                  />
+                  <video
+                    v-else-if="media.kind === 2 && mediaUrls[media.id]"
+                    :src="mediaUrls[media.id]"
+                    controls
+                    preload="metadata"
+                  />
+                  <a
+                    v-else-if="mediaUrls[media.id]"
+                    :href="mediaUrls[media.id]"
+                    :download="media.fileName"
+                    >下载文件</a
+                  >
+                  <div v-else class="media-unavailable" role="status">
+                    <span>附件暂时无法加载</span>
+                    <button type="button" @click="load">重试</button>
+                  </div>
+                  <figcaption>
+                    {{ media.fileName }} · {{ (media.size / 1024 / 1024).toFixed(1) }}MB
+                    <small v-if="mediaErrors[media.id]">{{ mediaErrors[media.id] }}</small>
+                  </figcaption>
+                </figure>
               </div>
-              <figcaption>
-                {{ media.fileName }} · {{ (media.size / 1024 / 1024).toFixed(1) }}MB
-                <small v-if="mediaErrors[media.id]">{{ mediaErrors[media.id] }}</small>
-              </figcaption>
-            </figure>
-          </div>
-        </section>
+            </section>
+          </article>
+          <aside class="detail-context" aria-label="记录信息">
+            <section class="context-section">
+              <h2 class="context-title">记录信息</h2>
+              <dl class="source">
+                <div v-if="item.kind === EventKind.Trace">
+                  <dt>发生时间</dt>
+                  <dd>{{ fmt(item.happenedAt) }}</dd>
+                </div>
+                <div v-if="item.kind === EventKind.Plan">
+                  <dt>预定时间</dt>
+                  <dd>{{ fmt(item.plannedAt) }}</dd>
+                </div>
+                <div v-if="item.completedAt">
+                  <dt>完成时间</dt>
+                  <dd>{{ fmt(item.completedAt) }}</dd>
+                </div>
+                <div v-if="item.status === EventStatus.Planned">
+                  <dt>状态</dt>
+                  <dd>待执行</dd>
+                </div>
+              </dl>
+            </section>
 
-        <section v-if="item.locations.length" class="semantic-card">
-          <div>
-            <p class="section-label">地点</p>
-            <strong>{{ item.locations[0]?.name }}</strong>
-            <p>{{ item.locations[0]?.address }}</p>
-          </div>
-          <button
-            v-if="item.locations[0]?.latitude != null"
-            class="button button-dark compact-button"
-            @click="navigateToLocation"
-          >
-            导航到这里
-          </button>
-        </section>
+            <section v-if="item.locations.length" class="semantic-card location-card">
+              <div>
+                <p class="section-label">地点</p>
+                <strong>{{ item.locations[0]?.name }}</strong>
+                <p>{{ item.locations[0]?.address }}</p>
+              </div>
+              <button
+                v-if="item.locations[0]?.latitude != null"
+                class="button button-dark compact-button"
+                @click="navigateToLocation"
+              >
+                导航到这里
+              </button>
+            </section>
 
-        <section class="source-meta">
-          <p class="section-label">Source 修订</p>
-          <dl>
-            <div>
-              <dt>Source 修订版本</dt>
-              <dd>{{ item.sourceRevision }}</dd>
-            </div>
-            <div>
-              <dt>并发令牌 (version)</dt>
-              <dd>{{ item.version }}</dd>
-            </div>
-            <div>
-              <dt>可见性</dt>
-              <dd>仅自己可见</dd>
-            </div>
-            <div>
-              <dt>创建时间</dt>
-              <dd>{{ fmt(item.createdAt) }}</dd>
-            </div>
-            <div>
-              <dt>最后更新</dt>
-              <dd>{{ fmt(item.updatedAt) }}</dd>
-            </div>
-          </dl>
-        </section>
+            <section class="source-meta">
+              <p class="section-label">Source 修订</p>
+              <dl>
+                <div>
+                  <dt>Source 修订版本</dt>
+                  <dd>{{ item.sourceRevision }}</dd>
+                </div>
+                <div>
+                  <dt>并发令牌 (version)</dt>
+                  <dd>{{ item.version }}</dd>
+                </div>
+                <div>
+                  <dt>可见性</dt>
+                  <dd>仅自己可见</dd>
+                </div>
+                <div>
+                  <dt>创建时间</dt>
+                  <dd>{{ fmt(item.createdAt) }}</dd>
+                </div>
+                <div>
+                  <dt>最后更新</dt>
+                  <dd>{{ fmt(item.updatedAt) }}</dd>
+                </div>
+              </dl>
+            </section>
+          </aside>
+        </div>
       </template>
     </main>
 
@@ -406,28 +447,80 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-.detail-page {
-  max-width: 880px;
-  margin: 0 auto;
-  padding: 56px 42px 104px;
+.detail-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--workspace-gap);
+  align-items: start;
+}
+.detail-content,
+.detail-context {
+  min-width: 0;
+}
+.detail-content {
+  padding: clamp(20px, 2.5vw, 40px);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+.detail-context {
+  display: grid;
+  gap: 24px;
+  padding: clamp(20px, 1.75vw, 28px);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface-soft);
+  overflow-wrap: anywhere;
+}
+.context-title {
+  margin: 0 0 20px;
+  font-size: 18px;
 }
 .back-link {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 24px;
   margin: 0 0 24px;
-  font-size: 12px;
-  color: var(--ink-tertiary);
+  font-size: 14px;
+  color: var(--ink-secondary);
+}
+.back-link a {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  border-radius: var(--radius-md);
+}
+.back-link .conversation-return {
+  padding: 0 16px;
+  border: 1px solid var(--line-strong);
+  color: var(--primary-strong);
+  background: var(--surface);
+  font-weight: 650;
+}
+.back-link .secondary-return {
+  font-size: 13px;
 }
 .back-link a:hover {
-  color: var(--red);
+  color: var(--primary-strong);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.back-link a:focus-visible {
+  outline: 2px solid var(--primary-strong);
+  outline-offset: 4px;
 }
 .detail-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 16px;
-  margin-bottom: 12px;
+  margin-bottom: 24px;
 }
 .detail-meta {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 10px;
   font-size: 11px;
@@ -439,6 +532,7 @@ onUnmounted(() => {
 }
 .detail-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
 }
 .detail-title-row {
@@ -455,6 +549,7 @@ onUnmounted(() => {
   font-weight: 750;
   line-height: 1.2;
   letter-spacing: -0.045em;
+  overflow-wrap: anywhere;
 }
 .semantic-toggle {
   width: 44px;
@@ -488,14 +583,9 @@ onUnmounted(() => {
 }
 .source {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px 32px;
-  margin: 0 0 36px;
-  padding: 18px 20px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  background: var(--surface);
-  box-shadow: var(--shadow-1);
+  margin: 0;
 }
 .source div {
   display: flex;
@@ -504,8 +594,7 @@ onUnmounted(() => {
   font-size: 13px;
 }
 .source dt {
-  font-size: 10px;
-  letter-spacing: 0.14em;
+  font-size: 12px;
   color: var(--ink-tertiary);
   text-transform: uppercase;
 }
@@ -521,18 +610,15 @@ onUnmounted(() => {
 }
 .section-label {
   margin: 0 0 8px;
-  font-size: 10px;
-  letter-spacing: 0.14em;
+  font-size: 12px;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--ink-tertiary);
 }
 .raw-content {
   margin-bottom: 36px;
-  padding: 22px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  background: var(--surface);
-  box-shadow: var(--shadow-1);
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
 }
 .raw-content-body {
   margin: 0;
@@ -540,6 +626,7 @@ onUnmounted(() => {
   line-height: 1.8;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+  max-width: 78ch;
 }
 .raw-content-empty {
   margin: 0;
@@ -547,11 +634,11 @@ onUnmounted(() => {
   font-size: 13px;
 }
 .media-section {
-  margin-bottom: 36px;
+  margin-top: 32px;
 }
 .media-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
   gap: 12px;
 }
 .media-grid figure {
@@ -568,7 +655,8 @@ onUnmounted(() => {
   width: 100%;
   max-height: 420px;
   object-fit: contain;
-  background: #171713;
+  aspect-ratio: 4 / 3;
+  background: var(--surface-soft);
 }
 .media-unavailable {
   min-height: 180px;
@@ -602,6 +690,7 @@ onUnmounted(() => {
   padding: 8px 10px;
   color: var(--ink-tertiary);
   font-size: 11px;
+  overflow-wrap: anywhere;
 }
 .media-grid figcaption small {
   display: block;
@@ -618,6 +707,15 @@ onUnmounted(() => {
   border: 1px solid color-mix(in srgb, var(--primary) 25%, var(--line));
   border-radius: var(--radius-lg);
   background: var(--primary-soft);
+}
+.semantic-card > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.location-card {
+  flex-direction: column;
+  align-items: flex-start;
+  margin-bottom: 0;
 }
 .semantic-card p {
   margin: 5px 0;
@@ -654,7 +752,7 @@ onUnmounted(() => {
 }
 .source-meta dl {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 10px 24px;
   margin: 0;
   font-size: 12px;
@@ -708,16 +806,19 @@ onUnmounted(() => {
   border-bottom: 1px solid currentColor;
   color: var(--red);
 }
-@media (max-width: 800px) {
-  .detail-page {
-    padding: 32px 20px 60px;
+@media (min-width: 1024px) {
+  .detail-workspace {
+    grid-template-columns: minmax(0, 2.25fr) minmax(0, 1fr);
   }
-  .source,
-  .source-meta dl {
-    grid-template-columns: 1fr;
+}
+@media (max-width: 600px) {
+  .detail-content,
+  .detail-context {
+    padding: 18px;
   }
-  .media-grid {
-    grid-template-columns: 1fr;
+  .semantic-card {
+    flex-direction: column;
+    align-items: flex-start;
   }
   .detail-header {
     flex-direction: column;

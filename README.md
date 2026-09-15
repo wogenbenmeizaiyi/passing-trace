@@ -90,6 +90,7 @@ deploy/                          部署相关文件
 - [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/)
 - Node.js `22.18+` 或 `24.12+`，并启用 Corepack
+- Python 3.10+（本地示例数据脚本，无需额外安装 Python 包）
 - Flutter SDK（包含 Dart `3.13+`）
 - Android Studio、Android SDK Platform-Tools；真机调试还需要开启 USB 调试
 
@@ -154,6 +155,16 @@ dotnet run --project AppHost/AppHost.csproj
 ```
 
 终端会输出 Aspire Dashboard 的地址和一次性登录链接。Dashboard 是本地端口、服务状态、日志和 Trace 的可靠入口。
+
+Development 启动时，`development-demo-data` 会自动为默认登录账号 `dev` 补齐 **30 条记录/计划和 5 条故事线**。数据带有“开发示例”标签，覆盖跨年/月列表、分类、地点、未来安排，以及故事线阶段、分支和汇合。刷新、重新编译或重启不会重复创建，也不会覆盖你已经编辑、归档或软删除的示例。数据保存在现有 PostgreSQL 持久卷中。
+
+已启动服务时也可手动补齐：
+
+```powershell
+python tools/seed_development_demo.py
+```
+
+脚本只连接本机开发服务，使用已有的自动开发登录；不接收密码或生产 Token。需要禁用自动补齐、修改端口或了解数据保护规则时，参见[本地示例数据说明](docs/development-demo-data.md)。
 
 默认开发地址：
 

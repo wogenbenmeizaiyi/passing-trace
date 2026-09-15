@@ -29,6 +29,7 @@ class AiMessageModel {
     required this.role,
     required this.content,
     required this.evidenceRecords,
+    required this.evidenceStorylines,
     required this.amapPlaces,
     required this.actions,
   });
@@ -36,6 +37,7 @@ class AiMessageModel {
   final String role;
   final String content;
   final List<AiEvidenceRecord> evidenceRecords;
+  final List<AiEvidenceStoryline> evidenceStorylines;
   final List<AmapPlaceModel> amapPlaces;
   final List<AssistantActionModel> actions;
   List<int> get evidenceEventIds =>
@@ -49,6 +51,9 @@ class AiMessageModel {
     final amapPlaces = evidence is Map<String, dynamic>
         ? evidence['amapPlaces'] as List<dynamic>? ?? const []
         : const <dynamic>[];
+    final storylines = evidence is Map<String, dynamic>
+        ? evidence['storylines'] as List<dynamic>? ?? const []
+        : const <dynamic>[];
     final actions = evidence is Map<String, dynamic>
         ? evidence['actions'] as List<dynamic>? ?? const []
         : const <dynamic>[];
@@ -58,6 +63,11 @@ class AiMessageModel {
       evidenceRecords: records
           .whereType<Map<String, dynamic>>()
           .map(AiEvidenceRecord.fromJson)
+          .toList(growable: false),
+      evidenceStorylines: storylines
+          .whereType<Map<String, dynamic>>()
+          .map(AiEvidenceStoryline.fromJson)
+          .where((storyline) => storyline.isValid)
           .toList(growable: false),
       amapPlaces: amapPlaces
           .whereType<Map<String, dynamic>>()
@@ -70,6 +80,37 @@ class AiMessageModel {
           .where((action) => action.isSafe)
           .toList(growable: false),
     );
+  }
+}
+
+class AiEvidenceStoryline {
+  const AiEvidenceStoryline({required this.storylineId, required this.title});
+
+  final String storylineId;
+  final String title;
+
+  bool get isValid => RegExp(
+    r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+    caseSensitive: false,
+  ).hasMatch(storylineId);
+
+  String get displayTitle => title.trim().isEmpty ? '查看故事线' : title.trim();
+
+  factory AiEvidenceStoryline.fromJson(Map<String, dynamic> json) =>
+      AiEvidenceStoryline(
+        storylineId:
+            (json['storylineId'] ?? json['StorylineId']) as String? ?? '',
+        title: (json['title'] ?? json['Title']) as String? ?? '',
+      );
+
+  static List<AiEvidenceStoryline> fromEnvelope(Map<String, dynamic> json) {
+    final raw = json['storylines'] ?? json['Storylines'];
+    if (raw is! List<dynamic>) return const [];
+    return raw
+        .whereType<Map<String, dynamic>>()
+        .map(AiEvidenceStoryline.fromJson)
+        .where((storyline) => storyline.isValid)
+        .toList(growable: false);
   }
 }
 

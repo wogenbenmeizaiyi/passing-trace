@@ -26,7 +26,7 @@ public static class AssistantErrorPresenter
                 true);
         }
 
-        if (ContainsUnknownFinishReason(exception))
+        if (ContainsMalformedStreamingProtocol(exception))
         {
             return new AssistantErrorResponse(
                 "incomplete_ai_response",
@@ -34,11 +34,38 @@ public static class AssistantErrorPresenter
                 true);
         }
 
-        if (exception is ArgumentException)
+        for (Exception? current = exception; current is not null; current = current.InnerException)
+        {
+            if (current is AssistantToolInvocationException)
+                return new AssistantErrorResponse(
+                    "record_tools_unavailable",
+                    "暂时没能完成这次记录查询，请稍后重试。",
+                    true);
+            if (current is AssistantResponseLimitException)
+                return new AssistantErrorResponse(
+                    "ai_response_too_long",
+                    "这次回答内容较多，没能完整生成。请缩小范围后重试。",
+                    true);
+            if (current is AssistantResponseBlockedException)
+                return new AssistantErrorResponse(
+                    "ai_response_blocked",
+                    "AI 服务未能提供这次回答，请换一种方式提问。",
+                    false);
+        }
+
+        if (ContainsStatisticsToolError(exception))
+        {
+            return new AssistantErrorResponse(
+                "statistics_unavailable",
+                "暂时没能完成消费或记录统计，请稍后重试。",
+                true);
+        }
+
+        if (exception is AssistantMessageValidationException)
         {
             return new AssistantErrorResponse(
                 "invalid_message",
-                "这条消息暂时无法发送，请检查内容后再试。",
+                "请填写消息内容，并控制在 8000 字以内后再发送。",
                 false);
         }
 
@@ -56,14 +83,26 @@ public static class AssistantErrorPresenter
             true);
     }
 
-    private static bool ContainsUnknownFinishReason(Exception exception)
+    private static bool ContainsMalformedStreamingProtocol(Exception exception)
     {
         for (Exception? current = exception; current is not null; current = current.InnerException)
         {
-            if (current.Message.Contains("Unknown ChatFinishReason", StringComparison.OrdinalIgnoreCase))
+            if (current is IncompleteAiResponseException ||
+                current.Message.Contains("Unknown ChatFinishReason", StringComparison.OrdinalIgnoreCase) ||
+                current.Message.Contains("Unknown ChatToolCallKind", StringComparison.OrdinalIgnoreCase))
             {
                 return true;
             }
+        }
+
+        return false;
+    }
+
+    private static bool ContainsStatisticsToolError(Exception exception)
+    {
+        for (Exception? current = exception; current is not null; current = current.InnerException)
+        {
+            if (current is AssistantStatisticsToolException) return true;
         }
 
         return false;

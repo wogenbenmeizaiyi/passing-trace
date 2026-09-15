@@ -347,7 +347,7 @@ onUnmounted(() => {
   <div class="app-shell">
     <WebAppHeader />
 
-    <main class="form-page">
+    <main class="form-page workspace-main">
       <p class="back-link">
         <RouterLink :to="mode === 'edit' && loaded ? `/events/${loaded.id}` : '/events'"
           >← 返回</RouterLink
@@ -370,179 +370,205 @@ onUnmounted(() => {
         <p v-if="loading" class="empty-state">正在加载…</p>
 
         <form v-else class="event-form" @submit.prevent="submit">
-          <fieldset class="form-field">
-            <legend>类型</legend>
-            <div class="kind-tabs">
-              <label
-                v-for="opt in kindOptions"
-                :key="opt.value"
-                class="kind-tab"
-                :class="{ active: form.kind === opt.value, disabled: mode === 'edit' }"
-              >
+          <div class="form-workspace">
+            <section class="form-content" aria-label="记录内容">
+              <fieldset class="form-field">
+                <legend>类型</legend>
+                <div class="kind-tabs">
+                  <label
+                    v-for="opt in kindOptions"
+                    :key="opt.value"
+                    class="kind-tab"
+                    :class="{ active: form.kind === opt.value, disabled: mode === 'edit' }"
+                  >
+                    <input
+                      type="radio"
+                      name="kind"
+                      :value="opt.value"
+                      v-model="form.kind"
+                      :disabled="mode === 'edit'"
+                    />
+                    {{ opt.label }}
+                  </label>
+                </div>
+                <p v-if="mode === 'edit'" class="field-hint">类型创建后不可修改。</p>
+              </fieldset>
+
+              <label class="form-field">
+                <span class="field-label">标题</span>
                 <input
-                  type="radio"
-                  name="kind"
-                  :value="opt.value"
-                  v-model="form.kind"
-                  :disabled="mode === 'edit'"
+                  v-model="form.title"
+                  type="text"
+                  maxlength="200"
+                  placeholder="给这条记录起个名字"
+                  autocomplete="off"
                 />
-                {{ opt.label }}
               </label>
-            </div>
-            <p v-if="mode === 'edit'" class="field-hint">类型创建后不可修改。</p>
-          </fieldset>
 
-          <label class="form-field">
-            <span class="field-label">标题</span>
-            <input
-              v-model="form.title"
-              type="text"
-              maxlength="200"
-              placeholder="一句话标题（可与正文同时为空则非法）"
-              autocomplete="off"
-            />
-          </label>
+              <label class="form-field content-field">
+                <span class="field-label">正文</span>
+                <textarea
+                  v-model="form.rawContent"
+                  rows="10"
+                  placeholder="把当下想到的、看到的、吃到的写下来…"
+                />
+              </label>
+              <p v-if="fieldErrors.content" class="field-error">{{ fieldErrors.content }}</p>
 
-          <label class="form-field">
-            <span class="field-label">正文</span>
-            <textarea
-              v-model="form.rawContent"
-              rows="6"
-              placeholder="把当下想到的、看到的、吃到的写下来…"
-            />
-          </label>
-          <p v-if="fieldErrors.content" class="field-error">{{ fieldErrors.content }}</p>
+              <fieldset class="form-field media-field">
+                <legend>图片、视频或文件</legend>
+                <label class="media-picker">
+                  <input type="file" multiple @change="selectFiles" />
+                  <span>＋ 选择附件</span>
+                  <small>最多 10 个；图片 20MB、视频 1GB、其他文件 200MB</small>
+                </label>
+                <ol v-if="attachments.length" class="attachment-list">
+                  <li v-for="(item, index) in attachments" :key="item.key">
+                    <span class="attachment-icon">{{
+                      item.media?.kind === 1 ? '图' : item.media?.kind === 2 ? '影' : '件'
+                    }}</span>
+                    <span class="attachment-name">{{
+                      item.media?.fileName ?? item.file?.name
+                    }}</span>
+                    <span v-if="item.uploading" class="attachment-progress"
+                      >{{ item.progress }}%</span
+                    >
+                    <span v-else-if="item.error" class="attachment-error">{{ item.error }}</span>
+                    <button
+                      v-if="item.error"
+                      type="button"
+                      class="text-button"
+                      @click="uploadAttachment(item)"
+                    >
+                      重试
+                    </button>
+                    <button
+                      type="button"
+                      class="text-button"
+                      :disabled="index === 0"
+                      aria-label="附件前移"
+                      @click="moveAttachment(index, -1)"
+                    >
+                      ↑
+                    </button>
+                    <button
+                      type="button"
+                      class="text-button"
+                      :disabled="index === attachments.length - 1"
+                      aria-label="附件后移"
+                      @click="moveAttachment(index, 1)"
+                    >
+                      ↓
+                    </button>
+                    <button
+                      type="button"
+                      class="text-button danger"
+                      @click="removeAttachment(index)"
+                    >
+                      移除
+                    </button>
+                    <progress v-if="item.uploading" :value="item.progress" max="100" />
+                  </li>
+                </ol>
+                <p v-if="fieldErrors.media" class="field-error">{{ fieldErrors.media }}</p>
+              </fieldset>
+            </section>
 
-          <details class="form-field optional-fields">
-            <summary>分类与标签（可选）</summary>
-            <p class="field-hint">不填写时由 AI 自动分类；人工主分类不会被 AI 覆盖。</p>
-            <label
-              ><span class="field-label">主分类</span>
-              <select v-model="primaryCategoryKey">
-                <option :value="null">交给 AI</option>
-                <option
-                  v-for="item in taxonomy?.categories ?? []"
-                  :key="item.key"
-                  :value="item.key"
-                >
-                  {{ item.label }}
-                </option>
-              </select>
-            </label>
-            <div class="tag-options">
-              <button
-                v-for="tag in taxonomy?.behaviorTags ?? []"
-                :key="tag.key"
-                type="button"
-                class="radio-pill"
-                :class="{ active: selectedTagKeys.includes(tag.key) }"
-                @click="toggleTag(tag.key)"
-              >
-                {{ tag.label }}
-              </button>
-            </div>
-            <div class="custom-tag-row">
-              <input
-                v-model="customTagDraft"
-                maxlength="24"
-                placeholder="自定义标签"
-                @keyup.enter.prevent="addCustomTag"
-              />
-              <button type="button" class="text-button" @click="addCustomTag">添加</button>
-            </div>
-            <div class="tag-options">
-              <button
-                v-for="tag in customTags"
-                :key="tag"
-                type="button"
-                class="radio-pill active"
-                @click="customTags = customTags.filter((x) => x !== tag)"
-              >
-                {{ tag }} ×
-              </button>
-            </div>
-          </details>
+            <aside class="form-context" aria-label="补充信息">
+              <div class="context-heading">
+                <h2>补充信息</h2>
+                <p>时间、地点与标签，让回忆更完整。</p>
+              </div>
+              <label class="form-field">
+                <span class="field-label">{{ whenLabel }}（可选）</span>
+                <input v-model="form.when" type="datetime-local" />
+                <p v-if="fieldErrors.when" class="field-error">{{ fieldErrors.when }}</p>
+              </label>
 
-          <fieldset class="form-field">
-            <legend>地点（可选）</legend>
-            <div class="custom-tag-row">
-              <input v-model="placeQuery" placeholder="搜索地点、商店或景点" />
-              <button
-                type="button"
-                class="text-button"
-                :disabled="placeSearching"
-                @click="searchPlace"
-              >
-                {{ placeSearching ? '搜索中…' : '搜索' }}
-              </button>
-            </div>
-            <p v-if="location" class="field-hint">
-              <svg class="location-icon" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M12 21s7-6.6 7-12a7 7 0 1 0-14 0c0 5.4 7 12 7 12Z" />
-                <circle cx="12" cy="9" r="2.2" />
-              </svg>
-              {{ location.name }} · {{ location.address }}
-              <button type="button" class="text-button" @click="location = null">清除</button>
-            </p>
-          </fieldset>
+              <details class="form-field optional-fields">
+                <summary>分类与标签（可选）</summary>
+                <p class="field-hint">不填写时由 AI 自动分类；人工主分类不会被 AI 覆盖。</p>
+                <label
+                  ><span class="field-label">主分类</span>
+                  <select v-model="primaryCategoryKey">
+                    <option :value="null">交给 AI</option>
+                    <option
+                      v-for="item in taxonomy?.categories ?? []"
+                      :key="item.key"
+                      :value="item.key"
+                    >
+                      {{ item.label }}
+                    </option>
+                  </select>
+                </label>
+                <div class="tag-options">
+                  <button
+                    v-for="tag in taxonomy?.behaviorTags ?? []"
+                    :key="tag.key"
+                    type="button"
+                    class="radio-pill"
+                    :class="{ active: selectedTagKeys.includes(tag.key) }"
+                    @click="toggleTag(tag.key)"
+                  >
+                    {{ tag.label }}
+                  </button>
+                </div>
+                <div class="custom-tag-row">
+                  <input
+                    v-model="customTagDraft"
+                    maxlength="24"
+                    aria-label="自定义标签"
+                    placeholder="自定义标签"
+                    @keyup.enter.prevent="addCustomTag"
+                  />
+                  <button type="button" class="text-button" @click="addCustomTag">添加</button>
+                </div>
+                <div class="tag-options">
+                  <button
+                    v-for="tag in customTags"
+                    :key="tag"
+                    type="button"
+                    class="radio-pill active"
+                    @click="customTags = customTags.filter((x) => x !== tag)"
+                  >
+                    {{ tag }} ×
+                  </button>
+                </div>
+              </details>
 
-          <fieldset class="form-field media-field">
-            <legend>图片、视频或文件</legend>
-            <label class="media-picker">
-              <input type="file" multiple @change="selectFiles" />
-              <span>＋ 选择附件</span>
-              <small>最多 10 个；图片 20MB、视频 1GB、其他文件 200MB</small>
-            </label>
-            <ol v-if="attachments.length" class="attachment-list">
-              <li v-for="(item, index) in attachments" :key="item.key">
-                <span class="attachment-icon">{{
-                  item.media?.kind === 1 ? '图' : item.media?.kind === 2 ? '影' : '件'
-                }}</span>
-                <span class="attachment-name">{{ item.media?.fileName ?? item.file?.name }}</span>
-                <span v-if="item.uploading" class="attachment-progress">{{ item.progress }}%</span>
-                <span v-else-if="item.error" class="attachment-error">{{ item.error }}</span>
-                <button
-                  v-if="item.error"
-                  type="button"
-                  class="text-button"
-                  @click="uploadAttachment(item)"
-                >
-                  重试
-                </button>
-                <button
-                  type="button"
-                  class="text-button"
-                  :disabled="index === 0"
-                  @click="moveAttachment(index, -1)"
-                >
-                  ↑
-                </button>
-                <button
-                  type="button"
-                  class="text-button"
-                  :disabled="index === attachments.length - 1"
-                  @click="moveAttachment(index, 1)"
-                >
-                  ↓
-                </button>
-                <button type="button" class="text-button danger" @click="removeAttachment(index)">
-                  移除
-                </button>
-                <progress v-if="item.uploading" :value="item.progress" max="100" />
-              </li>
-            </ol>
-            <p v-if="fieldErrors.media" class="field-error">{{ fieldErrors.media }}</p>
-          </fieldset>
-
-          <label class="form-field">
-            <span class="field-label">{{ whenLabel }}</span>
-            <input v-model="form.when" type="datetime-local" />
-            <p v-if="fieldErrors.when" class="field-error">{{ fieldErrors.when }}</p>
-          </label>
+              <fieldset class="form-field">
+                <legend>地点（可选）</legend>
+                <div class="custom-tag-row">
+                  <input
+                    v-model="placeQuery"
+                    aria-label="搜索地点"
+                    placeholder="搜索地点、商店或景点"
+                  />
+                  <button
+                    type="button"
+                    class="text-button"
+                    :disabled="placeSearching"
+                    @click="searchPlace"
+                  >
+                    {{ placeSearching ? '搜索中…' : '搜索' }}
+                  </button>
+                </div>
+                <p v-if="location" class="field-hint">
+                  <svg class="location-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M12 21s7-6.6 7-12a7 7 0 1 0-14 0c0 5.4 7 12 7 12Z" />
+                    <circle cx="12" cy="9" r="2.2" />
+                  </svg>
+                  {{ location.name }} · {{ location.address }}
+                  <button type="button" class="text-button" @click="location = null">清除</button>
+                </p>
+              </fieldset>
+            </aside>
+          </div>
 
           <p v-if="error" class="error-banner" role="alert">{{ error }}</p>
 
           <div class="form-actions">
+            <p class="save-hint">写下内容后，即可保存为自己的记录。</p>
             <button
               type="button"
               class="button ghost compact-button"
@@ -593,11 +619,7 @@ onUnmounted(() => {
 }
 .custom-tag-row input {
   flex: 1;
-}
-.form-page {
-  max-width: 780px;
-  margin: 0 auto;
-  padding: 56px 42px 104px;
+  min-width: 0;
 }
 .back-link {
   margin: 0 0 20px;
@@ -626,7 +648,37 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 16px;
 }
+.form-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--workspace-gap);
+  align-items: start;
+}
+.form-content,
+.form-context {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 20px;
+}
+.form-context {
+  padding: clamp(16px, 1.5vw, 24px);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface-soft);
+}
+.context-heading h2 {
+  margin: 0;
+  font-size: 18px;
+}
+.context-heading p {
+  margin: 6px 0 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ink-secondary);
+}
 .form-field {
+  scroll-margin-block: 9rem;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -634,6 +686,7 @@ onUnmounted(() => {
   border-radius: var(--radius-lg);
   padding: 18px;
   margin: 0;
+  min-width: 0;
   background: var(--surface);
   box-shadow: var(--shadow-1);
 }
@@ -648,6 +701,8 @@ onUnmounted(() => {
 .form-field input,
 .form-field textarea,
 .form-field select {
+  width: 100%;
+  min-width: 0;
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
   background: var(--surface-soft);
@@ -704,7 +759,9 @@ onUnmounted(() => {
   font-size: 12px;
 }
 .media-picker {
+  position: relative;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 12px;
   padding: 14px;
@@ -713,7 +770,15 @@ onUnmounted(() => {
   background: var(--surface-soft);
   cursor: pointer;
 }
+.media-picker:focus-within,
+.kind-tab:focus-within,
+.radio-pill:focus-within {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
+}
 .media-picker input {
+  inset: 0;
+  height: 100%;
   position: absolute;
   opacity: 0;
   pointer-events: none;
@@ -741,6 +806,11 @@ onUnmounted(() => {
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
   background: var(--surface-soft);
+  flex-wrap: wrap;
+}
+.attachment-list .text-button {
+  min-width: 36px;
+  min-height: 36px;
 }
 .attachment-icon {
   display: grid;
@@ -751,6 +821,7 @@ onUnmounted(() => {
   background: var(--primary-soft);
   color: var(--primary-strong);
   font-size: 11px;
+  flex-shrink: 0;
 }
 .attachment-name {
   min-width: 0;
@@ -768,6 +839,7 @@ onUnmounted(() => {
   max-width: 180px;
   color: var(--danger);
   font-size: 11px;
+  overflow-wrap: anywhere;
 }
 .attachment-list progress {
   position: absolute;
@@ -822,6 +894,7 @@ onUnmounted(() => {
   opacity: 0.58;
 }
 .radio-pill {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -860,6 +933,13 @@ onUnmounted(() => {
   background: color-mix(in srgb, var(--surface) 94%, transparent);
   box-shadow: var(--shadow-2);
   backdrop-filter: blur(12px);
+  align-items: center;
+}
+.save-hint {
+  margin: 0 auto 0 0;
+  color: var(--ink-secondary);
+  font-size: 13px;
+  line-height: 1.6;
 }
 .button.ghost {
   background: transparent;
@@ -876,13 +956,31 @@ onUnmounted(() => {
   border-bottom: 1px solid currentColor;
   color: var(--red);
 }
-@media (max-width: 800px) {
-  .form-page {
-    padding: 32px 20px 60px;
+@media (min-width: 1024px) {
+  .form-workspace {
+    grid-template-columns: minmax(0, 1.75fr) minmax(0, 1fr);
   }
+  .content-field textarea {
+    min-height: clamp(260px, 35vh, 480px);
+  }
+}
+@media (max-width: 600px) {
   .form-actions {
-    flex-direction: column-reverse;
+    flex-wrap: wrap;
     align-items: stretch;
+  }
+  .save-hint {
+    width: 100%;
+  }
+  .form-actions .button {
+    flex: 1;
+  }
+  .attachment-name {
+    flex-basis: calc(100% - 46px);
+  }
+  .attachment-error {
+    max-width: none;
+    flex-basis: 100%;
   }
 }
 </style>

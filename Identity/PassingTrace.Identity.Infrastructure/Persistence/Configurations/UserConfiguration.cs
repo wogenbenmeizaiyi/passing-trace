@@ -46,6 +46,10 @@ public sealed class UserConfiguration : IEntityTypeConfiguration<User>
             .HasColumnName("updated_at")
             .IsRequired();
         builder.Property(user => user.LastLoginAt).HasColumnName("last_login_at");
+        builder.Property(user => user.Nickname).HasColumnName("nickname").HasMaxLength(128);
+        builder.Property(user => user.Bio).HasColumnName("bio").HasMaxLength(1024);
+        builder.Property(user => user.AvatarKey).HasColumnName("avatar_key").HasMaxLength(200);
+        builder.Property(user => user.ProfileVersion).HasColumnName("profile_version").IsConcurrencyToken();
 
         // Identity 将用户名标准化，因此该唯一索引实现忽略大小写的唯一用户名。
         builder.HasIndex(user => user.NormalizedUserName)
