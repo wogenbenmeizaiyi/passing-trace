@@ -1,13 +1,16 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:passingtrace_mobile/auth_service.dart';
 import 'package:passingtrace_mobile/social/social_api.dart';
 import 'package:passingtrace_mobile/social/social_widgets.dart';
 import 'package:passingtrace_mobile/social/messages_view.dart';
+import 'package:passingtrace_mobile/social/friends_view.dart';
 import 'package:passingtrace_mobile/theme/passingtrace_theme.dart';
 import 'package:passingtrace_mobile/views/assistant_view.dart';
 
@@ -47,7 +50,202 @@ class _Feed extends SocialFeed {
   }
 }
 
+class _ConnectionApi extends SocialApi {
+  _ConnectionApi(super.auth, super.session);
+  ValueChanged<bool>? connection;
+  final events = StreamController<int>();
+  @override
+  Stream<int> changes({int after = 0, ValueChanged<bool>? onConnection}) {
+    connection = onConnection;
+    return events.stream;
+  }
+
+  @override
+  Future<dynamic> request(
+    String method,
+    String path, {
+    Object? body,
+    bool identity = false,
+  }) async => {'count': 2};
+  @override
+  void close() {
+    events.close();
+    super.close();
+  }
+}
+
 void main() {
+  testWidgets('消息页只加载摘要，通知合并，好友内切换不残留聊天列表', (tester) async {
+    FlutterSecureStorage.setMockInitialValues({});
+    final paths = <String>[];
+    final auth = _Auth();
+    final feed = _Feed(auth, session);
+    final api = SocialApi(
+      auth,
+      session,
+      client: MockClient((r) async {
+        paths.add('${r.method} ${r.url.path}?${r.url.query}');
+        if (r.url.path == '/api/v1/conversations') {
+          return json({'items': [], 'nextCursor': null});
+        }
+        if (r.url.path == '/api/v1/people/me') {
+          return json({
+            'profile': {'id': '1', 'nickname': '我', 'hasAvatar': false},
+          });
+        }
+        const notice = {
+          'id': 9,
+          'kind': 'friend-request',
+          'text': '小王想添加你为好友',
+          'createdAt': '2026-09-22T10:00:00',
+        };
+        if (r.url.path == '/api/v1/notifications/summary') {
+          return json({'unreadCount': 1, 'latest': notice});
+        }
+        if (r.url.path == '/api/v1/notifications') return json([notice]);
+        return json([]);
+      }),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MessagesView(auth: auth, session: session, feed: feed, api: api),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('好友通知'), findsOneWidget);
+    expect(find.byTooltip('提醒'), findsNothing);
+    expect(paths.any((p) => p.contains('/messages')), isFalse);
+    await tester.tap(find.text('好友通知'));
+    await tester.pumpAndSettle();
+    expect(paths, contains('GET /api/v1/notifications?visibleOnly=true'));
+    expect(paths, contains('PUT /api/v1/notifications/read?visibleOnly=true'));
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('好友', skipOffstage: true));
+    await tester.pumpAndSettle();
+    expect(find.text('我的好友'), findsOneWidget);
+    expect(find.text('好友通知'), findsNothing);
+    expect(find.text('还没有聊天，和好友聊聊共同的生活吧。'), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+    feed.dispose();
+  });
+  testWidgets('断线十秒才显示同步提示，恢复不丢未读或要求退出', (tester) async {
+    final auth = _Auth(), api = _ConnectionApi(_Auth(), session);
+    final feed = SocialFeed(auth, session, apiFactory: () => api)..start();
+    await tester.pump(const Duration(seconds: 9));
+    expect(feed.reconnecting, isFalse);
+    await tester.pump(const Duration(seconds: 1));
+    expect(feed.reconnecting, isTrue);
+    api.connection!(true);
+    expect(feed.reconnecting, isFalse);
+    expect(feed.unread, 2);
+    feed.dispose();
+    await tester.pump();
+  });
+  test('时间分隔只在首条、跨日或超过五分钟出现', () {
+    SocialRow at(String date) => {'createdAt': date};
+    expect(showSocialMessageTime(at('2026-09-22T10:00:00'), null), isTrue);
+    expect(
+      showSocialMessageTime(
+        at('2026-09-22T10:05:00'),
+        at('2026-09-22T10:00:00'),
+      ),
+      isFalse,
+    );
+    expect(
+      showSocialMessageTime(
+        at('2026-09-22T10:05:01'),
+        at('2026-09-22T10:00:00'),
+      ),
+      isTrue,
+    );
+    expect(
+      showSocialMessageTime(
+        at('2026-09-23T00:01:00'),
+        at('2026-09-22T23:59:00'),
+      ),
+      isTrue,
+    );
+  });
+  for (final dark in [false, true]) {
+    testWidgets('好友分组、搜索与独立添加页面在大字体${dark ? '深色' : '浅色'}下可用', (tester) async {
+      FlutterSecureStorage.setMockInitialValues({});
+      tester.view.resetPhysicalSize();
+      tester.view.physicalSize = const Size(750, 1500);
+      tester.view.devicePixelRatio = 2;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      var sent = 0;
+      final api = SocialApi(
+        _Auth(),
+        session,
+        client: MockClient((r) async {
+          if (r.url.path == '/api/v1/people/me') {
+            return json({
+              'profile': {'id': '1'},
+            });
+          }
+          if (r.url.path == '/api/v1/friends') {
+            return json([
+              {
+                'id': 'friend',
+                'person': {'id': '2', 'nickname': '王小明', 'hasAvatar': false},
+                'remark': '小王',
+                'label': '同事',
+                'relationship': '恋人',
+              },
+            ]);
+          }
+          if (r.method == 'POST' && r.url.path == '/api/v1/friend-requests') {
+            sent++;
+            return json({'id': 'request'});
+          }
+          return json([]);
+        }),
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData(
+            brightness: dark ? Brightness.dark : Brightness.light,
+          ),
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: const TextScaler.linear(1.6)),
+            child: child!,
+          ),
+          home: FriendsView(api: api, onChat: (_) {}),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('小王'), findsOneWidget);
+      expect(find.text('发送申请'), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('group:同事')));
+      await tester.pumpAndSettle();
+      expect(find.text('小王'), findsNothing);
+      await tester.enterText(find.byType(TextField), '恋人');
+      await tester.pumpAndSettle();
+      expect(find.text('小王'), findsOneWidget);
+      await tester.enterText(find.byType(TextField), '');
+      await tester.pumpAndSettle();
+      expect(find.text('小王'), findsNothing);
+      await tester.tap(find.byTooltip('添加好友'));
+      await tester.pumpAndSettle();
+      expect(find.text('发送申请'), findsOneWidget);
+      expect(find.text('扫码添加'), findsOneWidget);
+      await tester.enterText(find.byType(TextField), 'FRIENDCODE');
+      await tester.pump();
+      await tester.tap(find.text('发送申请'));
+      await tester.pumpAndSettle();
+      expect(sent, 1);
+      expect(find.textContaining('好友申请已发送'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(find.text('小王'), findsNothing);
+      await tester.pumpWidget(const SizedBox());
+      api.close();
+    });
+  }
   test('好友 API 使用认证资料接口，401 只续期一次，消息重试保留标识', () async {
     final auth = _Auth();
     final id = messageKey();

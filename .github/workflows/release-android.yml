@@ -7,6 +7,10 @@ on:
     paths:
       - passingtrace-mobile/**
       - .github/workflows/release-android.yml
+      - tools/publish_android_release.py
+      - tools/ci_timed.py
+      - tools/android-release-requirements.txt
+      - tools/tests/test_publish_android_release.py
   workflow_dispatch:
     inputs:
       version_name:
@@ -26,49 +30,87 @@ on:
         required: true
         default: 修复高德地图正式版闪退，并完善自动发布链路。
 
-concurrency:
-  group: release-android-${{ github.ref }}
-  cancel-in-progress: true
 
 permissions:
   contents: read
 
+env:
+  RELEASE_VERSION_NAME: ${{ inputs.version_name || format('1.0.{0}', github.run_number) }}
+  RELEASE_VERSION_CODE: ${{ inputs.version_code || github.run_number }}
+  RELEASE_MINIMUM_SUPPORTED_VERSION_CODE: ${{ inputs.minimum_supported_version_code || '1' }}
+  RELEASE_NOTES: ${{ inputs.notes || github.event.head_commit.message || '自动发布移动端正式版本。' }}
+  ANDROID_SIGNING_SHA256: 99706958760D9FEDBF388DA327FB7159B9F233EC89E394A44188C9C32C509F78
+
 jobs:
-  release:
+  verify:
+    name: Analyze and test
     runs-on: ubuntu-latest
-    environment: production
-    env:
-      RELEASE_VERSION_NAME: ${{ inputs.version_name || format('1.0.{0}', github.run_number) }}
-      RELEASE_VERSION_CODE: ${{ inputs.version_code || github.run_number }}
-      RELEASE_MINIMUM_SUPPORTED_VERSION_CODE: ${{ inputs.minimum_supported_version_code || '1' }}
-      RELEASE_NOTES: ${{ inputs.notes || github.event.head_commit.message || '自动发布移动端正式版本。' }}
-      S3_ENDPOINT: ${{ vars.S3_ENDPOINT }}
-      S3_BUCKET: ${{ vars.S3_BUCKET }}
-      S3_REGION: ${{ vars.S3_REGION }}
-      AWS_ACCESS_KEY_ID: ${{ secrets.S3_ACCESS_KEY }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_KEY }}
-      ANDROID_SIGNING_STORE_FILE: ${{ github.workspace }}/passingtrace-mobile/android/app/release.keystore
-      ANDROID_SIGNING_STORE_PASSWORD: android
-      ANDROID_SIGNING_KEY_ALIAS: androiddebugkey
-      ANDROID_SIGNING_KEY_PASSWORD: android
-      ANDROID_SIGNING_SHA256: 99706958760D9FEDBF388DA327FB7159B9F233EC89E394A44188C9C32C509F78
+    timeout-minutes: 15
+    # Superseded verification/build jobs may stop. An active publisher never does.
+    concurrency:
+      group: android-verify-${{ github.ref }}
+      cancel-in-progress: true
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
-
-      - name: Set up Flutter
-        uses: subosito/flutter-action@v2
+      - uses: actions/checkout@v6
+      - uses: subosito/flutter-action@v2
+        id: flutter
         with:
           flutter-version: 3.47.0
           channel: stable
           cache: true
+      - name: Restore locked packages
+        working-directory: passingtrace-mobile
+        run: python3 ../tools/ci_timed.py "校验依赖" flutter pub get --enforce-lockfile
+      - name: Analyze
+        working-directory: passingtrace-mobile
+        run: python3 ../tools/ci_timed.py "静态检查" flutter analyze --no-pub
+      - name: Test
+        working-directory: passingtrace-mobile
+        run: python3 ../tools/ci_timed.py "Flutter 测试" flutter test --no-pub
+      - name: Test release safety
+        run: python3 tools/ci_timed.py "发布保护测试" python3 -m unittest discover -s tools/tests -p test_publish_android_release.py -v
+      - name: Cache summary
+        if: always()
+        run: |
+          printf '%s\n' "Flutter cache hit: ${{ steps.flutter.outputs.CACHE-HIT }}" "Pub cache hit: ${{ steps.flutter.outputs.PUB-CACHE-HIT }}" >> "$GITHUB_STEP_SUMMARY"
 
+  build:
+    name: Build signed APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    concurrency:
+      group: android-build-${{ github.ref }}
+      cancel-in-progress: true
+    env:
+      ANDROID_SIGNING_STORE_FILE: ${{ github.workspace }}/passingtrace-mobile/android/app/release.keystore
+      ANDROID_SIGNING_STORE_PASSWORD: android
+      ANDROID_SIGNING_KEY_ALIAS: androiddebugkey
+      ANDROID_SIGNING_KEY_PASSWORD: android
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: subosito/flutter-action@v2
+        id: flutter
+        with:
+          flutter-version: 3.47.0
+          channel: stable
+          cache: true
+      # Only downloaded dependencies/wrapper, never local.properties, signing,
+      # project outputs, configuration-cache or Gradle credentials.
+      - name: Restore Gradle dependencies
+        id: gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches/modules-2
+            ~/.gradle/wrapper
+          key: android-gradle-deps-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('passingtrace-mobile/android/**/*.gradle*', 'passingtrace-mobile/android/gradle/wrapper/gradle-wrapper.properties', 'passingtrace-mobile/pubspec.lock') }}
+          restore-keys: |
+            android-gradle-deps-${{ runner.os }}-${{ runner.arch }}-
       - name: Restore Android signing certificate
         shell: bash
         env:
@@ -77,141 +119,92 @@ jobs:
           set -euo pipefail
           printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$ANDROID_SIGNING_STORE_FILE"
           chmod 600 "$ANDROID_SIGNING_STORE_FILE"
-
       - name: Verify release keystore certificate
         shell: bash
         run: |
           set -euo pipefail
-          actual="$(keytool -exportcert \
-            -keystore "$ANDROID_SIGNING_STORE_FILE" \
-            -storepass "$ANDROID_SIGNING_STORE_PASSWORD" \
-            -alias "$ANDROID_SIGNING_KEY_ALIAS" \
-            | sha256sum \
-            | awk '{print toupper($1)}')"
+          actual="$(keytool -exportcert -keystore "$ANDROID_SIGNING_STORE_FILE" -storepass "$ANDROID_SIGNING_STORE_PASSWORD" -alias "$ANDROID_SIGNING_KEY_ALIAS" | sha256sum | awk '{print toupper($1)}')"
           if [ "$actual" != "$ANDROID_SIGNING_SHA256" ]; then
-            echo "::error::Unexpected release keystore certificate: $actual"
+            echo "::error::Unexpected release keystore certificate"
             exit 1
           fi
-
-      - name: Configure Android and restore packages
+      - name: Configure Android and restore locked packages
         working-directory: passingtrace-mobile
         shell: bash
         env:
           AMAP_ANDROID_KEY: ${{ secrets.AMAP_ANDROID_KEY }}
         run: |
           set -euo pipefail
-          flutter pub get --enforce-lockfile
+          python3 ../tools/ci_timed.py "构建依赖还原" flutter pub get --enforce-lockfile
           printf '\nAMAP_ANDROID_KEY=%s\n' "$AMAP_ANDROID_KEY" >> android/local.properties
-
-      - name: Test
-        working-directory: passingtrace-mobile
-        run: flutter test
-
       - name: Build production APK
         working-directory: passingtrace-mobile
-        shell: bash
         run: |
-          set -euo pipefail
-          flutter build apk --release \
+          python3 ../tools/ci_timed.py "正式 APK 编译" flutter build apk --release --no-pub \
             --flavor production \
             --build-name "$RELEASE_VERSION_NAME" \
             --build-number "$RELEASE_VERSION_CODE" \
             --dart-define PASSINGTRACE_CHANNEL=production \
             --dart-define PASSINGTRACE_IDENTITY_URL=https://auth.passingtrace.com \
             --dart-define PASSINGTRACE_EVENTS_API_URL=https://passingtrace.com
-
       - name: Verify production signing certificate
         working-directory: passingtrace-mobile
         shell: bash
         run: |
           set -euo pipefail
+          started=$SECONDS
           apk='build/app/outputs/flutter-apk/app-production-release.apk'
-          signer_output="$($ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/apksigner \
-            verify --print-certs "$apk" 2>&1)"
-          printf '%s\n' "$signer_output"
-          actual="$(printf '%s\n' "$signer_output" \
-            | awk -F ': ' '/certificate SHA-256 digest/ {print toupper($NF); exit}' \
-            | tr -d '\r')"
+          signer_output="$($ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/apksigner verify --print-certs "$apk" 2>&1)"
+          actual="$(printf '%s\n' "$signer_output" | awk -F ': ' '/certificate SHA-256 digest/ {print toupper($NF); exit}' | tr -d '\r')"
           if [ "$actual" != "$ANDROID_SIGNING_SHA256" ]; then
-            echo "::error::Unexpected Android signing certificate: $actual"
+            echo "::error::Unexpected APK signing certificate"
             exit 1
           fi
-
-      - name: Create release manifest
-        shell: bash
-        env:
-          VERSION_NAME: ${{ env.RELEASE_VERSION_NAME }}
-          VERSION_CODE: ${{ env.RELEASE_VERSION_CODE }}
-          MINIMUM_SUPPORTED_VERSION_CODE: ${{ env.RELEASE_MINIMUM_SUPPORTED_VERSION_CODE }}
-        run: |
-          set -euo pipefail
-          install -d release
-          apk='passingtrace-mobile/build/app/outputs/flutter-apk/app-production-release.apk'
-          object_key="releases/android/PassingTrace-${VERSION_NAME}-${VERSION_CODE}.apk"
-          cp "$apk" release/PassingTrace.apk
-          export APK_OBJECT_KEY="$object_key"
-          export APK_SHA256="$(sha256sum "$apk" | awk '{print $1}')"
-          export APK_SIZE="$(stat -c '%s' "$apk")"
-          python3 - <<'PY'
-          import datetime
-          import json
-          import os
-
-          manifest = {
-              "versionName": os.environ["VERSION_NAME"],
-              "versionCode": int(os.environ["VERSION_CODE"]),
-              "publishedAt": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z"),
-              "objectKey": os.environ["APK_OBJECT_KEY"],
-              "sha256": os.environ["APK_SHA256"],
-              "size": int(os.environ["APK_SIZE"]),
-              "notes": os.environ["RELEASE_NOTES"],
-              "minimumSupportedVersionCode": int(os.environ["MINIMUM_SUPPORTED_VERSION_CODE"]),
-          }
-          with open("release/latest.json", "w", encoding="utf-8") as stream:
-              json.dump(manifest, stream, ensure_ascii=False, separators=(",", ":"))
-          PY
-          printf '%s' "$object_key" > release/object-key.txt
-
-      - name: Upload APK and publish manifest to Rainyun S3
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 -m pip install --disable-pip-version-check --quiet boto3
-          python3 - <<'PY'
-          import os
-          import boto3
-          from botocore.config import Config
-
-          with open("release/object-key.txt", encoding="utf-8") as stream:
-              object_key = stream.read()
-          client = boto3.client(
-              "s3",
-              endpoint_url=os.environ["S3_ENDPOINT"],
-              region_name=os.environ.get("S3_REGION") or "us-east-1",
-              aws_access_key_id=os.environ["AWS_ACCESS_KEY_ID"],
-              aws_secret_access_key=os.environ["AWS_SECRET_ACCESS_KEY"],
-              config=Config(s3={"addressing_style": "virtual"}),
-          )
-          client.upload_file(
-              "release/PassingTrace.apk",
-              os.environ["S3_BUCKET"],
-              object_key,
-              ExtraArgs={"ContentType": "application/vnd.android.package-archive"},
-          )
-          client.upload_file(
-              "release/latest.json",
-              os.environ["S3_BUCKET"],
-              "releases/android/latest.json",
-              ExtraArgs={"ContentType": "application/json; charset=utf-8", "CacheControl": "no-cache"},
-          )
-          PY
-
-      - name: Keep CI artifact
+          printf '%s\n' "- 安装包验签: $((SECONDS-started)) 秒" >> "$GITHUB_STEP_SUMMARY"
+      - name: Prepare verified release artifact
+        run: python3 tools/ci_timed.py "准备发布产物" python3 tools/publish_android_release.py prepare
+      - name: Keep verified APK before publication
         uses: actions/upload-artifact@v4
         with:
-          name: PassingTrace-${{ env.RELEASE_VERSION_NAME }}-${{ env.RELEASE_VERSION_CODE }}-production
-          path: |
-            release/PassingTrace.apk
-            release/latest.json
+          name: android-production-${{ github.run_id }}
+          path: release/
           if-no-files-found: error
           retention-days: 30
+          overwrite: true
+      - name: Cache summary
+        if: always()
+        run: |
+          printf '%s\n' "Flutter cache hit: ${{ steps.flutter.outputs.CACHE-HIT }}" "Pub cache hit: ${{ steps.flutter.outputs.PUB-CACHE-HIT }}" "Gradle exact cache hit: ${{ steps.gradle.outputs.cache-hit }}" >> "$GITHUB_STEP_SUMMARY"
+      - name: Remove ephemeral signing/config files
+        if: always()
+        shell: bash
+        run: rm -f -- "$ANDROID_SIGNING_STORE_FILE" "$GITHUB_WORKSPACE/passingtrace-mobile/android/local.properties"
+
+  publish:
+    name: Publish verified APK
+    needs: [verify, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: production
+    # Global across branches and manual runs. Queued runs can be superseded;
+    # the version check handles GitHub's non-FIFO scheduling.
+    concurrency:
+      group: passingtrace-android-publish
+      cancel-in-progress: false
+    env:
+      S3_ENDPOINT: ${{ vars.S3_ENDPOINT }}
+      S3_BUCKET: ${{ vars.S3_BUCKET }}
+      S3_REGION: ${{ vars.S3_REGION }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.S3_ACCESS_KEY }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_KEY }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Download this run's verified artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: android-production-${{ github.run_id }}
+          path: release
+      - name: Prepare upload dependencies
+        run: python3 tools/ci_timed.py "上传依赖准备" python3 -m pip install --disable-pip-version-check --quiet -r tools/android-release-requirements.txt
+      - name: Upload APK, verify and commit latest manifest
+        run: python3 tools/publish_android_release.py publish

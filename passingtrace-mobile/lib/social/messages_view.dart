@@ -15,24 +15,31 @@ class MessagesView extends StatefulWidget {
     required this.auth,
     required this.session,
     required this.feed,
+    this.api,
     this.drawer,
     this.bottomNavigationBar,
   });
   final AuthService auth;
   final AuthSession session;
   final SocialFeed feed;
+  final SocialApi? api;
   final Widget? drawer, bottomNavigationBar;
   @override
   State<MessagesView> createState() => _MessagesViewState();
 }
 
 class _MessagesViewState extends State<MessagesView> {
-  late final SocialApi _api = SocialApi(widget.auth, widget.session);
+  late final SocialApi _api =
+      widget.api ?? SocialApi(widget.auth, widget.session);
+  final Map<String, String> _drafts = {};
   List<SocialRow> _items = [];
   String? _cursor, _error;
   bool _busy = false;
   int _revision = -1;
   String _me = '';
+  SocialRow? _myProfile, _notificationSummary;
+  int _tab = 0;
+  bool _friendsVisited = false;
   @override
   void initState() {
     super.initState();
@@ -48,6 +55,7 @@ class _MessagesViewState extends State<MessagesView> {
   }
 
   void _changed() {
+    if (mounted) setState(() {});
     if (_revision == widget.feed.revision) return;
     _revision = widget.feed.revision;
     _load();
@@ -67,10 +75,16 @@ class _MessagesViewState extends State<MessagesView> {
           '/api/v1/people/me',
           identity: true,
         );
-        _me = me['profile']['id'] as String;
+        _myProfile = Map<String, dynamic>.from(me['profile'] as Map);
+        _me = _myProfile!['id'] as String;
       }
+      final summary = await _api.request(
+        'GET',
+        '/api/v1/notifications/summary',
+      );
       if (mounted) {
         setState(() {
+          _notificationSummary = Map<String, dynamic>.from(summary as Map);
           final rows = socialRows(page['items']);
           _items = more
               ? [
@@ -97,6 +111,9 @@ class _MessagesViewState extends State<MessagesView> {
           api: _api,
           conversationId: id,
           me: _me,
+          myProfile: _myProfile,
+          initialDraft: _drafts[id] ?? '',
+          onDraftChanged: (draft) => _drafts[id] = draft,
           feed: widget.feed,
         ),
       ),
@@ -117,77 +134,154 @@ class _MessagesViewState extends State<MessagesView> {
     }
   }
 
-  Future<void> _friends() async {
+  Future<void> _notifications() async {
     await Navigator.push<void>(
       context,
       MaterialPageRoute(
-        builder: (_) => FriendsView(api: _api, onChat: _friendChat),
+        builder: (_) => NotificationsView(api: _api, onChat: _chat),
       ),
     );
-    if (mounted) _load();
+    if (mounted) await _load();
   }
 
   @override
   Widget build(BuildContext context) => Scaffold(
     drawer: widget.drawer,
     bottomNavigationBar: widget.bottomNavigationBar,
-    appBar: AppBar(
-      title: const Text('消息'),
-      actions: [
-        TextButton(onPressed: _friends, child: const Text('好友')),
-        IconButton(
-          tooltip: '提醒',
-          icon: const Icon(Icons.notifications_none),
-          onPressed: () => Navigator.push<void>(
-            context,
-            MaterialPageRoute(
-              builder: (_) => NotificationsView(api: _api, onChat: _chat),
-            ),
+    appBar: AppBar(title: const Text('消息')),
+    body: Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: SegmentedButton<int>(
+            expandedInsets: EdgeInsets.zero,
+            segments: const [
+              ButtonSegment(
+                value: 0,
+                label: Text('聊天'),
+                icon: Icon(Icons.chat_bubble_outline),
+              ),
+              ButtonSegment(
+                value: 1,
+                label: Text('好友'),
+                icon: Icon(Icons.people_outline),
+              ),
+            ],
+            selected: {_tab},
+            onSelectionChanged: (value) => setState(() {
+              _tab = value.first;
+              if (_tab == 1) _friendsVisited = true;
+            }),
+          ),
+        ),
+        if (widget.feed.reconnecting)
+          const Padding(
+            padding: EdgeInsets.all(12),
+            child: Text('新消息同步暂时中断，正在重试', semanticsLabel: '新消息同步暂时中断，正在重试'),
+          ),
+        Expanded(
+          child: IndexedStack(
+            index: _tab,
+            children: [
+              RefreshIndicator(
+                onRefresh: _load,
+                child: ListView.builder(
+                  key: const PageStorageKey('conversations'),
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  itemCount: _items.length + 2,
+                  itemBuilder: (context, index) {
+                    if (index == 0) {
+                      final latest = _notificationSummary?['latest'] as Map?;
+                      if (latest == null) return const SizedBox.shrink();
+                      final unread =
+                          (_notificationSummary?['unreadCount'] as num?) ?? 0;
+                      return ListTile(
+                        leading: const CircleAvatar(
+                          child: Icon(Icons.people_alt_outlined),
+                        ),
+                        title: const Text('好友通知'),
+                        subtitle: Text(
+                          latest['text'] as String? ?? '',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        trailing: unread > 0
+                            ? Badge(label: Text('$unread'))
+                            : const Icon(Icons.chevron_right),
+                        onTap: _notifications,
+                      );
+                    }
+                    if (index > _items.length) {
+                      return Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          children: [
+                            if (_error != null) Text(_error!),
+                            if (_items.isEmpty) ...[
+                              const Text('还没有聊天，和好友聊聊共同的生活吧。'),
+                              TextButton(
+                                onPressed: () => setState(() {
+                                  _tab = 1;
+                                  _friendsVisited = true;
+                                }),
+                                child: const Text('查看好友'),
+                              ),
+                            ],
+                            if (_cursor != null)
+                              TextButton(
+                                onPressed: () => _load(more: true),
+                                child: const Text('加载更多'),
+                              ),
+                          ],
+                        ),
+                      );
+                    }
+                    final c = _items[index - 1];
+                    return ListTile(
+                      key: ValueKey(c['id']),
+                      leading: SocialAvatar(
+                        api: _api,
+                        person: Map<String, dynamic>.from(c['person'] as Map),
+                      ),
+                      title: Text(
+                        c['person']['nickname'] as String,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      subtitle: Text(
+                        c['preview'] as String,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      trailing: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            socialMessageTime(c['updatedAt'] as String? ?? ''),
+                            style: Theme.of(context).textTheme.labelSmall,
+                          ),
+                          if ((c['unreadCount'] as num) > 0)
+                            Badge(label: Text('${c['unreadCount']}')),
+                        ],
+                      ),
+                      onTap: () => _chat(c['id'] as String),
+                    );
+                  },
+                ),
+              ),
+              if (_friendsVisited)
+                FriendsView(
+                  api: _api,
+                  onChat: _friendChat,
+                  feed: widget.feed,
+                  embedded: true,
+                )
+              else
+                const SizedBox.shrink(),
+            ],
           ),
         ),
       ],
-    ),
-    body: RefreshIndicator(
-      onRefresh: _load,
-      child: ListView.builder(
-        itemCount: _items.length + 1,
-        itemBuilder: (context, index) {
-          if (index == _items.length) {
-            return Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                children: [
-                  if (_error != null) Text(_error!),
-                  if (_items.isEmpty) const Text('还没有聊天。添加好友，聊聊共同的生活。'),
-                  if (_cursor != null)
-                    TextButton(
-                      onPressed: () => _load(more: true),
-                      child: const Text('加载更多'),
-                    ),
-                ],
-              ),
-            );
-          }
-          final c = _items[index];
-          return ListTile(
-            key: ValueKey(c['id']),
-            leading: SocialAvatar(
-              api: _api,
-              person: Map<String, dynamic>.from(c['person'] as Map),
-            ),
-            title: Text(c['person']['nickname'] as String),
-            subtitle: Text(
-              c['preview'] as String,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            trailing: (c['unreadCount'] as num) > 0
-                ? Badge(label: Text('${c['unreadCount']}'))
-                : null,
-            onTap: () => _chat(c['id'] as String),
-          );
-        },
-      ),
     ),
   );
 }
@@ -198,18 +292,24 @@ class DirectChatView extends StatefulWidget {
     required this.api,
     required this.conversationId,
     required this.me,
+    this.myProfile,
     this.feed,
+    this.initialDraft = '',
+    this.onDraftChanged,
   });
   final SocialApi api;
   final String conversationId, me;
+  final SocialRow? myProfile;
   final SocialFeed? feed;
+  final String initialDraft;
+  final ValueChanged<String>? onDraftChanged;
   @override
   State<DirectChatView> createState() => _DirectChatViewState();
 }
 
 class _DirectChatViewState extends State<DirectChatView>
     with WidgetsBindingObserver {
-  final _draft = TextEditingController();
+  late final _draft = TextEditingController(text: widget.initialDraft);
   final _scroll = ScrollController();
   List<SocialRow> _messages = [];
   SocialRow? _summary;
@@ -229,6 +329,7 @@ class _DirectChatViewState extends State<DirectChatView>
       _ownedFeed = SocialFeed(widget.api.auth, widget.api.session)..start();
     }
     _feed?.addListener(_changed);
+    _draft.addListener(_saveDraft);
     _scroll.addListener(_scrolled);
     _load();
   }
@@ -243,7 +344,10 @@ class _DirectChatViewState extends State<DirectChatView>
     super.dispose();
   }
 
+  void _saveDraft() => widget.onDraftChanged?.call(_draft.text);
+
   void _changed() {
+    if (mounted) setState(() {});
     if (_revision == _feed?.revision) return;
     _revision = _feed?.revision ?? 0;
     _sync();
@@ -462,13 +566,18 @@ class _DirectChatViewState extends State<DirectChatView>
         PopupMenuButton<String>(
           onSelected: (_) => _clear(),
           itemBuilder: (_) => [
-            const PopupMenuItem(value: 'clear', child: Text('清除我的历史')),
+            const PopupMenuItem(value: 'clear', child: Text('清除我的聊天记录')),
           ],
         ),
       ],
     ),
     body: Column(
       children: [
+        if (_feed?.reconnecting == true)
+          const Padding(
+            padding: EdgeInsets.all(12),
+            child: Text('新消息同步暂时中断，正在重试'),
+          ),
         Expanded(
           child: ListView.builder(
             controller: _scroll,
@@ -490,63 +599,128 @@ class _DirectChatViewState extends State<DirectChatView>
               }
               final m = _messages[_messages.length - index - 1];
               final own = m['senderId'] == widget.me;
-              return Align(
-                alignment: own ? Alignment.centerRight : Alignment.centerLeft,
-                child: Container(
-                  constraints: BoxConstraints(
-                    maxWidth: MediaQuery.sizeOf(context).width * .85,
-                  ),
-                  margin: const EdgeInsets.only(bottom: 16),
-                  child: Column(
-                    crossAxisAlignment: own
-                        ? CrossAxisAlignment.end
-                        : CrossAxisAlignment.start,
+              final previous = index + 1 < _messages.length
+                  ? _messages[_messages.length - index - 2]
+                  : null;
+              return Column(
+                children: [
+                  if (showSocialMessageTime(m, previous))
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Text(
+                        socialMessageTime(m['createdAt'] as String, full: true),
+                        style: Theme.of(context).textTheme.labelSmall,
+                      ),
+                    ),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    textDirection: own ? TextDirection.rtl : TextDirection.ltr,
                     children: [
-                      Card(
-                        color: own
-                            ? Theme.of(context).colorScheme.primaryContainer
-                            : null,
-                        child: m['kind'] == 'text'
-                            ? Padding(
-                                padding: const EdgeInsets.all(14),
-                                child: SelectableText(m['text'] as String),
-                              )
-                            : ListTile(
-                                title: Text(
-                                  m['shareAvailable'] == true
-                                      ? (m['shareTitle'] as String? ?? '好友分享')
-                                      : '内容已不可查看',
-                                ),
-                                subtitle: Text(
-                                  m['kind'] == 'record'
-                                      ? '分享的记录 · 发送时版本'
-                                      : '分享的故事线 · 发送时版本',
-                                ),
-                                trailing: const Icon(Icons.chevron_right),
-                                onTap: m['shareAvailable'] == true
-                                    ? () async {
-                                        await Navigator.push<void>(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (_) => SharedContentView(
-                                              auth: widget.api.auth,
-                                              session: widget.api.session,
-                                              shareId: m['shareId'] as String,
-                                            ),
-                                          ),
-                                        );
-                                        await _sync();
-                                      }
-                                    : null,
+                      SocialAvatar(
+                        api: widget.api,
+                        person: own
+                            ? (widget.myProfile ??
+                                  {
+                                    'id': widget.me,
+                                    'nickname': '我',
+                                    'hasAvatar': false,
+                                  })
+                            : Map<String, dynamic>.from(
+                                _summary?['person'] as Map? ??
+                                    {
+                                      'id': m['senderId'],
+                                      'nickname': '好友',
+                                      'hasAvatar': false,
+                                    },
                               ),
                       ),
-                      Text(
-                        '${DateTime.parse(m['createdAt'] as String).toLocal().toString().substring(0, 16)}${own ? ' · ${(m['id'] as num) <= (_summary?['peerReadThroughId'] as num? ?? 0) ? '已读' : '已发送'}' : ''}',
-                        style: Theme.of(context).textTheme.labelSmall,
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Align(
+                          alignment: own
+                              ? Alignment.centerRight
+                              : Alignment.centerLeft,
+                          child: Container(
+                            constraints: BoxConstraints(
+                              maxWidth: MediaQuery.sizeOf(context).width * .75,
+                            ),
+                            margin: const EdgeInsets.only(bottom: 16),
+                            child: Column(
+                              crossAxisAlignment: own
+                                  ? CrossAxisAlignment.end
+                                  : CrossAxisAlignment.start,
+                              children: [
+                                Card(
+                                  color: own
+                                      ? Theme.of(context)
+                                            .colorScheme
+                                            .primaryContainer
+                                      : null,
+                                  child: m['kind'] == 'text'
+                                      ? Padding(
+                                          padding: const EdgeInsets.all(14),
+                                          child: SelectableText(
+                                            m['text'] as String,
+                                          ),
+                                        )
+                                      : ListTile(
+                                          title: Text(
+                                            m['shareAvailable'] == true
+                                                ? (m['shareTitle'] as String? ??
+                                                      '好友分享')
+                                                : '内容已不可查看',
+                                          ),
+                                          subtitle: Text(
+                                            m['kind'] == 'record'
+                                                ? '分享的记录 · 发送时版本'
+                                                : '分享的故事线 · 发送时版本',
+                                          ),
+                                          trailing: const Icon(
+                                            Icons.chevron_right,
+                                          ),
+                                          onTap: m['shareAvailable'] == true
+                                              ? () async {
+                                                  await Navigator.push<void>(
+                                                    context,
+                                                    MaterialPageRoute(
+                                                      builder: (_) =>
+                                                          SharedContentView(
+                                                            auth:
+                                                                widget.api.auth,
+                                                            session: widget
+                                                                .api
+                                                                .session,
+                                                            shareId:
+                                                                m['shareId']
+                                                                    as String,
+                                                          ),
+                                                    ),
+                                                  );
+                                                  await _sync();
+                                                }
+                                              : null,
+                                        ),
+                                ),
+                                if (own)
+                                  Text(
+                                    (m['id'] as num) <=
+                                            (_summary?['peerReadThroughId']
+                                                    as num? ??
+                                                0)
+                                        ? '已读'
+                                        : '已发送',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelSmall,
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
                       ),
                     ],
                   ),
-                ),
+                ],
               );
             },
           ),
@@ -575,20 +749,24 @@ class _DirectChatViewState extends State<DirectChatView>
                 : Column(
                     children: [
                       Row(
-                        children: [
-                          TextButton(
-                            onPressed: () => _share('record'),
-                            child: const Text('分享记录'),
-                          ),
-                          TextButton(
-                            onPressed: () => _share('storyline'),
-                            child: const Text('分享故事线'),
-                          ),
-                        ],
-                      ),
-                      Row(
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
+                          PopupMenuButton<String>(
+                            tooltip: '分享内容',
+                            icon: const Icon(Icons.add_circle_outline),
+                            enabled: !_busy,
+                            onSelected: _share,
+                            itemBuilder: (_) => const [
+                              PopupMenuItem(
+                                value: 'record',
+                                child: Text('分享记录'),
+                              ),
+                              PopupMenuItem(
+                                value: 'storyline',
+                                child: Text('分享故事线'),
+                              ),
+                            ],
+                          ),
                           Expanded(
                             child: TextField(
                               controller: _draft,
@@ -724,7 +902,7 @@ class _NotificationsViewState extends State<NotificationsView> {
       final rows = socialRows(
         await widget.api.request(
           'GET',
-          '/api/v1/notifications${_items.isEmpty ? '' : '?before=${_items.last['id']}'}',
+          '/api/v1/notifications?visibleOnly=true${_items.isEmpty ? '' : '&before=${_items.last['id']}'}',
         ),
       );
       if (mounted) {
@@ -736,7 +914,7 @@ class _NotificationsViewState extends State<NotificationsView> {
       if (rows.isNotEmpty) {
         await widget.api.request(
           'PUT',
-          '/api/v1/notifications/read',
+          '/api/v1/notifications/read?visibleOnly=true',
           body: {'throughId': rows.first['id']},
         );
       }
@@ -785,6 +963,7 @@ class _NotificationsViewState extends State<NotificationsView> {
       MaterialPageRoute(
         builder: (_) => FriendsView(
           api: widget.api,
+          initialPanel: n['kind'] == 'friend-request' ? 'requests' : '',
           onChat: (friend) async {
             final c = await widget.api.request(
               'POST',
@@ -800,7 +979,7 @@ class _NotificationsViewState extends State<NotificationsView> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('提醒')),
+    appBar: AppBar(title: const Text('好友通知')),
     body: ListView.builder(
       itemCount: _items.length + 1,
       itemBuilder: (context, i) {
@@ -809,14 +988,16 @@ class _NotificationsViewState extends State<NotificationsView> {
             children: [
               if (_error != null) Text(_error!),
               if (_hasMore)
-                TextButton(onPressed: _load, child: const Text('查看更早提醒')),
+                TextButton(onPressed: _load, child: const Text('查看更早通知')),
             ],
           );
         }
         final n = _items[i];
         return ListTile(
           title: Text(n['text'] as String),
-          subtitle: Text(n['createdAt'] as String),
+          subtitle: Text(
+            socialMessageTime(n['createdAt'] as String, full: true),
+          ),
           trailing: const Icon(Icons.chevron_right),
           onTap: () => _open(n),
         );

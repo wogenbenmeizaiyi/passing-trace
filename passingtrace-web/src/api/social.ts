@@ -112,6 +112,10 @@ export interface Notification {
   createdAt: string
   read: boolean
 }
+export interface NotificationSummary {
+  unreadCount: number
+  latest: Notification | null
+}
 export interface JointRecord {
   id: number
   title: string
@@ -180,9 +184,12 @@ export const socialApi = {
     httpClient.get<SharedDocument>(`/api/v1/friends/shared-records/${id}`),
   detach: (id: number) => httpClient.delete(`/api/v1/friends/shared-records/${id}/participation`),
   notifications: (before?: number) =>
-    httpClient.get<Notification[]>('/api/v1/notifications', { query: { before } }),
+    httpClient.get<Notification[]>('/api/v1/notifications', {
+      query: { before, visibleOnly: 'true' },
+    }),
+  notificationSummary: () => httpClient.get<NotificationSummary>('/api/v1/notifications/summary'),
   readNotifications: (throughId: number) =>
-    httpClient.put('/api/v1/notifications/read', { body: { throughId } }),
+    httpClient.put('/api/v1/notifications/read?visibleOnly=true', { body: { throughId } }),
 }
 
 export function safeSocialPath(path: string | null | undefined): string | null {

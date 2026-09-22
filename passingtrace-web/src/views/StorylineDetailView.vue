@@ -278,6 +278,10 @@ onMounted(async () => {
   overflow-wrap: anywhere;
 }
 .hero-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
   flex-shrink: 0;
 }
 .detail-hero h1 {

@@ -6,14 +6,35 @@ export const useSocialStore = defineStore('social', () => {
   const unread = ref(0)
   const change = ref(0)
   const online = ref(false)
+  const reconnecting = ref(false)
+  let reconnectTimer: ReturnType<typeof setTimeout> | undefined
+  function disconnected() {
+    online.value = false
+    reconnectTimer ??= setTimeout(() => {
+      reconnecting.value = true
+    }, 10000)
+  }
+  function connected() {
+    online.value = true
+    reconnecting.value = false
+    clearTimeout(reconnectTimer)
+    reconnectTimer = undefined
+  }
   let controller: AbortController | null = null
   let cursor = 0
   async function refresh() {
     const owner = controller
     const result = await httpClient.get<{ count: number }>('/api/v1/conversations/unread')
-    if (owner && controller === owner && !owner.signal.aborted) unread.value = result.count
+    const summary = await httpClient
+      .get<{ unreadCount: number }>('/api/v1/notifications/summary')
+      .catch(() => ({ unreadCount: 0 }))
+    if (owner && controller === owner && !owner.signal.aborted)
+      unread.value = result.count + (summary.unreadCount ?? 0)
   }
   function stop() {
+    clearTimeout(reconnectTimer)
+    reconnectTimer = undefined
+    reconnecting.value = false
     controller?.abort()
     controller = null
     cursor = 0
@@ -25,6 +46,7 @@ export const useSocialStore = defineStore('social', () => {
     stop()
     const current = new AbortController()
     controller = current
+    disconnected()
     void refresh().catch(() => {})
     while (!current.signal.aborted) {
       try {
@@ -32,7 +54,8 @@ export const useSocialStore = defineStore('social', () => {
           `/api/v1/notifications/stream?after=${cursor}`,
           current.signal,
         )
-        online.value = true
+        if (current.signal.aborted || controller !== current) return
+        connected()
         const reader = response.body!.getReader()
         const decoder = new TextDecoder()
         let buffer = ''
@@ -57,8 +80,9 @@ export const useSocialStore = defineStore('social', () => {
           }
         }
       } catch {
-        if (!current.signal.aborted) online.value = false
+        if (!current.signal.aborted && controller === current) disconnected()
       }
+      if (!current.signal.aborted && controller === current) disconnected()
       if (!current.signal.aborted)
         await new Promise<void>((resolve) => {
           const finish = () => {
@@ -71,5 +95,5 @@ export const useSocialStore = defineStore('social', () => {
         })
     }
   }
-  return { unread, change, online, start, stop, refresh }
+  return { unread, change, online, reconnecting, start, stop, refresh }
 })

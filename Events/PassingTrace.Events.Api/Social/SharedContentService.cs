@@ -72,7 +72,9 @@ public sealed class SharedContentService(TraceDbContext db, FriendService friend
             source.Event.Status.ToString(), source.MediaAssets.Where(x => x.MediaAsset.DeletedAt == null && x.MediaAsset.ConfirmedAt != null)
                 .OrderBy(x => x.SortOrder).Select(x => new SharedMedia(x.MediaAssetId, x.MediaAsset.OriginalFileName,
                     x.MediaAsset.Kind.ToString(), x.MediaAsset.VerifiedMimeType ?? x.MediaAsset.DeclaredMimeType)).ToArray(),
-            JsonSerializer.Deserialize<string[]>(source.ParticipantIdsJson) ?? [],
+            // Revisions created before social features were migrated with an empty string.
+            // Keep their historical meaning: no participants, not the current record's participants.
+            string.IsNullOrWhiteSpace(source.ParticipantIdsJson) ? [] : JsonSerializer.Deserialize<string[]>(source.ParticipantIdsJson) ?? [],
             Labels: source.Labels.Where(x => x.Decision == SourceLabelDecision.Include).OrderBy(x => x.SortOrder).Select(x => x.DisplayName).ToArray(),
             Places: source.Locations.Select(x => new SharedPlace(x.Name, x.Address, x.Latitude, x.Longitude, x.CoordinateSystem)).ToArray());
     }

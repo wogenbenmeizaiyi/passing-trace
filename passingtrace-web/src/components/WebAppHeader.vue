@@ -154,6 +154,13 @@ function download(event: MouseEvent) {
   white-space: nowrap;
 }
 @media (max-width: 760px) {
+  .site-nav--app {
+    gap: 0.5rem;
+    overflow-x: auto;
+  }
+  .site-nav--app a {
+    white-space: nowrap;
+  }
   .account-entry > span:last-child {
     display: none;
   }

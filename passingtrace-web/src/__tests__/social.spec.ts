@@ -32,6 +32,9 @@ vi.mock('@/api/social', async (original) => ({
     send: vi.fn<typeof socialApi.send>(),
     friends: vi.fn<typeof socialApi.friends>(),
     shareStatuses: vi.fn<typeof socialApi.shareStatuses>(),
+    notificationSummary: vi.fn<typeof socialApi.notificationSummary>(),
+    notifications: vi.fn<typeof socialApi.notifications>(),
+    readNotifications: vi.fn<typeof socialApi.readNotifications>(),
   },
 }))
 const id = '11111111-1111-4111-8111-111111111111'
@@ -67,6 +70,7 @@ beforeEach(() => {
   vi.mocked(socialApi.conversation).mockResolvedValue({ ...conversation })
   vi.mocked(socialApi.messages).mockResolvedValue({ items: [message(31)], nextCursor: '31' })
   vi.mocked(socialApi.read).mockResolvedValue(undefined)
+  vi.mocked(socialApi.notificationSummary).mockResolvedValue({ unreadCount: 0, latest: null })
 })
 afterEach(() => wrapper?.unmount())
 async function open(path = '/messages') {
@@ -85,6 +89,48 @@ async function open(path = '/messages') {
   return router
 }
 describe('好友与聊天', () => {
+  it('好友模式不残留聊天，通知以摘要入口出现且旧链接可返回', async () => {
+    const router = await open('/messages?tab=friends')
+    expect(wrapper.find('.conversation-pane').exists()).toBe(false)
+    expect(wrapper.find('.empty-chat').exists()).toBe(false)
+    const notice = {
+      id: 9,
+      kind: 'friend-request',
+      text: '小王想添加你为好友',
+      target: null,
+      read: false,
+      createdAt: '2026-09-22',
+    }
+    vi.mocked(socialApi.notificationSummary).mockResolvedValue({ unreadCount: 1, latest: notice })
+    vi.mocked(socialApi.notifications).mockResolvedValue([notice])
+    await router.push('/messages?tab=notifications')
+    await flushPromises()
+    expect(wrapper.text()).toContain('好友通知')
+    expect(socialApi.notifications).toHaveBeenCalledTimes(1)
+    expect(socialApi.readNotifications).toHaveBeenCalledWith(9)
+    expect(wrapper.findComponent({ name: 'RouterLink' }).props('to')).toBe(
+      '/messages?tab=friends&panel=requests',
+    )
+    await router.push('/messages')
+    await flushPromises()
+    expect(wrapper.find('.notification-entry').text()).toContain('小王想添加你')
+    expect(wrapper.text()).not.toContain('已连接')
+  })
+  it('Enter 发送，Shift+Enter 和输入法选词不发送', async () => {
+    await open(`/messages/${id}`)
+    expect(wrapper.get('.composer-toolbar').findAll('button')).toHaveLength(3)
+    expect(wrapper.get('.chat-composer').find('textarea').exists()).toBe(true)
+    expect(wrapper.find('[role="separator"]').exists()).toBe(true)
+    vi.mocked(socialApi.send).mockResolvedValue({ ...message(32), senderId: '1', text: '你好' })
+    const input = wrapper.get('textarea')
+    await input.setValue('你好')
+    await input.trigger('keydown', { key: 'Enter', shiftKey: true })
+    await input.trigger('keydown', { key: 'Enter', isComposing: true })
+    expect(socialApi.send).not.toHaveBeenCalled()
+    await input.trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(socialApi.send).toHaveBeenCalledTimes(1)
+  })
   it('分享详情返回保留聊天、草稿和滚动位置，不把分享 ID 当成会话 ID', async () => {
     vi.mocked(socialApi.messages).mockImplementation(async (_id, _before, after) =>
       after === undefined

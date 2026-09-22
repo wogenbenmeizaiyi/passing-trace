@@ -2,7 +2,7 @@
 import { onUnmounted, ref, watch } from 'vue'
 import AccountAvatar from './AccountAvatar.vue'
 import { httpClient } from '@/api/http-client'
-const props = defineProps<{ id: string; hasAvatar: boolean }>()
+const props = defineProps<{ id: string; hasAvatar: boolean; size?: number }>()
 const src = ref('')
 let request = 0
 watch(
@@ -28,4 +28,4 @@ onUnmounted(() => {
   if (src.value) URL.revokeObjectURL(src.value)
 })
 </script>
-<template><AccountAvatar :src="src" /></template>
+<template><AccountAvatar :src="src" :size="size" /></template>

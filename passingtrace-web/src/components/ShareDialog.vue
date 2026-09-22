@@ -11,6 +11,8 @@ const friendId = ref(props.initialFriendId ?? '')
 const modal = ref<HTMLDialogElement | null>(null)
 const document = ref<SharedDocument | null>(null)
 const busy = ref(false)
+const loading = ref(false)
+const loadErrors = ref<string[]>([])
 const error = ref('')
 const sent = ref<Array<{ id: string; recipientId: string; revokedAt: string | null }>>([])
 let clientMessageId = randomUuid()
@@ -20,24 +22,40 @@ const payload = {
   eventId: props.eventId,
   storylineId: props.storylineId,
 }
-onMounted(async () => {
+onMounted(() => {
   modal.value?.showModal()
-  try {
-    ;[friends.value, document.value, sent.value] = await Promise.all([
-      socialApi.friends(),
-      socialApi.preview(payload),
-      socialApi.shares(props.eventId, props.storylineId),
-    ])
-  } catch {
-    error.value = '分享内容暂时无法加载，请稍后重试。'
-  }
+  void load()
 })
+async function load() {
+  if (loading.value || busy.value) return
+  loading.value = true
+  loadErrors.value = []
+  const [people, preview, history] = await Promise.allSettled([
+    socialApi.friends(),
+    socialApi.preview(payload),
+    socialApi.shares(props.eventId, props.storylineId),
+  ])
+  friends.value = people.status === 'fulfilled' ? people.value : []
+  document.value = preview.status === 'fulfilled' ? preview.value : null
+  sent.value = history.status === 'fulfilled' ? history.value : []
+  if (people.status === 'rejected') loadErrors.value.push('好友列表暂时无法加载。')
+  if (preview.status === 'rejected') loadErrors.value.push('分享内容暂时无法加载。')
+  if (history.status === 'rejected')
+    loadErrors.value.push('已发送的分享暂时无法加载，不影响本次分享。')
+  loading.value = false
+}
 watch(friendId, () => {
   clientMessageId = randomUuid()
   payload.clientMessageId = clientMessageId
 })
 async function send() {
-  if (!friendId.value || busy.value) return
+  if (
+    !friends.value.some((f) => f.id === friendId.value) ||
+    !document.value ||
+    busy.value ||
+    loading.value
+  )
+    return
   busy.value = true
   error.value = ''
   try {
@@ -45,8 +63,8 @@ async function send() {
     await socialApi.send(c.id, payload)
     emit('close')
     await router.push(`/messages/${c.id}`)
-  } catch (e) {
-    error.value = e instanceof Error ? e.message : '发送失败，请重试。'
+  } catch {
+    error.value = '暂时未能发送，请稍后重试。'
   } finally {
     busy.value = false
   }
@@ -72,6 +90,11 @@ async function revoke(id: string) {
       <button class="text-button" aria-label="关闭分享" @click="emit('close')">关闭</button>
     </header>
     <p v-if="error" role="alert">{{ error }}</p>
+    <p v-if="loading" role="status">正在准备分享内容…</p>
+    <div v-else-if="loadErrors.length" class="load-error" role="alert">
+      <p v-for="message in loadErrors" :key="message">{{ message }}</p>
+      <button class="text-button" :disabled="busy" @click="load">重新加载</button>
+    </div>
     <template v-if="document"
       ><h3>{{ document.title }}</h3>
       <p>
@@ -96,14 +119,21 @@ async function revoke(id: string) {
       <p>好友看到的是发送时的版本，后续修改不会自动展示。</p></template
     >
     <label
-      >接收好友<select v-model="friendId" :disabled="busy">
+      >接收好友<select v-model="friendId" :disabled="busy || loading || !friends.length">
         <option value="">选择一位好友</option>
         <option v-for="f in friends" :key="f.id" :value="f.id">
           {{ f.remark || f.person.nickname }}
         </option>
       </select></label
     >
-    <button class="button button-primary" :disabled="busy || !friendId || !document" @click="send">
+    <p v-if="!loading && !friends.length && !loadErrors.length">
+      还没有可以分享的好友，先去消息页添加一位吧。
+    </p>
+    <button
+      class="button button-primary"
+      :disabled="busy || loading || !friends.some((f) => f.id === friendId) || !document"
+      @click="send"
+    >
       {{ busy ? '正在发送…' : '确认分享' }}
     </button>
     <details v-if="sent.length">
@@ -133,14 +163,21 @@ async function revoke(id: string) {
   background: rgb(0 0 0 / 0.45);
 }
 .share-dialog {
-  width: min(100%, 32rem);
+  width: min(calc(100% - 2rem), 32rem);
   max-height: 85dvh;
   overflow: auto;
   background: var(--surface);
   color: var(--ink);
   padding: 1.5rem;
+  border: 1px solid var(--line);
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-2);
+}
+.load-error {
+  margin-block: 1rem;
+}
+.load-error p {
+  margin-block: 0.5rem;
 }
 header,
 .sent-share {

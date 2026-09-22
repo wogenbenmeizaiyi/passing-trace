@@ -66,6 +66,45 @@ public sealed class SocialExperienceTests : IClassFixture<StorylinePostgresFixtu
         await _friends.DecideAsync(b, request, "accept", default);
         return (await _friends.ListAsync(a, null, default)).Single(x => x.Person.Id == b.ToString()).Id;
     }
+    [Fact]
+    public async Task Visible_notifications_filter_before_paging_and_share_read_rules()
+    {
+        var controller = new SocialNotificationsController(_db, _clock)
+        {
+            ControllerContext = new Microsoft.AspNetCore.Mvc.ControllerContext
+            {
+                HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity([new Claim("sub", _a.ToString())], "test")) }
+            }
+        };
+        for (var index = 0; index < 35; index++)
+        {
+            _db.SocialNotifications.Add(new() { UserId = _a, Kind = "mention", Text = $"共同记录{index}", CreatedAt = _clock.GetUtcNow() });
+            _db.SocialNotifications.Add(new() { UserId = _a, Kind = "message-sync", Text = "内部事件", CreatedAt = _clock.GetUtcNow() });
+        }
+        _db.SocialNotifications.Add(new() { UserId = B, Kind = "mention", Text = "其他账号", CreatedAt = _clock.GetUtcNow() });
+        await _db.SaveChangesAsync();
+        var page = Assert.IsType<List<PassingTrace.Core.Social.SocialNotification>>(
+            Assert.IsType<Microsoft.AspNetCore.Mvc.OkObjectResult>(await controller.List(default, visibleOnly: true)).Value);
+        Assert.Equal(30, page.Count);
+        Assert.All(page, item => { Assert.Equal(_a, item.UserId); Assert.Equal("mention", item.Kind); });
+        var older = Assert.IsType<List<PassingTrace.Core.Social.SocialNotification>>(
+            Assert.IsType<Microsoft.AspNetCore.Mvc.OkObjectResult>(await controller.List(default, page.Last().Id, true)).Value);
+        Assert.Equal(5, older.Count);
+        var summary = JsonSerializer.SerializeToElement(Assert.IsType<Microsoft.AspNetCore.Mvc.OkObjectResult>(await controller.Summary(default)).Value);
+        Assert.Equal(35, summary.GetProperty("UnreadCount").GetInt32());
+        await controller.Read(new(page.First().Id), default, visibleOnly: true);
+        Assert.Equal(0, await _db.SocialNotifications.CountAsync(n => n.UserId == _a && n.Kind == "mention" && !n.Read));
+        Assert.Equal(35, await _db.SocialNotifications.CountAsync(n => n.UserId == _a && n.Kind == "message-sync" && !n.Read));
+        Assert.Equal(1, await _db.SocialNotifications.CountAsync(n => n.UserId == B && !n.Read));
+        await controller.Read(new(page.First().Id), default, visibleOnly: true);
+        Assert.Equal(1, await _db.SocialNotifications.CountAsync(n => n.UserId == _a && n.Kind == "notification-read-sync"));
+        summary = JsonSerializer.SerializeToElement(Assert.IsType<Microsoft.AspNetCore.Mvc.OkObjectResult>(await controller.Summary(default)).Value);
+        Assert.Equal(0, summary.GetProperty("UnreadCount").GetInt32());
+        Assert.Equal("mention", summary.GetProperty("Latest").GetProperty("Kind").GetString());
+        var compatible = Assert.IsType<List<PassingTrace.Core.Social.SocialNotification>>(
+            Assert.IsType<Microsoft.AspNetCore.Mvc.OkObjectResult>(await controller.List(default)).Value);
+        Assert.Contains(compatible, item => item.Kind == "notification-read-sync");
+    }
     private Task<Event> Record(long owner, string title, string[]? people = null, EventKind kind = EventKind.Trace,
         DateTimeOffset? happened = null, bool undated = false, Guid[]? media = null) => _events.CreateAsync(new(owner, kind,
         title, "共同记录正文", kind == EventKind.Trace && !undated ? happened ?? _clock.GetUtcNow().AddDays(-1) : null,
@@ -289,6 +328,40 @@ public sealed class SocialExperienceTests : IClassFixture<StorylinePostgresFixtu
         // RequireAsync uses a fresh SQL predicate despite an old entity being tracked.
         await Assert.ThrowsAsync<KeyNotFoundException>(() => _chat.SendAsync(_a, c, new(Guid.NewGuid(), "text", "过期发送"), default));
         Assert.Empty(await _db.DirectMessages.Where(x => x.ConversationId == c).ToListAsync());
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task Legacy_records_without_participant_metadata_can_be_previewed_and_shared(string legacyParticipants)
+    {
+        var friendship = await Befriend(_a, B);
+        var record = await Record(_a, "旧版记录");
+        var source = await _db.SourceRevisions.SingleAsync(x => x.EventId == record.Id && x.Revision == 1);
+        // AddSocialExperiences populated pre-existing revisions with an empty string.
+        source.ParticipantIdsJson = legacyParticipants;
+        await _db.SaveChangesAsync();
+        var preview = await _shares.BuildAsync(_a, "record", record.Id, null, default);
+        Assert.Empty(Assert.Single(preview.Records).Participants);
+
+        var stage = Guid.NewGuid(); var node = Guid.NewGuid();
+        var story = await new StorylineService(_db, new AnalysisOutbox(_db), _clock).CreateAsync(_a,
+            new SaveStorylineRequest("旧记录故事线", null, "trip", StorylineStatus.Ongoing, null, [],
+                [new(stage, "起点", 0)], [new(node, "existing-event", record.Id, 1, null, stage, 0)], [], null),
+            Guid.NewGuid().ToString(), default);
+        await Edit(record, "新版记录", [B.ToString()]);
+        var storylinePreview = await _shares.BuildAsync(_a, "storyline", null, story.Storyline.Id, default);
+        Assert.Equal("旧版记录", Assert.Single(storylinePreview.Records).Title);
+        Assert.Empty(storylinePreview.Records[0].Participants);
+        Assert.Equal([B.ToString()], (await _shares.BuildAsync(_a, "record", record.Id, null, default)).Records[0].Participants);
+
+        var conversation = await _chat.OpenAsync(_a, friendship, default);
+        var message = await _chat.SendAsync(_a, conversation,
+            new(Guid.NewGuid(), "storyline", StorylineId: story.Storyline.Id), default);
+        var shared = await _shares.GetAsync(B, message.ShareId!.Value, default);
+        Assert.Equal("旧版记录", Assert.Single(shared.Document.Records).Title);
+        Assert.Empty(shared.Document.Records[0].Participants);
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => _shares.GetAsync(C, message.ShareId.Value, default));
     }
 
     private sealed class FixedClock : TimeProvider { public override DateTimeOffset GetUtcNow() => new(2026, 9, 22, 4, 0, 0, TimeSpan.Zero); }

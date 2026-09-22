@@ -134,13 +134,33 @@ public sealed class SharesController(SharedContentService content, TraceDbContex
 [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
 public sealed class SocialNotificationsController(TraceDbContext db, TimeProvider clock) : ControllerBase
 {
+    // Transport events must remain in the stream, but never masquerade as user notices.
+    private static readonly string[] VisibleKinds = ["friend-request", "relationship", "mention", "access-changed"];
+    private IQueryable<PassingTrace.Core.Social.SocialNotification> Query(bool visibleOnly) =>
+        db.SocialNotifications.Where(x => x.UserId == User.GetUserId() && (!visibleOnly || VisibleKinds.Contains(x.Kind)));
+
     [HttpGet]
-    public async Task<IActionResult> List(CancellationToken ct, long? before = null) => Ok(
-        await db.SocialNotifications.AsNoTracking().Where(x => x.UserId == User.GetUserId() && (before == null || x.Id < before))
+    public async Task<IActionResult> List(CancellationToken ct, long? before = null, bool visibleOnly = false) => Ok(
+        await Query(visibleOnly).AsNoTracking().Where(x => before == null || x.Id < before)
             .OrderByDescending(x => x.Id).Take(30).ToListAsync(ct));
+    [HttpGet("summary")]
+    public async Task<IActionResult> Summary(CancellationToken ct) => Ok(new
+    {
+        UnreadCount = await Query(true).CountAsync(x => !x.Read, ct),
+        Latest = await Query(true).AsNoTracking().OrderByDescending(x => x.Id).FirstOrDefaultAsync(ct)
+    });
     [HttpPut("read")]
-    public async Task<IActionResult> Read(ReadMessagesInput input, CancellationToken ct)
-    { await db.SocialNotifications.Where(x => x.UserId == User.GetUserId() && x.Id <= input.ThroughId).ExecuteUpdateAsync(s => s.SetProperty(x => x.Read, true), ct); return NoContent(); }
+    public async Task<IActionResult> Read(ReadMessagesInput input, CancellationToken ct, bool visibleOnly = false)
+    {
+        var changed = await Query(visibleOnly).Where(x => !x.Read && x.Id <= input.ThroughId)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.Read, true), ct);
+        if (changed > 0)
+        {
+            db.SocialNotifications.Add(new() { UserId = User.GetUserId(), Kind = "notification-read-sync", Text = "通知状态已更新", CreatedAt = clock.GetUtcNow() });
+            await db.SaveChangesAsync(ct);
+        }
+        return NoContent();
+    }
     [HttpGet("stream")]
     public IResult Stream(CancellationToken ct, long after = 0)
     {
