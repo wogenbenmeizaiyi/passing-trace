@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import JointRecordsList from '@/components/JointRecordsList.vue'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
-import { RouterLink } from 'vue-router'
+import { RouterLink, useRoute } from 'vue-router'
 
 import { eventsApi } from '@/api/events'
 import { HttpError } from '@/api/http-client'
@@ -17,6 +18,14 @@ import WebAppHeader from '@/components/WebAppHeader.vue'
 import { useAuthStore } from '@/stores/auth'
 
 const auth = useAuthStore()
+const route = useRoute()
+const recordScope = ref(route.query.scope === 'joint' ? 'joint' : 'own')
+watch(
+  () => route.query.scope,
+  (value) => {
+    recordScope.value = value === 'joint' ? 'joint' : 'own'
+  },
+)
 const items = ref<EventResponse[]>([])
 const nextCursor = ref<number | null>(null)
 const loading = ref(false)
@@ -275,7 +284,23 @@ onUnmounted(() => activeController?.abort())
         </RouterLink>
       </header>
 
-      <div class="records-workspace">
+      <nav v-if="auth.isAuthenticated" class="record-scope" aria-label="记录归属">
+        <button
+          class="button"
+          :class="recordScope === 'own' ? 'button-primary' : 'button-secondary'"
+          @click="recordScope = 'own'"
+        >
+          我创建的</button
+        ><button
+          class="button"
+          :class="recordScope === 'joint' ? 'button-primary' : 'button-secondary'"
+          @click="recordScope = 'joint'"
+        >
+          共同参与的
+        </button>
+      </nav>
+      <JointRecordsList v-if="recordScope === 'joint'" />
+      <div v-else class="records-workspace">
         <aside class="records-sidebar" aria-label="筛选与日期">
           <section class="record-toolbar" aria-label="记录筛选">
             <h2>筛选记录</h2>

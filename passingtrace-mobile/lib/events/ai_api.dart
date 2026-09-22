@@ -32,6 +32,7 @@ class AiMessageModel {
     required this.evidenceStorylines,
     required this.amapPlaces,
     required this.actions,
+    this.socialEvidence = const {},
   });
 
   final String role;
@@ -40,6 +41,7 @@ class AiMessageModel {
   final List<AiEvidenceStoryline> evidenceStorylines;
   final List<AmapPlaceModel> amapPlaces;
   final List<AssistantActionModel> actions;
+  final Map<String, dynamic> socialEvidence;
   List<int> get evidenceEventIds =>
       evidenceRecords.map((record) => record.eventId).toList(growable: false);
 
@@ -58,6 +60,7 @@ class AiMessageModel {
         ? evidence['actions'] as List<dynamic>? ?? const []
         : const <dynamic>[];
     return AiMessageModel(
+      socialEvidence: evidence is Map<String, dynamic> ? evidence : const {},
       role: (json['role'] as String).toLowerCase(),
       content: json['content'] as String,
       evidenceRecords: records
@@ -232,11 +235,17 @@ class AssistantActionModel {
 }
 
 class AiEvidenceRecord {
-  const AiEvidenceRecord({required this.eventId, this.title, this.snippet});
+  const AiEvidenceRecord({
+    required this.eventId,
+    this.title,
+    this.snippet,
+    this.accessPath,
+  });
 
   final int eventId;
   final String? title;
   final String? snippet;
+  final String? accessPath;
 
   String get displayTitle {
     final explicitTitle = title?.trim();
@@ -253,6 +262,7 @@ class AiEvidenceRecord {
   factory AiEvidenceRecord.fromJson(Map<String, dynamic> json) =>
       AiEvidenceRecord(
         eventId: ((json['eventId'] ?? json['EventId']) as num).toInt(),
+        accessPath: (json['accessPath'] ?? json['AccessPath']) as String?,
         title: ((json['title'] ?? json['Title']) as String?)?.trim(),
         snippet: ((json['snippet'] ?? json['Snippet']) as String?)?.trim(),
       );

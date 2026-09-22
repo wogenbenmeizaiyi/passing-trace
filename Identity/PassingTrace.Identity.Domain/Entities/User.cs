@@ -13,6 +13,7 @@ public sealed class User : IdentityUser<long>
     /// <summary>私有头像对象键；不出现在令牌、日志或个人资料合同中。</summary>
     public string? AvatarKey { get; set; }
     public Guid ProfileVersion { get; set; }
+    public string FriendCode { get; set; } = Guid.NewGuid().ToString("N")[..16].ToUpperInvariant();
 
     /// <summary>账号的业务状态；Disabled 用户即使凭据正确也不能继续授权。</summary>
     public UserStatus Status { get; set; } = UserStatus.Active;

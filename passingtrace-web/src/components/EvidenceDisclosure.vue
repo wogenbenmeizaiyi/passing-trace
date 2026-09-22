@@ -1,9 +1,15 @@
 <script setup lang="ts">
 import { RouterLink } from 'vue-router'
 import { recordFromConversation } from '@/utils/assistant-navigation'
+import { safeSocialPath } from '@/api/social'
 
 defineProps<{
-  records: Array<{ eventId: number; title: string | null }>
+  records: Array<{
+    eventId: number
+    title: string | null
+    accessPath?: string | null
+    authorId?: string | null
+  }>
   conversationId?: string | null
 }>()
 </script>
@@ -27,7 +33,16 @@ defineProps<{
       <RouterLink
         v-for="record in records"
         :key="record.eventId"
-        :to="recordFromConversation(record.eventId, conversationId)"
+        :to="
+          safeSocialPath(record.accessPath)
+            ? {
+                path: safeSocialPath(record.accessPath)!,
+                query: {
+                  from: `/assistant${conversationId ? `?conversation=${conversationId}` : ''}`,
+                },
+              }
+            : recordFromConversation(record.eventId, conversationId)
+        "
       >
         <strong>{{ record.title || '未命名记录' }}</strong>
         <small>打开记录</small>

@@ -20,6 +20,8 @@ import '../theme/quiet_trace_components.dart';
 import '../theme/quiet_trace_icons.dart';
 import '../user_facing_error.dart';
 import 'nearby_place_sheet.dart';
+import '../social/social_api.dart';
+import '../social/social_widgets.dart';
 
 class EventFormView extends StatefulWidget {
   const EventFormView({
@@ -65,6 +67,21 @@ class _EventFormViewState extends State<EventFormView> {
   final _customTag = TextEditingController();
 
   bool get _isEdit => widget.eventId != null;
+  List<String> _participants = [];
+  String _lastContent = '';
+  bool _pickingPeople = false;
+  Future<void> _pickPeople() async {
+    if (_pickingPeople) return;
+    _pickingPeople = true;
+    final api = SocialApi(widget.auth, widget.session);
+    try {
+      final result = await pickParticipants(context, api, _participants);
+      if (result != null && mounted) setState(() => _participants = result);
+    } finally {
+      api.close();
+      _pickingPeople = false;
+    }
+  }
 
   @override
   void initState() {
@@ -113,6 +130,8 @@ class _EventFormViewState extends State<EventFormView> {
       if (!mounted) return;
       setState(() {
         _loaded = event;
+        _participants = event.participantIds;
+        _lastContent = event.rawContent ?? '';
         _loadedVersion = event.version;
         _kind = event.kind;
         _title.text = event.title ?? '';
@@ -318,6 +337,7 @@ class _EventFormViewState extends State<EventFormView> {
         final updated = await _api.update(
           widget.session,
           loaded.id,
+          participantIds: _participants,
           title: _title.text.trim().isEmpty ? null : _title.text.trim(),
           rawContent: _content.text.trim().isEmpty
               ? null
@@ -338,6 +358,7 @@ class _EventFormViewState extends State<EventFormView> {
         final key = _ensureIdempotencyKey();
         final created = await _api.create(
           widget.session,
+          participantIds: _participants,
           kind: _kind,
           title: _title.text.trim().isEmpty ? null : _title.text.trim(),
           rawContent: _content.text.trim().isEmpty
@@ -580,6 +601,13 @@ class _EventFormViewState extends State<EventFormView> {
           const TraceFieldLabel('正文（可选）'),
           TextFormField(
             controller: _content,
+            onChanged: (value) {
+              final added =
+                  value.length > _lastContent.length &&
+                  value.split('@').length > _lastContent.split('@').length;
+              _lastContent = value;
+              if (added) _pickPeople();
+            },
             minLines: 7,
             maxLines: 14,
             textAlignVertical: TextAlignVertical.top,
@@ -594,6 +622,17 @@ class _EventFormViewState extends State<EventFormView> {
             },
             textInputAction: TextInputAction.newline,
           ),
+          const SizedBox(height: 20),
+          OutlinedButton.icon(
+            onPressed: _submitting ? null : _pickPeople,
+            icon: const Icon(Icons.people_outline),
+            label: Text(
+              _participants.isEmpty
+                  ? '一起的人 · 添加好友'
+                  : '一起的人 · 已选择 ${_participants.length} 位好友',
+            ),
+          ),
+          const Text('选择后好友可查看记录及后续更新。仅在正文写名字不会关联。'),
           const SizedBox(height: 20),
           TraceFieldLabel(_kind == EventKind.plan ? '预定时间（可选）' : '发生时间（可选）'),
           TraceRowButton(

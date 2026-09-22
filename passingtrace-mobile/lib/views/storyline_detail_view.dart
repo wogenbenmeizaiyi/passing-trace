@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../social/social_api.dart';
+import '../social/shared_content_view.dart';
+
 import '../auth_service.dart';
 import '../events/event_model.dart';
 import '../events/events_api.dart';
@@ -521,15 +524,35 @@ class _StorylineDetailViewState extends State<StorylineDetailView> {
     return Scaffold(
       appBar: TraceAppBar(
         title: '故事线详情',
+        trailingWidth: 96,
         leading: TraceIconButton(
           glyph: TraceGlyph.chevronLeft,
           tooltip: '返回',
           onPressed: () => Navigator.pop(context),
         ),
-        trailing: TraceIconButton(
-          glyph: TraceGlyph.add,
-          tooltip: '快捷补充',
-          onPressed: _changing ? null : _showAdd,
+        trailing: Row(
+          children: [
+            IconButton(
+              tooltip: '分享给好友',
+              icon: const Icon(Icons.share_outlined),
+              onPressed: story == null
+                  ? null
+                  : () async {
+                      final api = SocialApi(widget.auth, widget.session);
+                      await shareSocialContent(
+                        context,
+                        api,
+                        storylineId: widget.storylineId,
+                      );
+                      api.close();
+                    },
+            ),
+            TraceIconButton(
+              glyph: TraceGlyph.add,
+              tooltip: '快捷补充',
+              onPressed: _changing ? null : _showAdd,
+            ),
+          ],
         ),
       ),
       body: _body(story),

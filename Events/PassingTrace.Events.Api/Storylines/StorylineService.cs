@@ -240,6 +240,20 @@ public sealed class StorylineService(TraceDbContext db, IAnalysisOutbox outbox, 
             index.IsCurrent = false;
         outbox.EnqueueStoryline(userId, storylineId, storyline.CurrentRevision, now, "storyline.removed");
         await outbox.IncrementWatermarkAsync(userId, now, cancellationToken);
+        var recipients = await db.ContentShares.Where(s => s.StorylineId == storylineId && s.RevokedAt == null)
+            .Select(s => s.RecipientId).Distinct().ToListAsync(cancellationToken);
+        foreach (var recipient in recipients)
+        {
+            await outbox.IncrementWatermarkAsync(recipient, now, cancellationToken);
+            db.SocialNotifications.Add(new PassingTrace.Core.Social.SocialNotification
+            {
+                UserId = recipient,
+                Kind = "access-changed",
+                Text = "分享的故事线已不可查看",
+                Target = "/messages",
+                CreatedAt = now
+            });
+        }
         await SaveChangesAsync(cancellationToken);
     }
 

@@ -17,9 +17,11 @@ class AccountCenterView extends StatefulWidget {
     super.key,
     required this.controller,
     required this.onSignOut,
+    this.onFriendCode,
   });
   final ProfileController controller;
   final Future<void> Function() onSignOut;
+  final VoidCallback? onFriendCode;
   @override
   State<AccountCenterView> createState() => _AccountCenterViewState();
 }
@@ -118,7 +120,7 @@ class _AccountCenterViewState extends State<AccountCenterView>
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          '仅自己可见的生活档案',
+                          '头像、昵称和简介向好友展示',
                           style: TextStyle(color: colors.inkSecondary),
                         ),
                       ],
@@ -145,6 +147,11 @@ class _AccountCenterViewState extends State<AccountCenterView>
                     _InfoRow(label: '登录用户名', value: profile.username),
                     _InfoRow(label: '加入星期八', value: _date(profile.createdAt)),
                   ],
+                  ListTile(
+                    title: const Text('我的好友码'),
+                    leading: const Icon(Icons.qr_code),
+                    onTap: widget.onFriendCode,
+                  ),
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     leading: const TraceIcon(TraceGlyph.settings),

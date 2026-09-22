@@ -271,6 +271,28 @@ async function downloadBlob(path: string, opts: RequestOptions = {}): Promise<Bl
 }
 
 export const httpClient = {
+  async stream(path: string, signal: AbortSignal): Promise<Response> {
+    let token = await readAccessToken()
+    let res = await fetch(buildUrl(path, undefined), {
+      headers: authHeader(token),
+      signal,
+      credentials: 'omit',
+    })
+    if (res.status === 401) {
+      const renewed = await oidc.signinSilent()
+      if (renewed) {
+        useAuthStore().user = renewed
+        token = renewed.access_token
+      }
+      res = await fetch(buildUrl(path, undefined), {
+        headers: authHeader(token),
+        signal,
+        credentials: 'omit',
+      })
+    }
+    if (!res.ok) throw new HttpError(res.status, '消息连接暂时中断，正在重新连接。')
+    return res
+  },
   get<T>(path: string, opts: RequestOptions = {}): Promise<T> {
     return send<T>('GET', path, opts)
   },

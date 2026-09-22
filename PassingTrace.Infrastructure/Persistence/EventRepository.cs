@@ -12,6 +12,7 @@ public sealed class EventRepository(TraceDbContext dbContext) : IEventRepository
         CancellationToken cancellationToken)
     {
         return await dbContext.Events
+            .Include(e => e.Participants)
             .Include(e => e.SourceRevisions)
                 .ThenInclude(r => r.MediaAssets)
             .Include(e => e.SourceRevisions)
@@ -36,6 +37,7 @@ public sealed class EventRepository(TraceDbContext dbContext) : IEventRepository
         CancellationToken cancellationToken)
     {
         return await dbContext.Events
+            .Include(e => e.Participants)
             .Include(e => e.MediaAssets)
                 .ThenInclude(link => link.MediaAsset)
             .Include(e => e.SourceRevisions)
@@ -53,6 +55,7 @@ public sealed class EventRepository(TraceDbContext dbContext) : IEventRepository
         CancellationToken cancellationToken)
     {
         var events = dbContext.Events
+            .Include(e => e.Participants)
             .Include(e => e.MediaAssets)
                 .ThenInclude(link => link.MediaAsset)
             .Include(e => e.SemanticRuns)

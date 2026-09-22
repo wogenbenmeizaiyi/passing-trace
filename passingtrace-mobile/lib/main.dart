@@ -21,6 +21,9 @@ import 'views/assistant_view.dart';
 import 'views/events_list_view.dart';
 import 'views/settings_view.dart';
 import 'views/storylines_list_view.dart';
+import 'social/social_api.dart';
+import 'social/messages_view.dart';
+import 'social/social_widgets.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -396,6 +399,7 @@ class AccountHome extends StatefulWidget {
 }
 
 class _AccountHomeState extends State<AccountHome> with WidgetsBindingObserver {
+  late final SocialFeed _social;
   late final ProfileController _profile;
   bool _busy = false;
   int _section = 1;
@@ -407,6 +411,9 @@ class _AccountHomeState extends State<AccountHome> with WidgetsBindingObserver {
       api: ProfileApi(widget.auth),
       session: () => widget.session,
     )..addListener(_profileChanged);
+    _social = SocialFeed(widget.auth, widget.session)
+      ..addListener(_profileChanged)
+      ..start();
     WidgetsBinding.instance.addObserver(this);
     unawaited(_profile.refresh().catchError((Object _) {}));
     if (BuildEnvironment.current.isProduction) {
@@ -421,7 +428,11 @@ class _AccountHomeState extends State<AccountHome> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
+      _social.start();
       unawaited(_profile.refresh().catchError((Object _) {}));
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      _social.stop();
     }
   }
 
@@ -429,6 +440,7 @@ class _AccountHomeState extends State<AccountHome> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _profile.dispose();
+    _social.dispose();
     super.dispose();
   }
 
@@ -439,6 +451,13 @@ class _AccountHomeState extends State<AccountHome> with WidgetsBindingObserver {
       MaterialPageRoute(
         builder: (_) => AccountCenterView(
           controller: _profile,
+          onFriendCode: () async {
+            final api = SocialApi(widget.auth, widget.session);
+            await Navigator.of(context).push<void>(
+              MaterialPageRoute(builder: (_) => FriendCodeView(api: api)),
+            );
+            api.close();
+          },
           onSignOut: () async {
             Navigator.of(context).popUntil((route) => route.isFirst);
             await _clear();
@@ -655,6 +674,14 @@ class _AccountHomeState extends State<AccountHome> with WidgetsBindingObserver {
           bottomNavigationBar: _buildPrimaryNavigation(),
           onSessionExpired: () => _restoreAfterSessionExpiry(true),
         )
+      else if (_section == 4)
+        MessagesView(
+          auth: widget.auth,
+          session: widget.session,
+          feed: _social,
+          drawer: _buildDrawer(),
+          bottomNavigationBar: _buildPrimaryNavigation(),
+        )
       else
         MemoriesView(
           auth: widget.auth,
@@ -673,16 +700,21 @@ class _AccountHomeState extends State<AccountHome> with WidgetsBindingObserver {
   );
 
   Widget _buildPrimaryNavigation() => TraceBottomNavigation(
+    unreadMessages: _social.unread,
     selectedIndex: _section == 1
         ? 0
         : _section == 3
         ? 1
+        : _section == 4
+        ? 3
         : 2,
     onSelected: (index) {
       final section = index == 0
           ? 1
           : index == 1
           ? 3
+          : index == 3
+          ? 4
           : 0;
       if (_section != section) setState(() => _section = section);
     },

@@ -10,6 +10,7 @@ const auth = vi.hoisted(() => ({
   logout: vi.fn<() => Promise<void>>(),
 }))
 vi.mock('@/stores/auth', () => ({ useAuthStore: () => auth }))
+vi.mock('@/stores/social', () => ({ useSocialStore: () => ({ unread: 0 }) }))
 vi.mock('@/stores/profile', () => ({
   useProfileStore: () => ({ nickname: '我的昵称', avatarUrl: '' }),
 }))
@@ -24,10 +25,12 @@ afterEach(() => wrapper?.unmount())
 async function open(props = {}) {
   const router = createRouter({
     history: createMemoryHistory(),
-    routes: ['/', '/events', '/storylines', '/assistant', '/account', '/product'].map((path) => ({
-      path,
-      component: { template: '<div />' },
-    })),
+    routes: ['/', '/events', '/storylines', '/assistant', '/messages', '/account', '/product'].map(
+      (path) => ({
+        path,
+        component: { template: '<div />' },
+      }),
+    ),
   })
   await router.push('/assistant?conversation=abc')
   wrapper = mount(WebAppHeader, {
@@ -41,13 +44,14 @@ async function open(props = {}) {
 }
 
 describe('应用与产品导航层级', () => {
-  it('应用主导航只保留三个核心功能，头像仍能进入用户中心', async () => {
+  it('应用主导航包含消息，头像仍能进入用户中心', async () => {
     const router = await open()
     const nav = wrapper.get('nav[aria-label="应用导航"]')
     expect(nav.findAll('a').map((link) => [link.text(), link.attributes('href')])).toEqual([
       ['我的记录', '/events'],
       ['故事线', '/storylines'],
       ['问问 AI', '/assistant'],
+      ['消息', '/messages'],
     ])
     expect(nav.get('[href="/assistant"]').attributes('aria-current')).toBe('page')
     expect(wrapper.find('[href="/product"]').exists()).toBe(false)
@@ -60,7 +64,7 @@ describe('应用与产品导航层级', () => {
     auth.isAuthenticated = false
     const router = await open()
     const nav = wrapper.get('nav')
-    expect(nav.findAll('a')).toHaveLength(3)
+    expect(nav.findAll('a')).toHaveLength(4)
     expect(nav.text()).not.toContain('下载')
     expect(wrapper.text()).toContain('扫码登录')
     const download = wrapper.get('.site-header__actions .app-download-link')

@@ -2,6 +2,7 @@
 import { RouterLink, useRoute } from 'vue-router'
 import AccountAvatar from '@/components/AccountAvatar.vue'
 import { useProfileStore } from '@/stores/profile'
+import { useSocialStore } from '@/stores/social'
 
 import BrandMark from '@/components/BrandMark.vue'
 import AppearanceMenu from '@/components/AppearanceMenu.vue'
@@ -20,6 +21,7 @@ const emit = defineEmits<{ download: [] }>()
 
 const auth = useAuthStore()
 const account = useProfileStore()
+const social = useSocialStore()
 const route = useRoute()
 
 function login() {
@@ -55,7 +57,12 @@ function download(event: MouseEvent) {
       <nav v-else class="site-nav site-nav--app" aria-label="应用导航">
         <RouterLink to="/events">我的记录</RouterLink
         ><RouterLink to="/storylines">故事线</RouterLink
-        ><RouterLink to="/assistant">问问 AI</RouterLink>
+        ><RouterLink to="/assistant">问问 AI</RouterLink
+        ><RouterLink to="/messages"
+          >消息<span v-if="social.unread" class="message-badge">{{
+            social.unread > 99 ? '99+' : social.unread
+          }}</span></RouterLink
+        >
       </nav>
 
       <div class="site-header__actions">
@@ -103,6 +110,14 @@ function download(event: MouseEvent) {
 </template>
 
 <style scoped>
+.message-badge {
+  margin-left: 0.4rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 1rem;
+  background: var(--primary);
+  color: var(--on-primary);
+  font-size: 0.75rem;
+}
 .app-download-link {
   display: inline-flex;
   align-items: center;

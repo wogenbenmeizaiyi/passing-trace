@@ -16,7 +16,8 @@ public sealed record CreateEventCommand(
     string? IdempotencyKey,
     IReadOnlyList<Guid>? MediaIds = null,
     ClassificationInput? Classification = null,
-    IReadOnlyList<EventLocationInput>? Locations = null);
+    IReadOnlyList<EventLocationInput>? Locations = null,
+    IReadOnlyList<string>? ParticipantIds = null);
 
 /// <summary>修改 Event Source 的应用命令。</summary>
 public sealed record UpdateEventCommand(
@@ -30,7 +31,8 @@ public sealed record UpdateEventCommand(
     string Timezone,
     IReadOnlyList<Guid>? MediaIds = null,
     ClassificationInput? Classification = null,
-    IReadOnlyList<EventLocationInput>? Locations = null);
+    IReadOnlyList<EventLocationInput>? Locations = null,
+    IReadOnlyList<string>? ParticipantIds = null);
 
 /// <summary>创建 Event 的 HTTP 请求体。</summary>
 public sealed record CreateEventRequest(
@@ -42,7 +44,8 @@ public sealed record CreateEventRequest(
     string? Timezone,
     IReadOnlyList<Guid>? MediaIds = null,
     ClassificationInput? Classification = null,
-    IReadOnlyList<EventLocationInput>? Locations = null);
+    IReadOnlyList<EventLocationInput>? Locations = null,
+    IReadOnlyList<string>? ParticipantIds = null);
 
 /// <summary>修改 Event Source 的 HTTP 请求体。</summary>
 public sealed record UpdateEventRequest(
@@ -53,7 +56,8 @@ public sealed record UpdateEventRequest(
     string? Timezone,
     IReadOnlyList<Guid>? MediaIds = null,
     ClassificationInput? Classification = null,
-    IReadOnlyList<EventLocationInput>? Locations = null);
+    IReadOnlyList<EventLocationInput>? Locations = null,
+    IReadOnlyList<string>? ParticipantIds = null);
 
 public sealed record ClassificationInput(
     string? PrimaryCategoryKey,
@@ -132,7 +136,8 @@ public sealed record EventResponse(
     string? SemanticSummary,
     ManualClassificationResponse ManualClassification,
     EffectiveClassificationResponse EffectiveClassification,
-    IReadOnlyList<EventLocationResponse> Locations);
+    IReadOnlyList<EventLocationResponse> Locations,
+    IReadOnlyList<string>? ParticipantIds = null);
 
 /// <summary>Event 列表响应体。</summary>
 public sealed record EventListResponse(

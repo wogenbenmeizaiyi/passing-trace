@@ -1,5 +1,6 @@
 import { httpClient } from '@/api/http-client'
 import { useAuthStore } from '@/stores/auth'
+import type { Friend } from '@/api/social'
 
 export interface ConversationSummary {
   id: string
@@ -53,7 +54,25 @@ export interface SemanticResult {
 }
 
 export interface EvidenceBundle {
-  records: Array<{ eventId: number; title: string | null }>
+  records: Array<{
+    eventId: number
+    title: string | null
+    authorId?: string | null
+    accessPath?: string | null
+  }>
+  friends?: Friend[]
+  sharedContents?: Array<{ shareId: string; title: string; authorId: string; accessPath: string }>
+  friendActivities?: {
+    from: string
+    to: string
+    unit: string
+    items: Array<{
+      friend: Friend
+      recordCount: number
+      plannedCount: number
+      undatedCount: number
+    }>
+  } | null
   memories: Array<{ memoryId: number; content: string }>
   aggregate: string | null
   storylines?: StorylineEvidence[]

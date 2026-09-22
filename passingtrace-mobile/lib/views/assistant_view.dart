@@ -11,6 +11,10 @@ import '../theme/quiet_trace_icons.dart';
 import '../user_facing_error.dart';
 import 'event_detail_view.dart';
 import 'storyline_detail_view.dart';
+import '../social/social_api.dart';
+import '../social/friends_view.dart';
+import '../social/shared_content_view.dart';
+import '../social/messages_view.dart';
 
 class AssistantView extends StatefulWidget {
   const AssistantView({
@@ -143,6 +147,7 @@ class _AssistantViewState extends State<AssistantView> {
                   text: message.content,
                   evidenceRecords: message.evidenceRecords,
                   evidenceStorylines: message.evidenceStorylines,
+                  socialEvidence: message.socialEvidence,
                   amapPlaces: message.amapPlaces,
                   actions: message.actions,
                 ),
@@ -198,6 +203,12 @@ class _AssistantViewState extends State<AssistantView> {
           setState(() {
             answer.eventTitles = {
               for (final record in records) record.eventId: record.displayTitle,
+            };
+            answer.socialEvidence = raw;
+            answer.accessPaths = {
+              for (final record in records)
+                if (record.accessPath != null)
+                  record.eventId: record.accessPath!,
             };
             answer.storylineTitles = {
               for (final storyline in storylines)
@@ -292,6 +303,7 @@ class _AssistantViewState extends State<AssistantView> {
                 text: message.content,
                 evidenceRecords: message.evidenceRecords,
                 evidenceStorylines: message.evidenceStorylines,
+                socialEvidence: message.socialEvidence,
                 amapPlaces: message.amapPlaces,
                 actions: message.actions,
               ),
@@ -329,6 +341,7 @@ class _AssistantViewState extends State<AssistantView> {
                 text: message.content,
                 evidenceRecords: message.evidenceRecords,
                 evidenceStorylines: message.evidenceStorylines,
+                socialEvidence: message.socialEvidence,
                 amapPlaces: message.amapPlaces,
                 actions: message.actions,
               ),
@@ -529,13 +542,15 @@ class _AssistantViewState extends State<AssistantView> {
               isUser: mine,
               eventTitles: message.eventTitles,
               storylineTitles: message.storylineTitles,
-              onOpenEvent: _openEvent,
+              onOpenEvent: (id) => _openEvidenceEvent(message, id),
+              socialTitles: _socialTitles(message),
+              onOpenSocial: _openSocial,
               onOpenStoryline: _openStoryline,
             ),
             if (message.eventTitles.isNotEmpty)
               AssistantEvidenceDisclosure(
                 records: message.eventTitles,
-                onOpenEvent: _openEvent,
+                onOpenEvent: (id) => _openEvidenceEvent(message, id),
               ),
             if (message.amapPlaces.isNotEmpty || message.actions.isNotEmpty)
               AmapActionCards(
@@ -546,6 +561,85 @@ class _AssistantViewState extends State<AssistantView> {
         ),
       ),
     );
+  }
+
+  Map<String, String> _socialTitles(_ChatBubble message) => {
+    for (final f in socialRows(message.socialEvidence['friends']))
+      'friend/${f['id']}': socialName(f),
+    for (final s in socialRows(message.socialEvidence['sharedContents']))
+      'share/${s['shareId']}': s['title'] as String,
+  };
+  void _openEvidenceEvent(_ChatBubble message, int id) {
+    if (message.accessPaths[id] == '/joint-records/$id') {
+      Navigator.push<void>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => SharedContentView(
+            auth: widget.auth,
+            session: widget.session,
+            eventId: id,
+          ),
+        ),
+      );
+    } else {
+      _openEvent(id);
+    }
+  }
+
+  Future<void> _openSocial(String key) async {
+    if (key.startsWith('share/')) {
+      await Navigator.push<void>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => SharedContentView(
+            auth: widget.auth,
+            session: widget.session,
+            shareId: key.substring(6),
+          ),
+        ),
+      );
+      return;
+    }
+    if (!key.startsWith('friend/')) return;
+    final api = SocialApi(widget.auth, widget.session);
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => FriendsView(
+          api: api,
+          selectedId: key.substring(7),
+          onChat: (friendship) async {
+            try {
+              final c = await api.request(
+                'POST',
+                '/api/v1/conversations',
+                body: {'friendshipId': friendship},
+              );
+              final me = await api.request(
+                'GET',
+                '/api/v1/people/me',
+                identity: true,
+              );
+              if (mounted) {
+                await Navigator.push<void>(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => DirectChatView(
+                      api: api,
+                      conversationId: c['id'] as String,
+                      me: me['profile']['id'] as String,
+                    ),
+                  ),
+                );
+              }
+            } catch (error) {
+              if (mounted) _handleError(error);
+            }
+          },
+        ),
+      ),
+    );
+    api.close();
   }
 
   void _openEvent(int id) {
@@ -1353,6 +1447,7 @@ class _ChatBubble {
     List<AiEvidenceStoryline>? evidenceStorylines,
     List<AmapPlaceModel>? amapPlaces,
     List<AssistantActionModel>? actions,
+    this.socialEvidence = const {},
   }) : eventTitles = {
          for (final record in evidenceRecords ?? const <AiEvidenceRecord>[])
            record.eventId: record.displayTitle,
@@ -1362,10 +1457,16 @@ class _ChatBubble {
              in evidenceStorylines ?? const <AiEvidenceStoryline>[])
            storyline.storylineId.toLowerCase(): storyline.displayTitle,
        },
+       accessPaths = {
+         for (final r in evidenceRecords ?? <AiEvidenceRecord>[])
+           if (r.accessPath != null) r.eventId: r.accessPath!,
+       },
        amapPlaces = amapPlaces ?? [],
        actions = actions ?? [];
   final String role;
   String text;
+  Map<String, dynamic> socialEvidence;
+  Map<int, String> accessPaths;
   Map<int, String> eventTitles;
   Map<String, String> storylineTitles;
   List<AmapPlaceModel> amapPlaces;
@@ -1623,6 +1724,8 @@ class AssistantMessageContent extends StatelessWidget {
     this.storylineTitles = const {},
     this.onOpenEvent,
     this.onOpenStoryline,
+    this.socialTitles = const {},
+    this.onOpenSocial,
   });
 
   final String text;
@@ -1631,6 +1734,8 @@ class AssistantMessageContent extends StatelessWidget {
   final Map<String, String> storylineTitles;
   final ValueChanged<int>? onOpenEvent;
   final ValueChanged<String>? onOpenStoryline;
+  final Map<String, String> socialTitles;
+  final ValueChanged<String>? onOpenSocial;
 
   @override
   Widget build(BuildContext context) {
@@ -1643,7 +1748,15 @@ class AssistantMessageContent extends StatelessWidget {
     }
 
     return MarkdownBody(
-      data: _replaceCitations(text, eventTitles, storylineTitles),
+      data: _replaceCitations(text, eventTitles, storylineTitles).replaceAllMapped(
+        RegExp(r'\[(Friend|Share)\s*#([0-9a-f-]{36})\]', caseSensitive: false),
+        (match) {
+          final key = '${match[1]!.toLowerCase()}/${match[2]!.toLowerCase()}';
+          return socialTitles.containsKey(key)
+              ? '[${_escapeMarkdownLabel(socialTitles[key]!)}](passingtrace://$key)'
+              : '内容已不可查看';
+        },
+      ),
       selectable: true,
       onTapLink: (_, href, _) {
         final uri = Uri.tryParse(href ?? '');
@@ -1654,6 +1767,8 @@ class AssistantMessageContent extends StatelessWidget {
           if (eventId != null) onOpenEvent?.call(eventId);
         } else if (uri.host == 'storyline' && id != null) {
           onOpenStoryline?.call(id);
+        } else if (id != null && socialTitles.containsKey('${uri.host}/$id')) {
+          onOpenSocial?.call('${uri.host}/$id');
         }
       },
       styleSheet: MarkdownStyleSheet(

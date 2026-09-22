@@ -31,7 +31,8 @@ public sealed class EventsController(EventService service) : ControllerBase
             idempotencyKey,
             request.MediaIds,
             request.Classification,
-            request.Locations);
+            request.Locations,
+            request.ParticipantIds);
 
         var evt = await service.CreateAsync(command, cancellationToken);
 
@@ -112,7 +113,8 @@ public sealed class EventsController(EventService service) : ControllerBase
             request.Timezone ?? "UTC",
             request.MediaIds,
             request.Classification,
-            request.Locations);
+            request.Locations,
+            request.ParticipantIds);
 
         var evt = await service.UpdateSourceAsync(command, cancellationToken);
 
@@ -205,6 +207,7 @@ public sealed class EventsController(EventService service) : ControllerBase
             semantic?.Summary,
             manual,
             effective,
-            locations);
+            locations,
+            evt.Participants.Where(x => x.Active).Select(x => x.UserId.ToString()).ToArray());
     }
 }

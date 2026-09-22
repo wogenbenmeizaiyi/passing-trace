@@ -193,6 +193,7 @@ class EventApiClient {
     DateTime? plannedAt,
     required String timezone,
     required String idempotencyKey,
+    List<String>? participantIds,
     List<String> mediaIds = const [],
     ManualClassification? classification,
     List<EventLocationModel>? locations,
@@ -202,6 +203,7 @@ class EventApiClient {
     }
     final body = <String, Object?>{
       'kind': kind.value,
+      'participantIds': ?participantIds,
       'title': title,
       'rawContent': rawContent,
       'happenedAt': happenedAt?.toUtc().toIso8601String(),
@@ -234,6 +236,7 @@ class EventApiClient {
     DateTime? plannedAt,
     required String timezone,
     required int version,
+    List<String>? participantIds,
     List<String> mediaIds = const [],
     ManualClassification? classification,
     List<EventLocationModel>? locations,
@@ -243,6 +246,7 @@ class EventApiClient {
     }
     final body = <String, Object?>{
       'title': title,
+      'participantIds': ?participantIds,
       'rawContent': rawContent,
       'happenedAt': happenedAt?.toUtc().toIso8601String(),
       'plannedAt': plannedAt?.toUtc().toIso8601String(),

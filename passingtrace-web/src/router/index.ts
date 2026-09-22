@@ -5,6 +5,21 @@ import { defaultWebEntry } from '@/utils/device'
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
+    {
+      path: '/messages/:id?',
+      name: 'messages',
+      component: () => import('@/views/MessagesView.vue'),
+    },
+    {
+      path: '/shares/:id',
+      name: 'shared-detail',
+      component: () => import('@/views/SharedDocumentView.vue'),
+    },
+    {
+      path: '/joint-records/:id',
+      name: 'joint-detail',
+      component: () => import('@/views/SharedDocumentView.vue'),
+    },
     { path: '/account', name: 'account', component: () => import('@/views/AccountView.vue') },
     { path: '/', name: 'entry', redirect: () => defaultWebEntry() },
     { path: '/product', name: 'product', component: () => import('@/views/HomeView.vue') },

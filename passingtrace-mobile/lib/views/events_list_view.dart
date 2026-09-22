@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../social/messages_view.dart';
+
 import '../auth_service.dart';
 import '../events/event_model.dart';
 import '../events/events_api.dart';
@@ -258,7 +260,30 @@ class _EventsListViewState extends State<EventsListView> {
     ),
     floatingActionButton: _buildFixedFilterButton(),
     floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
-    body: _buildBody(),
+    body: Column(
+      children: [
+        Align(
+          alignment: Alignment.centerLeft,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: TextButton.icon(
+              onPressed: () => Navigator.push<void>(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => JointRecordsView(
+                    auth: widget.auth,
+                    session: widget.session,
+                  ),
+                ),
+              ),
+              icon: const Icon(Icons.people_outline),
+              label: const Text('共同参与的记录'),
+            ),
+          ),
+        ),
+        Expanded(child: _buildBody()),
+      ],
+    ),
   );
 
   Widget _buildFixedFilterButton() {

@@ -3,6 +3,7 @@ using PassingTrace.Core.Ai;
 using PassingTrace.Core.Events;
 using PassingTrace.Core.Media;
 using PassingTrace.Core.Storylines;
+using PassingTrace.Core.Social;
 
 namespace PassingTrace.Infrastructure;
 
@@ -14,6 +15,16 @@ public sealed class TraceDbContext(DbContextOptions<TraceDbContext> options)
     : DbContext(options)
 {
     public DbSet<Event> Events => Set<Event>();
+    public DbSet<Friendship> Friendships => Set<Friendship>();
+    public DbSet<FriendPreference> FriendPreferences => Set<FriendPreference>();
+    public DbSet<FriendRequest> FriendRequests => Set<FriendRequest>();
+    public DbSet<UserBlock> UserBlocks => Set<UserBlock>();
+    public DbSet<EventParticipant> EventParticipants => Set<EventParticipant>();
+    public DbSet<DirectConversation> DirectConversations => Set<DirectConversation>();
+    public DbSet<ConversationMember> ConversationMembers => Set<ConversationMember>();
+    public DbSet<DirectMessage> DirectMessages => Set<DirectMessage>();
+    public DbSet<ContentShare> ContentShares => Set<ContentShare>();
+    public DbSet<SocialNotification> SocialNotifications => Set<SocialNotification>();
 
     public DbSet<SourceRevision> SourceRevisions => Set<SourceRevision>();
 

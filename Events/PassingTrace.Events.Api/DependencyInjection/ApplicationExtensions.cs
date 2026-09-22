@@ -10,6 +10,7 @@ using PassingTrace.Events.Api.Places;
 using PassingTrace.Events.Api.Updates;
 using PassingTrace.Events.Api.Storylines;
 using PassingTrace.Events.Api.Development;
+using PassingTrace.Events.Api.Social;
 
 namespace PassingTrace.Events.Api.DependencyInjection;
 
@@ -44,6 +45,7 @@ public static class ApplicationExtensions
         services.AddSingleton(TimeProvider.System);
         services.Configure<DevelopmentDemoOptions>(configuration.GetSection(DevelopmentDemoOptions.SectionName));
         services.AddScoped<DevelopmentDemoSeeder>();
+        services.AddScoped<SocialDemoSeeder>();
         services.Configure<ObjectStorageOptions>(configuration.GetSection(ObjectStorageOptions.SectionName));
         services.Configure<AiModelOptions>(configuration.GetSection(AiModelOptions.SectionName));
         services.AddOptions<AmapOptions>()
@@ -68,6 +70,18 @@ public static class ApplicationExtensions
         services.AddSingleton(provider => provider.GetRequiredService<AiClientFactory>().AssistantChatClient);
         services.AddSingleton(provider => provider.GetRequiredService<AiClientFactory>().EmbeddingGenerator);
         services.AddHttpContextAccessor();
+        services.AddHttpClient<ISocialIdentityClient, SocialIdentityClient>(client =>
+        {
+            client.BaseAddress = new Uri(configuration["Identity:Authority"]!.TrimEnd('/') + "/");
+            client.Timeout = TimeSpan.FromSeconds(10);
+        }).RemoveAllLoggers();
+        services.AddScoped<FriendService>();
+        services.AddScoped<SharedContentService>();
+        services.AddScoped<DirectChatService>();
+        services.AddScoped<SocialAiTools>();
+        services.AddScoped<IAiCapabilityPackage, FriendsCapabilityPackage>();
+        services.AddScoped<EventParticipationService>();
+        services.AddScoped<IEventParticipationService>(p => p.GetRequiredService<EventParticipationService>());
         services.AddScoped<CurrentUserContext>();
         services.AddScoped<PersonalRecordTools>();
         services.AddScoped<AmapAiTools>();

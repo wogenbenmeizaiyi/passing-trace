@@ -7,6 +7,10 @@ import { eventsApi } from '@/api/events'
 import { EventKind, EventStatus, EventVisibility, type EventResponse } from '@/api/events-types'
 import { useAuthStore } from '@/stores/auth'
 import EventsListView from '@/views/EventsListView.vue'
+vi.mock('vue-router', async (original) => ({
+  ...(await original<typeof import('vue-router')>()),
+  useRoute: () => ({ query: {} }),
+}))
 
 vi.mock('@/api/events', () => ({
   eventsApi: { list: vi.fn<typeof eventsApi.list>() },

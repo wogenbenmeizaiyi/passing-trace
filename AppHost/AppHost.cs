@@ -14,7 +14,7 @@ var objectStoragePublicEndpoint = builder.AddParameter(
     "object-storage-public-endpoint",
     "http://localhost:9000");
 var qwenApiKey = builder.AddParameter("qwen-api-key", secret: true);
-var miniMaxApiKey = builder.AddParameter("minimax-api-key", secret: true);
+var deepSeekApiKey = builder.AddParameter("deepseek-api-key", secret: true);
 var amapWebServiceKey = builder.AddParameter("amap-web-service-key", secret: true);
 var amapMcpKey = builder.Configuration["AMAP_MCP_KEY"];
 
@@ -72,7 +72,7 @@ var api = builder.AddProject<Projects.PassingTrace_Events_Api>("passingtrace-eve
     .WithEnvironment("ObjectStorage__AccessKey", minioAccessKey)
     .WithEnvironment("ObjectStorage__SecretKey", minioSecretKey)
     .WithEnvironment("AiModels__Providers__Qwen__ApiKey", qwenApiKey)
-    .WithEnvironment("AiModels__Providers__MiniMax__ApiKey", miniMaxApiKey)
+    .WithEnvironment("AiModels__Providers__DeepSeek__ApiKey", deepSeekApiKey)
     .WithEnvironment("Amap__WebServiceKey", amapWebServiceKey)
     .WaitFor(identity)
     .WaitFor(traceDatabase)
@@ -89,7 +89,7 @@ var aiWorker = builder.AddProject<Projects.PassingTrace_Ai_Worker>("passingtrace
     .WithEnvironment("ObjectStorage__AccessKey", minioAccessKey)
     .WithEnvironment("ObjectStorage__SecretKey", minioSecretKey)
     .WithEnvironment("AiModels__Providers__Qwen__ApiKey", qwenApiKey)
-    .WithEnvironment("AiModels__Providers__MiniMax__ApiKey", miniMaxApiKey)
+    .WithEnvironment("AiModels__Providers__DeepSeek__ApiKey", deepSeekApiKey)
     .WaitFor(traceDatabase)
     .WaitFor(minio)
     .WaitFor(api);

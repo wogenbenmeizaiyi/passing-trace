@@ -10,7 +10,9 @@ public sealed record RecordEvidence(
     DateTimeOffset CreatedAt,
     double Score,
     IReadOnlyList<string>? Labels = null,
-    string? Place = null);
+    string? Place = null,
+    string? AuthorId = null,
+    string? AccessPath = null);
 
 public sealed record PlaceEvidence(
     long LocationId,
@@ -93,7 +95,10 @@ public sealed record EvidenceBundle(
     IReadOnlyList<StorylineEvidence>? Storylines = null,
     IReadOnlyList<AmapPlaceEvidence>? AmapPlaces = null,
     IReadOnlyList<AssistantAction>? Actions = null,
-    IReadOnlyList<AmapResultEvidence>? AmapResults = null);
+    IReadOnlyList<AmapResultEvidence>? AmapResults = null,
+    IReadOnlyList<Social.FriendView>? Friends = null,
+    Social.FriendActivityResult? FriendActivities = null,
+    IReadOnlyList<Social.SharedEvidence>? SharedContents = null);
 
 public sealed record RecordEvidenceDetail(
     long EventId,

@@ -6,6 +6,7 @@ import { eventsApi } from '@/api/events'
 import { mediaApi } from '@/api/media'
 import { HttpError } from '@/api/http-client'
 import WebAppHeader from '@/components/WebAppHeader.vue'
+import ParticipantPicker from '@/components/ParticipantPicker.vue'
 import {
   EventKind,
   EventKindActionLabel,
@@ -24,6 +25,8 @@ import { randomUuid } from '@/utils/id'
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
+const participantIds = ref<string[]>([])
+const mentionTrigger = ref(0)
 
 type Mode = 'create' | 'edit'
 const mode = computed<Mode>(() => (eventId.value !== null ? 'edit' : 'create'))
@@ -107,6 +110,7 @@ async function load() {
     const item = await eventsApi.get(eventId.value, { signal: controller.signal })
     if (controller.signal.aborted) return
     loaded.value = item
+    participantIds.value = item.participantIds ?? []
     form.value = {
       kind: item.kind,
       title: item.title ?? '',
@@ -150,6 +154,7 @@ async function submit() {
         ? toIsoWithOffset(form.value.when, form.value.timezone.trim())
         : null
       const payload = {
+        participantIds: participantIds.value,
         kind: form.value.kind,
         title: form.value.title.trim() || null,
         rawContent: form.value.rawContent.trim() || null,
@@ -170,6 +175,7 @@ async function submit() {
         ? toIsoWithOffset(form.value.when, form.value.timezone.trim())
         : null
       const payload: UpdateEventRequest = {
+        participantIds: participantIds.value,
         title: form.value.title.trim() || null,
         rawContent: form.value.rawContent.trim() || null,
         ...(form.value.kind === EventKind.Plan
@@ -409,11 +415,17 @@ onUnmounted(() => {
                 <span class="field-label">正文</span>
                 <textarea
                   v-model="form.rawContent"
+                  @keydown="
+                    (event) => {
+                      if (event.key === '@') mentionTrigger++
+                    }
+                  "
                   rows="10"
                   placeholder="把当下想到的、看到的、吃到的写下来…"
                 />
               </label>
               <p v-if="fieldErrors.content" class="field-error">{{ fieldErrors.content }}</p>
+              <ParticipantPicker v-model="participantIds" :mention-trigger="mentionTrigger" />
 
               <fieldset class="form-field media-field">
                 <legend>图片、视频或文件</legend>

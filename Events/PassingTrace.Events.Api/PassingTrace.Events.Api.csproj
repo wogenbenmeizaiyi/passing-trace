@@ -17,6 +17,9 @@
     <PackageReference Include="Pgvector.EntityFrameworkCore" />
   </ItemGroup>
   <ItemGroup>
+    <EmbeddedResource Include="Ai/Skills/*.md" LogicalName="AssistantSkills.%(Filename)%(Extension)" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\..\PassingTrace.Core\PassingTrace.Core.csproj" />
     <ProjectReference Include="..\..\PassingTrace.Infrastructure\PassingTrace.Infrastructure.csproj" />
   </ItemGroup>

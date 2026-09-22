@@ -50,6 +50,8 @@ public sealed class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(user => user.Bio).HasColumnName("bio").HasMaxLength(1024);
         builder.Property(user => user.AvatarKey).HasColumnName("avatar_key").HasMaxLength(200);
         builder.Property(user => user.ProfileVersion).HasColumnName("profile_version").IsConcurrencyToken();
+        builder.Property(user => user.FriendCode).HasColumnName("friend_code").HasMaxLength(16).IsRequired();
+        builder.HasIndex(user => user.FriendCode).IsUnique();
 
         // Identity 将用户名标准化，因此该唯一索引实现忽略大小写的唯一用户名。
         builder.HasIndex(user => user.NormalizedUserName)

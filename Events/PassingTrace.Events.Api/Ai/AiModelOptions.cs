@@ -10,16 +10,14 @@ public sealed class AiModelOptions
 
     public ChatModelSelection Assistant { get; set; } = new()
     {
-        Provider = "MiniMax",
-        PrimaryModel = "MiniMax-M3",
-        FallbackModel = "MiniMax-M2.7",
+        Provider = "DeepSeek",
+        PrimaryModel = "deepseek-flash",
     };
 
     public ChatModelSelection Semantic { get; set; } = new()
     {
-        Provider = "MiniMax",
-        PrimaryModel = "MiniMax-M3",
-        FallbackModel = "MiniMax-M2.7",
+        Provider = "DeepSeek",
+        PrimaryModel = "deepseek-flash",
     };
 
     public EmbeddingModelSelection Embedding { get; set; } = new()
@@ -32,6 +30,12 @@ public sealed class AiModelOptions
     public Dictionary<string, OpenAiCompatibleProviderOptions> Providers { get; set; } =
         new(StringComparer.OrdinalIgnoreCase)
         {
+            ["DeepSeek"] = new()
+            {
+                Endpoint = "https://api.deepseek.com/v1",
+                StripThinkingTags = true,
+                UseRemoteMediaUrls = false,
+            },
             ["MiniMax"] = new()
             {
                 Endpoint = "https://api.minimaxi.com/v1",

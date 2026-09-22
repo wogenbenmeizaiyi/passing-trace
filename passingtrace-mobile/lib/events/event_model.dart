@@ -60,6 +60,7 @@ class EventModel {
     this.manualClassification = const ManualClassification(),
     this.effectiveClassification = const EffectiveClassification(),
     this.locations = const [],
+    this.participantIds = const [],
   });
 
   final int id;
@@ -87,6 +88,7 @@ class EventModel {
   final ManualClassification manualClassification;
   final EffectiveClassification effectiveClassification;
   final List<EventLocationModel> locations;
+  final List<String> participantIds;
 
   EventModel copyWith({
     EventKind? kind,
@@ -107,6 +109,7 @@ class EventModel {
     ManualClassification? manualClassification,
     EffectiveClassification? effectiveClassification,
     List<EventLocationModel>? locations,
+    List<String>? participantIds,
   }) => EventModel(
     id: id,
     kind: kind ?? this.kind,
@@ -128,10 +131,12 @@ class EventModel {
     effectiveClassification:
         effectiveClassification ?? this.effectiveClassification,
     locations: locations ?? this.locations,
+    participantIds: participantIds ?? this.participantIds,
   );
 
   factory EventModel.fromJson(Map<String, dynamic> json) => EventModel(
     id: (json['id'] as num).toInt(),
+    participantIds: (json['participantIds'] as List? ?? []).cast<String>(),
     kind: EventKind.fromValue((json['kind'] as num).toInt()),
     status: EventStatus.fromValue((json['status'] as num).toInt()),
     title: json['title'] as String?,

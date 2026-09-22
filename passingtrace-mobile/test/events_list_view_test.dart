@@ -125,6 +125,10 @@ void main() {
     expect(find.text('八月记录'), findsNothing);
     expect(find.text('去年记录'), findsNothing);
 
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('events-year-2025')),
+      120,
+    );
     await tester.tap(find.byKey(const ValueKey('events-year-2025')));
     await tester.pumpAndSettle();
     await tester.drag(find.byType(ListView), const Offset(0, -220));

@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using PassingTrace.Core.Events;
 using PassingTrace.Events.Api.Media;
 
@@ -20,6 +22,8 @@ public sealed class DomainExceptionHandler : IExceptionHandler
             EventNotFoundException => (StatusCodes.Status404NotFound, "资源不存在"),
             MediaAssetNotFoundException => (StatusCodes.Status404NotFound, "附件不存在"),
             ConcurrencyException => (StatusCodes.Status409Conflict, "版本冲突"),
+            DbUpdateConcurrencyException => (StatusCodes.Status409Conflict, "信息已更新"),
+            DbUpdateException { InnerException: PostgresException { SqlState: PostgresErrorCodes.UniqueViolation } } => (StatusCodes.Status409Conflict, "操作已提交"),
             IdempotencyConflictException => (StatusCodes.Status409Conflict, "幂等冲突"),
             DomainValidationException => (StatusCodes.Status400BadRequest, "请求不合法"),
             PreconditionRequiredException => (StatusCodes.Status428PreconditionRequired, "缺少前置条件"),
@@ -40,7 +44,7 @@ public sealed class DomainExceptionHandler : IExceptionHandler
             {
                 Status = status,
                 Title = title,
-                Detail = exception.Message,
+                Detail = exception is DbUpdateException ? "信息已发生变化，请刷新后重试。重复发送不会产生重复消息。" : exception.Message,
             },
             cancellationToken);
 

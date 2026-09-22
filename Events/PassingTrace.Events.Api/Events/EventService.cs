@@ -2,6 +2,7 @@ using PassingTrace.Core.Events;
 using PassingTrace.Core.Media;
 using PassingTrace.Events.Api.Ai;
 using PassingTrace.Events.Api.Media;
+using PassingTrace.Events.Api.Social;
 
 namespace PassingTrace.Events.Api.Events;
 
@@ -16,6 +17,7 @@ public sealed class EventService
     private readonly TimeProvider _clock;
     private readonly IEventMediaService _mediaService;
     private readonly IAnalysisOutbox _outbox;
+    private readonly IEventParticipationService _participation;
 
     public EventService(IEventRepository repository, TimeProvider clock)
         : this(repository, clock, new NoopEventMediaService(), new NoopAnalysisOutbox())
@@ -26,12 +28,14 @@ public sealed class EventService
         IEventRepository repository,
         TimeProvider clock,
         IEventMediaService mediaService,
-        IAnalysisOutbox outbox)
+        IAnalysisOutbox outbox,
+        IEventParticipationService? participation = null)
     {
         _repository = repository;
         _clock = clock;
         _mediaService = mediaService;
         _outbox = outbox;
+        _participation = participation ?? new NoopEventParticipationService();
     }
 
 
@@ -84,6 +88,7 @@ public sealed class EventService
         evt.SourceRevisions.Add(revision);
         _mediaService.ReplaceCurrent(evt, revision, media, now);
         ApplyRevisionMetadata(evt, revision, command.UserId, command.Classification, command.Locations, now);
+        await _participation.ApplyAsync(evt, revision, command.ParticipantIds, cancellationToken);
         AddBaseSearchIndex(evt, revision, now);
         _outbox.EnqueueEvent(evt, 1, now);
         await _outbox.IncrementWatermarkAsync(command.UserId, now, cancellationToken);
@@ -153,6 +158,7 @@ public sealed class EventService
         var locations = command.Locations ?? CopyLocations(previousRevision);
         foreach (var label in evt.LabelIndexes.Where(x => x.IsCurrent)) label.IsCurrent = false;
         ApplyRevisionMetadata(evt, revision, command.UserId, classification, locations, now);
+        await _participation.ApplyAsync(evt, revision, command.ParticipantIds, cancellationToken);
         foreach (var index in evt.SearchIndexes.Where(x => x.IsCurrent)) index.IsCurrent = false;
         AddBaseSearchIndex(evt, revision, now);
         _outbox.EnqueueEvent(evt, nextRevision, now);
@@ -182,6 +188,7 @@ public sealed class EventService
         var now = _clock.GetUtcNow();
         evt.DeletedAt = now;
         evt.UpdatedAt = now;
+        await _participation.ChangedAsync(evt, cancellationToken);
 
         _outbox.EnqueueEvent(evt, evt.CurrentSourceRevision, now, messageType: "event.deleted");
         await _outbox.IncrementWatermarkAsync(userId, now, cancellationToken);
@@ -216,6 +223,8 @@ public sealed class EventService
 
     private static bool MatchesContent(Event evt, CreateEventCommand command)
     {
+        if (!evt.Participants.Where(p => p.Active).Select(p => p.UserId.ToString()).Order()
+            .SequenceEqual((command.ParticipantIds ?? []).Distinct().Order())) return false;
         if (!(evt.EventKind == command.Kind &&
             evt.Title == command.Title &&
             evt.RawContent == command.RawContent &&

@@ -625,6 +625,8 @@ watch(
               <AssistantMessageContent
                 :content="message.content || (message.pending ? '正在检索你的记录…' : '')"
                 :records="message.evidence?.records ?? []"
+                :friends="message.evidence?.friends ?? []"
+                :shared-contents="message.evidence?.sharedContents ?? []"
                 :storylines="message.evidence?.storylines ?? []"
                 :conversation-id="currentId"
               />

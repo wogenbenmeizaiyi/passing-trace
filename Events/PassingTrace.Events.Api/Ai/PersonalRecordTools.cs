@@ -10,6 +10,7 @@ using PassingTrace.Core.Storylines;
 using PassingTrace.Infrastructure;
 using Pgvector;
 using Pgvector.EntityFrameworkCore;
+using PassingTrace.Events.Api.Social;
 
 namespace PassingTrace.Events.Api.Ai;
 
@@ -17,7 +18,8 @@ namespace PassingTrace.Events.Api.Ai;
 public sealed class PersonalRecordTools(
     TraceDbContext db,
     CurrentUserContext currentUser,
-    IEmbeddingGenerator<string, Embedding<float>> embeddingGenerator)
+    IEmbeddingGenerator<string, Embedding<float>> embeddingGenerator,
+    SharedContentService? sharedContent = null)
 {
     private readonly HashSet<long> _retrievedEventIds = [];
     private readonly List<RecordEvidence> _recordEvidence = [];
@@ -176,44 +178,55 @@ public sealed class PersonalRecordTools(
         [Range(-180, 180), Description("中心经度，可空")] decimal? centerLongitude = null,
         [Range(100, 100000), Description("半径米数，可空")] int? radiusMeters = null,
         [Range(1, 20), Description("最多返回 1-20 条")] int limit = 10,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        [Description("SearchMyFriends 返回的好友关系 ID；查询与该好友共同参与的记录时填写。")] Guid? participantFriendId = null)
     {
         limit = Math.Clamp(limit, 1, 20);
         var userId = currentUser.UserId;
+        var visible = sharedContent?.ReadableEvents(userId) ?? db.Events.Where(x => x.UserId == userId && x.DeletedAt == null);
+        if (participantFriendId is { } friendId)
+        {
+            var friend = await db.Friendships.AsNoTracking().SingleOrDefaultAsync(x => x.Id == friendId && x.Active &&
+                (x.FirstUserId == userId || x.SecondUserId == userId), cancellationToken)
+                ?? throw new DomainValidationException("这位好友已不可查询，请重新查找好友。");
+            var other = FriendService.Other(friend, userId);
+            visible = visible.Where(e => e.UserId == other || db.EventParticipants.Any(p => p.EventId == e.Id && p.UserId == other && p.Active &&
+                db.Friendships.Any(f => f.Id == p.FriendshipId && f.Active)));
+        }
         var indexes = db.EventSearchIndexes.AsNoTracking()
-            .Where(x => x.UserId == userId && x.IsCurrent);
+            .Where(x => x.IsCurrent && visible.Any(e => e.Id == x.EventId && e.UserId == x.UserId));
         if (DateTimeOffset.TryParse(from, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var fromValue))
         {
-            indexes = indexes.Where(x => db.Events.Any(e => e.Id == x.EventId && e.UserId == userId &&
+            indexes = indexes.Where(x => visible.Any(e => e.Id == x.EventId &&
                 (e.HappenedAt ?? e.CreatedAt) >= fromValue.ToUniversalTime()));
         }
         if (DateTimeOffset.TryParse(to, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var toValue))
         {
-            indexes = indexes.Where(x => db.Events.Any(e => e.Id == x.EventId && e.UserId == userId &&
+            indexes = indexes.Where(x => visible.Any(e => e.Id == x.EventId &&
                 (e.HappenedAt ?? e.CreatedAt) <= toValue.ToUniversalTime()));
         }
         if (Enum.TryParse<EventKind>(kind, true, out var eventKind))
         {
-            indexes = indexes.Where(x => db.Events.Any(e => e.Id == x.EventId && e.UserId == userId && e.EventKind == eventKind));
+            indexes = indexes.Where(x => visible.Any(e => e.Id == x.EventId && e.EventKind == eventKind));
         }
         if (Enum.TryParse<EventStatus>(status, true, out var eventStatus))
         {
-            indexes = indexes.Where(x => db.Events.Any(e => e.Id == x.EventId && e.UserId == userId && e.Status == eventStatus));
+            indexes = indexes.Where(x => visible.Any(e => e.Id == x.EventId && e.Status == eventStatus));
         }
         if (!string.IsNullOrWhiteSpace(category))
         {
             var key = category.ToLowerInvariant();
-            indexes = indexes.Where(x => db.EventLabelIndexes.Any(m => m.UserId == userId && m.EventId == x.EventId &&
+            indexes = indexes.Where(x => db.EventLabelIndexes.Any(m => m.UserId == x.UserId && m.EventId == x.EventId &&
                 m.IsCurrent && m.Type == EventLabelType.PrimaryCategory && m.TaxonomyKey == key));
         }
         if (!string.IsNullOrWhiteSpace(tag))
         {
             var key = tag.ToLowerInvariant();
-            indexes = indexes.Where(x => db.EventLabelIndexes.Any(m => m.UserId == userId && m.EventId == x.EventId &&
+            indexes = indexes.Where(x => db.EventLabelIndexes.Any(m => m.UserId == x.UserId && m.EventId == x.EventId &&
                 m.IsCurrent && m.Type == EventLabelType.BehaviorTag && m.TaxonomyKey == key));
         }
         if (!string.IsNullOrWhiteSpace(adCode))
-            indexes = indexes.Where(x => db.EventLocations.Any(l => l.UserId == userId && l.EventId == x.EventId &&
+            indexes = indexes.Where(x => db.EventLocations.Any(l => l.UserId == x.UserId && l.EventId == x.EventId &&
                 l.SourceRevision == x.SourceRevision && l.AdCode == adCode));
         if (centerLatitude.HasValue && centerLongitude.HasValue)
         {
@@ -222,14 +235,14 @@ public sealed class PersonalRecordTools(
             var longitudeDelta = latitudeDelta / (decimal)Math.Max(0.1, Math.Cos((double)centerLatitude.Value * Math.PI / 180));
             var minLat = centerLatitude.Value - latitudeDelta; var maxLat = centerLatitude.Value + latitudeDelta;
             var minLon = centerLongitude.Value - longitudeDelta; var maxLon = centerLongitude.Value + longitudeDelta;
-            indexes = indexes.Where(x => db.EventLocations.Any(l => l.UserId == userId && l.EventId == x.EventId &&
+            indexes = indexes.Where(x => db.EventLocations.Any(l => l.UserId == x.UserId && l.EventId == x.EventId &&
                 l.SourceRevision == x.SourceRevision && l.Latitude >= minLat && l.Latitude <= maxLat &&
                 l.Longitude >= minLon && l.Longitude <= maxLon));
         }
         if (!string.IsNullOrWhiteSpace(location))
         {
             indexes = indexes.Where(x => x.SemanticRunId != null && db.SemanticMentions.Any(m =>
-                m.UserId == userId && m.SemanticRunId == x.SemanticRunId && m.Category == "location" &&
+                m.UserId == x.UserId && m.SemanticRunId == x.SemanticRunId && m.Category == "location" &&
                 EF.Functions.TrigramsSimilarity(m.NormalizedValue, location) > 0.15));
         }
 
@@ -274,15 +287,15 @@ public sealed class PersonalRecordTools(
         var ids = scores.OrderByDescending(x => x.Value).Take(limit).Select(x => x.Key).ToArray();
         var rows = await (
             from index in db.EventSearchIndexes.AsNoTracking()
-            join evt in db.Events.AsNoTracking() on index.EventId equals evt.Id
-            where ids.Contains(index.EventId) && index.UserId == userId && evt.UserId == userId &&
+            join evt in visible.AsNoTracking() on index.EventId equals evt.Id
+            where ids.Contains(index.EventId) && index.UserId == evt.UserId &&
                   index.IsCurrent && evt.DeletedAt == null
             select new { index, evt }).ToListAsync(cancellationToken);
-        var labelRows = await db.EventLabelIndexes.AsNoTracking().Where(x => x.UserId == userId && x.IsCurrent && ids.Contains(x.EventId))
+        var labelRows = await db.EventLabelIndexes.AsNoTracking().Where(x => x.IsCurrent && ids.Contains(x.EventId) && visible.Any(e => e.Id == x.EventId && e.UserId == x.UserId))
             .ToListAsync(cancellationToken);
-        var locationRows = await db.EventLocations.AsNoTracking().Where(x => x.UserId == userId && ids.Contains(x.EventId))
+        var locationRows = await db.EventLocations.AsNoTracking().Where(x => ids.Contains(x.EventId) && visible.Any(e => e.Id == x.EventId && e.UserId == x.UserId))
             .ToListAsync(cancellationToken);
-        var records = ids.Select(id => rows.Single(x => x.index.EventId == id))
+        var records = ids.Where(id => rows.Any(x => x.index.EventId == id)).Select(id => rows.Single(x => x.index.EventId == id))
             .Select(x => new RecordEvidence(
                 x.evt.Id,
                 x.index.SourceRevision,
@@ -293,7 +306,8 @@ public sealed class PersonalRecordTools(
                 x.evt.CreatedAt,
                 scores[x.evt.Id],
                 labelRows.Where(l => l.EventId == x.evt.Id).Select(l => l.DisplayName).ToArray(),
-                locationRows.FirstOrDefault(l => l.EventId == x.evt.Id && l.SourceRevision == x.index.SourceRevision)?.Name))
+                locationRows.FirstOrDefault(l => l.EventId == x.evt.Id && l.SourceRevision == x.index.SourceRevision)?.Name,
+                x.evt.UserId.ToString(), x.evt.UserId == userId ? null : $"/joint-records/{x.evt.Id}"))
             .ToArray();
         foreach (var record in records)
         {
@@ -374,9 +388,9 @@ public sealed class PersonalRecordTools(
         if (ids.Length == 0) return [];
         var userId = currentUser.UserId;
         var rows = await (
-            from evt in db.Events.AsNoTracking()
+            from evt in (sharedContent?.ReadableEvents(userId) ?? db.Events.Where(x => x.UserId == userId && x.DeletedAt == null)).AsNoTracking()
             join index in db.EventSearchIndexes.AsNoTracking() on evt.Id equals index.EventId
-            where ids.Contains(evt.Id) && evt.UserId == userId && index.UserId == userId && index.IsCurrent && evt.DeletedAt == null
+            where ids.Contains(evt.Id) && index.UserId == evt.UserId && index.IsCurrent && evt.DeletedAt == null
             select new { evt, index }).ToListAsync(cancellationToken);
         var details = new List<RecordEvidenceDetail>();
         foreach (var row in rows)
@@ -384,7 +398,7 @@ public sealed class PersonalRecordTools(
             var mentions = row.index.SemanticRunId is null
                 ? []
                 : await db.SemanticMentions.AsNoTracking()
-                    .Where(x => x.UserId == userId && x.SemanticRunId == row.index.SemanticRunId)
+                    .Where(x => x.UserId == row.evt.UserId && x.SemanticRunId == row.index.SemanticRunId)
                     .Take(100)
                     .Select(x => $"{x.Category}: {x.NormalizedValue} (confidence={x.Confidence})")
                     .ToListAsync(cancellationToken);

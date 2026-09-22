@@ -13,10 +13,11 @@ namespace PassingTrace.Events.Api.Ai;
 public sealed class AiClientFactory : IDisposable
 {
     private static readonly HttpClient CompatibleHttpClient = new(
-        new OpenAiCompatibleStreamingHandler(new SocketsHttpHandler
+        new OpenAiCompatibleStreamingHandler(new DeepSeekChatRequestHandler(new SocketsHttpHandler
         {
             PooledConnectionLifetime = TimeSpan.FromMinutes(5),
-        })) { Timeout = Timeout.InfiniteTimeSpan };
+        })))
+    { Timeout = Timeout.InfiniteTimeSpan };
 
     private readonly IChatClient _assistantChatClient;
     private readonly IChatClient _semanticChatClient;

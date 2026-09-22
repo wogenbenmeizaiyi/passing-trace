@@ -54,10 +54,10 @@ public static class AssistantConversationHistory
             .Select(x => new { x.Id, x.Role, x.Content, x.CreatedAt, x.EvidenceSnapshotJson })
             .Take(limit + 1).ToArrayAsync(cancellationToken);
         var hasMore = rows.Length > limit;
-        var items = rows.Take(limit).Reverse().Select(x => new AiMessageResponse(
-            x.Id, x.Role.ToString(), x.Content, x.CreatedAt,
-            string.IsNullOrWhiteSpace(x.EvidenceSnapshotJson) ? null : JsonSerializer.Deserialize<object>(x.EvidenceSnapshotJson)))
-            .ToArray();
+        var items = new List<AiMessageResponse>();
+        foreach (var x in rows.Take(limit).Reverse())
+            items.Add(new AiMessageResponse(x.Id, x.Role.ToString(), x.Content, x.CreatedAt,
+                await Social.SocialEvidenceGuard.ReadAsync(db, userId, x.EvidenceSnapshotJson, cancellationToken)));
         return new AiMessagePageResponse(items, hasMore, hasMore ? items[0].Id : null);
     }
 

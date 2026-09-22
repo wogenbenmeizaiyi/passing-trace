@@ -68,6 +68,7 @@ public sealed class Event
 
     /// <summary>当前 Source 使用的附件。</summary>
     public List<EventMediaAsset> MediaAssets { get; set; } = [];
+    public List<Social.EventParticipant> Participants { get; set; } = [];
 
     /// <summary>该 Event 的不可变语义分析历史。</summary>
     public List<EventSemanticRun> SemanticRuns { get; set; } = [];

@@ -105,6 +105,7 @@ export const EventStatusLabel: Record<EventStatus, string> = {
 }
 
 export interface EventResponse {
+  participantIds?: string[]
   id: number
   kind: EventKind
   status: EventStatus
@@ -135,6 +136,7 @@ export interface EventResponse {
 }
 
 export interface CreateEventRequest {
+  participantIds?: string[]
   kind: EventKind
   title?: string | null
   rawContent?: string | null
@@ -147,6 +149,7 @@ export interface CreateEventRequest {
 }
 
 export interface UpdateEventRequest {
+  participantIds?: string[]
   title?: string | null
   rawContent?: string | null
   happenedAt?: string | null

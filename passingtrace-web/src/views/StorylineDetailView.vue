@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ShareDialog from '@/components/ShareDialog.vue'
 import { computed, onMounted, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import WebAppHeader from '@/components/WebAppHeader.vue'
@@ -7,6 +8,7 @@ import { StorylineStatus, type StorylineRevisionResponse } from '@/api/storyline
 import { conversationIdFromQuery, recordFromConversation } from '@/utils/assistant-navigation'
 
 const route = useRoute()
+const shareOpen = ref(false)
 const conversationId = computed(() => conversationIdFromQuery(route.query.conversation))
 const conversationRoute = computed(() => ({
   path: '/assistant',
@@ -64,6 +66,7 @@ onMounted(async () => {
       <p v-if="error" class="error-banner">{{ error }}</p>
       <div v-else-if="loading" class="detail-loading"><span class="loading-ring"></span></div>
       <template v-else-if="item">
+        <ShareDialog v-if="shareOpen" :storyline-id="item.id" @close="shareOpen = false" />
         <nav class="back-link" aria-label="返回导航">
           <RouterLink
             v-if="conversationId"
@@ -96,6 +99,13 @@ onMounted(async () => {
             </div>
           </div>
           <div class="hero-actions">
+            <button
+              v-if="!route.params.revision"
+              class="button button-secondary"
+              @click="shareOpen = true"
+            >
+              分享给好友
+            </button>
             <RouterLink class="button button-primary" :to="`/storylines/${item.id}/edit`"
               >整理故事线</RouterLink
             >

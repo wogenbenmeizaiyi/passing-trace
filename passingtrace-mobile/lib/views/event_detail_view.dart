@@ -1,6 +1,10 @@
 // 详情页：拉取并展示 Event 完整字段，编辑 / 删除入口。
 
 import 'package:flutter/material.dart';
+
+import '../social/social_api.dart';
+import '../social/shared_content_view.dart';
+
 import 'package:url_launcher/url_launcher.dart';
 import 'package:video_player/video_player.dart';
 
@@ -184,6 +188,7 @@ class _EventDetailViewState extends State<EventDetailView> {
     return Scaffold(
       appBar: TraceAppBar(
         title: '记录详情',
+        trailingWidth: 96,
         leading: TraceIconButton(
           glyph: TraceGlyph.chevronLeft,
           tooltip: '返回',
@@ -191,10 +196,27 @@ class _EventDetailViewState extends State<EventDetailView> {
         ),
         trailing: _event == null
             ? null
-            : TraceIconButton(
-                glyph: TraceGlyph.edit,
-                tooltip: '编辑',
-                onPressed: _edit,
+            : Row(
+                children: [
+                  IconButton(
+                    tooltip: '分享给好友',
+                    icon: const Icon(Icons.share_outlined),
+                    onPressed: () async {
+                      final api = SocialApi(widget.auth, widget.session);
+                      await shareSocialContent(
+                        context,
+                        api,
+                        eventId: _event!.id,
+                      );
+                      api.close();
+                    },
+                  ),
+                  TraceIconButton(
+                    glyph: TraceGlyph.edit,
+                    tooltip: '编辑',
+                    onPressed: _edit,
+                  ),
+                ],
               ),
       ),
       body: _buildBody(),

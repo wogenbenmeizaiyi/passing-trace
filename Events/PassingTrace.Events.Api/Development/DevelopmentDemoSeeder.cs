@@ -28,7 +28,8 @@ public sealed class DevelopmentDemoSeeder(
     StorylineService storylines,
     TimeProvider clock,
     IHostEnvironment environment,
-    IOptions<DevelopmentDemoOptions> options)
+    IOptions<DevelopmentDemoOptions> options,
+    SocialDemoSeeder? social = null)
 {
     // AppHost runs one local API. Serialize concurrent startup/manual requests within it;
     // persistent user-scoped idempotency keys also protect retries across process restarts.
@@ -106,6 +107,7 @@ public sealed class DevelopmentDemoSeeder(
                 createdStorylines++;
             }
 
+            if (social is not null) await social.SeedAsync(userId, cancellationToken);
             return new DevelopmentDemoResult(createdRecords, existingRecords, createdStorylines,
                 existingStorylines, DevelopmentDemoCatalog.StorylineCount - fixtures.Count);
         }

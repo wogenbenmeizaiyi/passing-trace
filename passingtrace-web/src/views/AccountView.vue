@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import FriendCodeCard from '@/components/FriendCodeCard.vue'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink, onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import WebAppHeader from '@/components/WebAppHeader.vue'
@@ -177,7 +178,7 @@ onBeforeUnmount(() => {
     <header class="account-heading">
       <button class="text-button" @click="router.push(back)">← 返回原页面</button>
       <h1>用户中心</h1>
-      <p>你的个人资料，仅自己可见。</p>
+      <p>管理个人资料。头像、昵称和简介供好友认识你，账号信息仅自己可见。</p>
     </header>
     <section v-if="!auth.isAuthenticated" class="account-panel">
       <p>登录后可以查看和编辑个人资料。</p>
@@ -201,7 +202,7 @@ onBeforeUnmount(() => {
             />
             <h2>{{ account.nickname }}</h2>
             <p class="profile-bio">{{ account.profile.bio || '在这里，慢慢收集属于你的生活。' }}</p>
-            <span class="profile-private">仅本人可见</span>
+            <span class="profile-private">好友可见的资料</span>
             <button
               v-if="!editing"
               class="button button-primary"
@@ -235,6 +236,7 @@ onBeforeUnmount(() => {
             </template>
           </aside>
           <section class="account-companion" aria-label="手机版">
+            <FriendCodeCard />
             <RouterLink to="/product" class="account-companion__link">
               <svg
                 class="account-companion__icon"

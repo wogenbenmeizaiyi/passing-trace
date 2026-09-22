@@ -6,14 +6,18 @@ namespace PassingTrace.Events.IntegrationTests;
 public sealed class AiModelConfigurationTests
 {
     [Fact]
-    public void Defaults_UseMiniMaxForChatAndSemanticAndQwenForEmbedding()
+    public void Defaults_UseDeepSeekFlashWithoutExpiredFallbackAndKeepQwenEmbedding()
     {
         var options = new AiModelOptions();
 
-        Assert.Equal("MiniMax", options.Assistant.Provider);
-        Assert.Equal("MiniMax-M3", options.Assistant.PrimaryModel);
-        Assert.Equal("MiniMax", options.Semantic.Provider);
-        Assert.Equal("MiniMax-M3", options.Semantic.PrimaryModel);
+        Assert.Equal("DeepSeek", options.Assistant.Provider);
+        Assert.Equal("deepseek-flash", options.Assistant.PrimaryModel);
+        Assert.Null(options.Assistant.FallbackModel);
+        Assert.Equal("DeepSeek", options.Semantic.Provider);
+        Assert.Equal("deepseek-flash", options.Semantic.PrimaryModel);
+        Assert.Null(options.Semantic.FallbackModel);
+        Assert.Equal("https://api.deepseek.com/v1", options.Providers["DeepSeek"].Endpoint);
+        Assert.False(options.Providers["DeepSeek"].UseRemoteMediaUrls);
         Assert.Equal("Qwen", options.Embedding.Provider);
         Assert.Equal("text-embedding-v4", options.Embedding.Model);
         Assert.Equal(1024, options.Embedding.Dimensions);

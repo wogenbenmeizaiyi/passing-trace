@@ -7,6 +7,7 @@ import { mediaApi } from '@/api/media'
 import { aiApi, type SemanticResult } from '@/api/ai'
 import { HttpError } from '@/api/http-client'
 import WebAppHeader from '@/components/WebAppHeader.vue'
+import ShareDialog from '@/components/ShareDialog.vue'
 import {
   EventKind,
   EventKindLabel,
@@ -21,6 +22,7 @@ import { formatLocal } from '@/utils/datetime'
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
+const shareOpen = ref(false)
 const conversationId = computed(() => conversationIdFromQuery(route.query.conversation))
 const conversationRoute = computed(() => ({
   path: '/assistant',
@@ -230,6 +232,7 @@ onUnmounted(() => {
       </p>
 
       <template v-else-if="item">
+        <ShareDialog v-if="shareOpen" :event-id="item.id" @close="shareOpen = false" />
         <header class="detail-header">
           <div class="detail-meta">
             <span class="badge kind" :data-kind="item.kind">{{ EventKindLabel[item.kind] }}</span>
@@ -239,6 +242,9 @@ onUnmounted(() => {
             <span class="detail-id">#{{ item.id }}</span>
           </div>
           <div class="detail-actions">
+            <button class="button button-secondary compact-button" @click="shareOpen = true">
+              分享给好友
+            </button>
             <button class="button button-dark compact-button" @click="startEdit">编辑</button>
             <button
               class="button compact-button"

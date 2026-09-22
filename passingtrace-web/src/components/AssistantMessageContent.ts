@@ -1,6 +1,7 @@
 import { defineComponent, h, type PropType, type VNodeChild } from 'vue'
 import { RouterLink } from 'vue-router'
 import { recordFromConversation, storylineFromConversation } from '@/utils/assistant-navigation'
+import { safeSocialPath, type Friend } from '@/api/social'
 
 type InlineToken =
   | { type: 'text'; value: string }
@@ -8,6 +9,7 @@ type InlineToken =
   | { type: 'code'; value: string }
   | { type: 'event'; eventId: number; value: string }
   | { type: 'storyline'; storylineId: string; value: string }
+  | { type: 'social'; kind: string; id: string; value: string }
 
 type Block =
   | { type: 'heading'; level: number; content: string }
@@ -22,7 +24,7 @@ function inlineTokens(
 ): InlineToken[] {
   const tokens: InlineToken[] = []
   const pattern =
-    /\[Event\s*#(\d+)\]|\[Storyline\s*#([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\]|\*\*(.+?)\*\*|`([^`]+)`/gi
+    /\[Event\s*#(\d+)\]|\[Storyline\s*#([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\]|\*\*(.+?)\*\*|`([^`]+)`|\[(Friend|Share)\s*#([0-9a-f-]{36})\]/gi
   let cursor = 0
   for (const match of source.matchAll(pattern)) {
     const index = match.index ?? 0
@@ -43,6 +45,13 @@ function inlineTokens(
       })
     } else if (match[3] !== undefined) {
       tokens.push({ type: 'strong', value: match[3] })
+    } else if (match[5]) {
+      tokens.push({
+        type: 'social',
+        kind: match[5].toLowerCase(),
+        id: match[6]!.toLowerCase(),
+        value: '',
+      })
     } else {
       tokens.push({ type: 'code', value: match[4]! })
     }
@@ -106,11 +115,18 @@ export default defineComponent({
     content: { type: String, required: true },
     conversationId: { type: String as PropType<string | null>, default: null },
     records: {
-      type: Array as PropType<Array<{ eventId: number; title: string | null }>>,
+      type: Array as PropType<
+        Array<{ eventId: number; title: string | null; accessPath?: string | null }>
+      >,
       default: () => [],
     },
     storylines: {
       type: Array as PropType<Array<{ storylineId: string; title: string | null }>>,
+      default: () => [],
+    },
+    friends: { type: Array as PropType<Friend[]>, default: () => [] },
+    sharedContents: {
+      type: Array as PropType<Array<{ shareId: string; title: string; accessPath: string }>>,
       default: () => [],
     },
   },
@@ -126,6 +142,28 @@ export default defineComponent({
         ]),
       )
       return inlineTokens(source, recordTitles, storylineTitles).map((token) => {
+        const from = `/assistant${props.conversationId ? `?conversation=${props.conversationId}` : ''}`
+        if (token.type === 'social') {
+          const friend = props.friends.find((f) => f.id.toLowerCase() === token.id)
+          const share = props.sharedContents.find((s) => s.shareId.toLowerCase() === token.id)
+          const path = share ? safeSocialPath(share.accessPath) : null
+          if (token.kind === 'friend' && friend)
+            return h(
+              RouterLink,
+              {
+                class: 'record-citation',
+                to: { path: '/messages', query: { tab: 'friends', friend: friend.id, from } },
+              },
+              { default: () => friend.remark || friend.person.nickname },
+            )
+          if (token.kind === 'share' && path)
+            return h(
+              RouterLink,
+              { class: 'record-citation', to: { path, query: { from } } },
+              { default: () => share!.title },
+            )
+          return token.kind === 'friend' ? '好友信息已更新' : '分享已不可查看'
+        }
         if (token.type === 'strong') return h('strong', token.value)
         if (token.type === 'code') return h('code', token.value)
         if (token.type === 'event') {
@@ -133,7 +171,14 @@ export default defineComponent({
             RouterLink,
             {
               class: 'record-citation',
-              to: recordFromConversation(token.eventId, props.conversationId),
+              to: safeSocialPath(props.records.find((r) => r.eventId === token.eventId)?.accessPath)
+                ? {
+                    path: safeSocialPath(
+                      props.records.find((r) => r.eventId === token.eventId)?.accessPath,
+                    )!,
+                    query: { from },
+                  }
+                : recordFromConversation(token.eventId, props.conversationId),
             },
             { default: () => token.value },
           )
