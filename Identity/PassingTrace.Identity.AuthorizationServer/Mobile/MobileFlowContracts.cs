@@ -14,7 +14,7 @@ public sealed record CompleteRegistrationRequest(
     Guid IntentId,
     [Required] string Username,
     [Required] string Password,
-    [Required] string BootstrapCode,
+    string? BootstrapCode = null,
     string DeviceName = "My Android");
 
 public sealed record MobilePasswordLoginRequest(

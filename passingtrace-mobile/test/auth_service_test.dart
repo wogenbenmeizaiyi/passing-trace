@@ -242,6 +242,43 @@ void main() {
       expect(store['refresh_token'], 'refresh-new');
     });
 
+    test('账号创建后自动登录失败，不误报注册失败', () async {
+      final registrationAuth = AuthService(
+        storage: const FlutterSecureStorage(),
+        httpClient: MockClient((request) async {
+          if (request.url.path.endsWith('/registration-intents')) {
+            return http.Response('{"intentId":"intent"}', 200);
+          }
+          if (request.url.path.endsWith('/registrations')) {
+            return http.Response(
+              jsonEncode({
+                'deviceId': 'registered-device',
+                'deviceSecret': 'test-device-secret',
+                'authorizeUrl': 'http://localhost:56229/connect/authorize?handoff_code=test',
+              }),
+              201,
+            );
+          }
+          return http.Response('', 503);
+        }),
+      );
+      await expectLater(
+        registrationAuth.register(
+          identityBaseUrl: 'http://localhost:56229',
+          username: 'new-user',
+          password: 'test-password',
+          deviceName: 'Android',
+        ),
+        throwsA(
+          isA<AuthException>().having(
+            (e) => e.message,
+            'message',
+            '账号已创建，但自动登录未完成。请使用刚设置的用户名和密码登录，无需重复注册。',
+          ),
+        ),
+      );
+    });
+
     test('密码登录的 handoff 直接取回授权码，不打开外部浏览器', () async {
       String? state;
       final client = MockClient((request) async {

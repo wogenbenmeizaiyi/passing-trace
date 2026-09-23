@@ -51,6 +51,7 @@ bool _isSafeMessage(String value) {
     r'exception|stack\s*trace|bad\s*state|parameter|platformexception|'
     r'chatfinishreason|package:|\.dart\b|\.cs:\d+|/home/runner|'
     r'localhost:\d+|#sha1|invalid_[a-z_]+|null,\s*null|'
+    r'\btoken\b|\bpkce\b|\boidc\b|\boauth\b|\bstate\b|回调|注册意图|'
     r'(?:ai\s*)?请求失败\s*[:：]\s*\d{3}|http\s*\d{3}|<!doctype\s+html',
     caseSensitive: false,
   ).hasMatch(value);

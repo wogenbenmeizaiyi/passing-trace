@@ -39,11 +39,6 @@ public sealed class MobileFlowService(
             throw new MobileFlowException("invalid_username", "用户名格式不正确。");
         }
 
-        if (await dbContext.Users.CountAsync(cancellationToken) >= _options.MaxUsers)
-        {
-            throw new MobileFlowException("registration_closed", "个人实例已完成初始化注册。", 403);
-        }
-
         var now = timeProvider.GetUtcNow();
         var ticket = SecretEncoding.Generate();
         var normalizedUsername = normalizer.NormalizeName(request.Username) ?? request.Username;
@@ -78,28 +73,22 @@ public sealed class MobileFlowService(
         Uri publicOrigin,
         CancellationToken cancellationToken)
     {
-        VerifyBootstrapCode(request.BootstrapCode);
         var now = timeProvider.GetUtcNow();
         var intent = await dbContext.MobileAuthorizationTickets.SingleOrDefaultAsync(
             ticket => ticket.Id == request.IntentId &&
                 ticket.TicketType == MobileAuthorizationTicketType.RegistrationIntent,
             cancellationToken)
-            ?? throw new MobileFlowException("invalid_intent", "注册意图不存在。", 404);
+            ?? throw new MobileFlowException("invalid_intent", "本次注册未能继续，请重新提交。", 404);
 
         if (intent.ConsumedAt is not null || intent.ExpiresAt <= now)
         {
-            throw new MobileFlowException("expired_intent", "注册意图已过期或已使用。", 410);
+            throw new MobileFlowException("expired_intent", "本次注册已超时，请重新提交。", 410);
         }
 
         var normalized = normalizer.NormalizeName(request.Username) ?? request.Username;
         if (!SecretEncoding.Verify(normalized, intent.NormalizedUsernameHash!))
         {
-            throw new MobileFlowException("intent_mismatch", "用户名与注册意图不匹配。", 400);
-        }
-
-        if (await dbContext.Users.CountAsync(cancellationToken) >= _options.MaxUsers)
-        {
-            throw new MobileFlowException("registration_closed", "个人实例已完成初始化注册。", 403);
+            throw new MobileFlowException("intent_mismatch", "用户名已变更，请重新提交注册。", 400);
         }
 
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
@@ -115,7 +104,9 @@ public sealed class MobileFlowService(
         {
             throw new MobileFlowException(
                 "registration_failed",
-                string.Join(" ", result.Errors.Select(error => error.Description)),
+                result.Errors.Any(error => error.Code.Contains("Duplicate", StringComparison.OrdinalIgnoreCase))
+                    ? "这个用户名已被使用，请换一个，或直接登录。"
+                    : "账号信息不符合要求，请检查用户名和密码后重试。",
                 result.Errors.Any(error => error.Code.Contains("Duplicate", StringComparison.OrdinalIgnoreCase))
                     ? 409
                     : 400);
@@ -341,15 +332,6 @@ public sealed class MobileFlowService(
             !SecretEncoding.IsS256Challenge(challenge))
         {
             throw new MobileFlowException("invalid_request", "移动授权参数无效。", 400);
-        }
-    }
-
-    private void VerifyBootstrapCode(string value)
-    {
-        if (string.IsNullOrWhiteSpace(_options.BootstrapCode) ||
-            !SecretEncoding.Verify(value, SecretEncoding.Hash(_options.BootstrapCode)))
-        {
-            throw new MobileFlowException("invalid_bootstrap_code", "初始化注册码无效。", 403);
         }
     }
 

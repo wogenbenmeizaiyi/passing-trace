@@ -120,7 +120,6 @@ class _RegistrationPageState extends State<RegistrationPage> {
   final _username = TextEditingController();
   final _password = TextEditingController();
   final _confirmPassword = TextEditingController();
-  final _bootstrapCode = TextEditingController();
   bool _busy = false;
   bool _obscure = true;
   bool _creating = false;
@@ -130,7 +129,6 @@ class _RegistrationPageState extends State<RegistrationPage> {
     _username.dispose();
     _password.dispose();
     _confirmPassword.dispose();
-    _bootstrapCode.dispose();
     super.dispose();
   }
 
@@ -142,7 +140,6 @@ class _RegistrationPageState extends State<RegistrationPage> {
         identityBaseUrl: AuthService.defaultIdentityUrl,
         username: _username.text.trim(),
         password: _password.text,
-        bootstrapCode: _bootstrapCode.text.trim(),
         deviceName: 'Android 手机',
       );
       widget.onRegistered(session);
@@ -295,25 +292,11 @@ class _RegistrationPageState extends State<RegistrationPage> {
                       TextFormField(
                         controller: _confirmPassword,
                         obscureText: true,
-                        textInputAction: TextInputAction.next,
+                        textInputAction: TextInputAction.done,
+                        onFieldSubmitted: (_) => _submit(),
                         decoration: _fieldDecoration('再次输入密码'),
                         validator: (value) =>
                             value != _password.text ? '两次密码不一致' : null,
-                      ),
-                      const SizedBox(height: 14),
-                      const TraceFieldLabel('初始注册码'),
-                      TextFormField(
-                        controller: _bootstrapCode,
-                        obscureText: true,
-                        autocorrect: false,
-                        enableSuggestions: false,
-                        textInputAction: TextInputAction.done,
-                        onFieldSubmitted: (_) => _submit(),
-                        decoration: _fieldDecoration('输入部署者提供的注册码'),
-                        validator: (value) =>
-                            value == null || value.trim().isEmpty
-                            ? '请输入部署者提供的初始注册码'
-                            : null,
                       ),
                     ],
                     const SizedBox(height: 26),
@@ -608,7 +591,7 @@ class _AccountHomeState extends State<AccountHome> with WidgetsBindingObserver {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('移除此手机凭据？'),
-        content: const Text('这会清除本机 Token 和设备密钥，但不会删除服务器账号。'),
+        content: const Text('退出后需要重新登录，你的账号和记录会保留。'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),

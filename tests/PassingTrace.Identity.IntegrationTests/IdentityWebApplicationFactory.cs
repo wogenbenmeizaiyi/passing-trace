@@ -27,7 +27,8 @@ public sealed class IdentityWebApplicationFactory : WebApplicationFactory<Progra
             "ConnectionStrings:identity",
             "Host=unused;Database=unused;Username=unused;Password=unused");
         builder.UseSetting("MobileRegistration:BootstrapCode", "testing-bootstrap");
-        builder.UseSetting("MobileRegistration:MaxUsers", "100");
+        // Legacy deployment settings must not impose a registration quota.
+        builder.UseSetting("MobileRegistration:MaxUsers", "1");
 
         // Keep integration tests independent of the Windows Event Log, which
         // is unavailable in restricted test runners.

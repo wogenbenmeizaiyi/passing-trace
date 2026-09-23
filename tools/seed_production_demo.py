@@ -188,7 +188,7 @@ class PassingTraceClient:
             payload = json.loads(payload_bytes) if "json" in content_type else payload_bytes
         return status, payload, dict(response.headers.items())
 
-    def authenticate(self, username: str, password: str, bootstrap_code: str) -> None:
+    def authenticate(self, username: str, password: str, bootstrap_code: str | None) -> None:
         verifier = _b64url(secrets.token_bytes(48))
         challenge = _b64url(hashlib.sha256(verifier.encode("ascii")).digest())
         state = _b64url(secrets.token_bytes(24))
@@ -304,8 +304,6 @@ def main(argv: list[str] | None = None) -> int:
         raise SeedError(f"Refusing production write: pass --confirm {CONFIRMATION}")
     if not args.password or len(args.password) < 8:
         raise SeedError("DEMO_ACCOUNT_PASSWORD must contain at least 8 characters")
-    if not args.bootstrap_code:
-        raise SeedError("REGISTRATION_BOOTSTRAP_CODE is required when the demo account does not exist")
 
     client = PassingTraceClient(args.identity_url, args.events_url)
     client.authenticate(args.username, args.password, args.bootstrap_code)

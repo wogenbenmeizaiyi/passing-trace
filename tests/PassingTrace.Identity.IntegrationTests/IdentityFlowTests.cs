@@ -41,6 +41,20 @@ public sealed partial class IdentityFlowTests(IdentityWebApplicationFactory fact
     }
 
     [Fact]
+    public async Task Registration_IsOpen_WithoutQuotaOrInvitation()
+    {
+        using var client = CreateBrowserClient();
+        for (var index = 0; index < 3; index++)
+        {
+            var account = await RegisterMobileAsync(client, Unique("invited"));
+            Assert.False(string.IsNullOrWhiteSpace(account.Tokens.AccessToken));
+        }
+        using var legacy = await BeginAndCompleteRegistrationAsync(
+            client, Unique("legacy"), "a secure passing trace phrase", bootstrapCode: "unused-legacy-code");
+        Assert.Equal(HttpStatusCode.Created, legacy.StatusCode);
+    }
+
+    [Fact]
     public async Task MobileRegistration_IssuesValidJwt_AndRefreshes()
     {
         using var client = CreateBrowserClient();
@@ -390,7 +404,8 @@ public sealed partial class IdentityFlowTests(IdentityWebApplicationFactory fact
         HttpClient client,
         string username,
         string password,
-        AuthorizationRequest? authorization = null)
+        AuthorizationRequest? authorization = null,
+        string? bootstrapCode = null)
     {
         authorization ??= CreateAuthorizationRequest(
             "passingtrace-mobile",
@@ -408,16 +423,15 @@ public sealed partial class IdentityFlowTests(IdentityWebApplicationFactory fact
             });
         intentResponse.EnsureSuccessStatusCode();
         var intent = await intentResponse.Content.ReadFromJsonAsync<JsonElement>();
-        return await client.PostAsJsonAsync(
-            "/api/mobile/registrations",
-            new
-            {
-                intentId = intent.GetProperty("intentId").GetGuid(),
-                username,
-                password,
-                bootstrapCode = "testing-bootstrap",
-                deviceName = "Integration Android"
-            });
+        var registration = new Dictionary<string, object?>
+        {
+            ["intentId"] = intent.GetProperty("intentId").GetGuid(),
+            ["username"] = username,
+            ["password"] = password,
+            ["deviceName"] = "Integration Android"
+        };
+        if (bootstrapCode is not null) registration["bootstrapCode"] = bootstrapCode;
+        return await client.PostAsJsonAsync("/api/mobile/registrations", registration);
     }
 
     private static async Task<AuthorizationGrant> AuthorizeWithCookieAsync(
