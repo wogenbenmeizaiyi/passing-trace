@@ -18,7 +18,50 @@ import threading
 import time
 
 MANIFEST_KEY = "releases/android/latest.json"
-CHUNK_SIZE = 8 * 1024 * 1024
+# Fewer, smaller concurrent requests suit the slow runner-to-Rainyun link.
+# Retry individual S3 requests, not the whole APK; retain completed parts.
+CHUNK_SIZE = 5 * 1024 * 1024
+UPLOAD_CONCURRENCY = 3
+CLIENT_OPTIONS = {
+    "s3": {"addressing_style": "virtual"},
+    "retries": {"mode": "standard", "total_max_attempts": 6},
+    "connect_timeout": 120,
+    "read_timeout": 300,
+    "max_pool_connections": UPLOAD_CONCURRENCY,
+    "request_checksum_calculation": "when_required",
+    "response_checksum_validation": "when_required",
+}
+
+
+def safe_error_details(error):
+    """Do not log SDK exception strings: they can contain signed URLs/headers."""
+    details, seen = [], set()
+    known_codes = {
+        "AccessDenied", "InvalidAccessKeyId", "SignatureDoesNotMatch",
+        "RequestTimeTooSkewed", "RequestTimeout", "SlowDown", "InternalError",
+        "ServiceUnavailable", "NoSuchBucket", "NoSuchUpload", "InvalidPart",
+        "InvalidPartOrder", "EntityTooSmall", "NotImplemented", "PreconditionFailed",
+    }
+    while error is not None and id(error) not in seen and len(details) < 5:
+        seen.add(id(error))
+        response = getattr(error, "response", {})
+        item = {"type": type(error).__name__}
+        if isinstance(response, dict):
+            code = response.get("Error", {}).get("Code")
+            if code in known_codes:
+                item["code"] = code
+            metadata = response.get("ResponseMetadata", {})
+            for source, target in (("HTTPStatusCode", "httpStatus"), ("RetryAttempts", "retries")):
+                if type(metadata.get(source)) is int:
+                    item[target] = metadata[source]
+        details.append(item)
+        error = error.__cause__ or error.__context__
+    return json.dumps(details, ensure_ascii=False)
+
+
+def transfer_options():
+    return {"multipart_threshold": CHUNK_SIZE, "multipart_chunksize": CHUNK_SIZE,
+            "max_concurrency": UPLOAD_CONCURRENCY, "preferred_transfer_client": "classic"}
 
 
 class ReleaseError(Exception):
@@ -239,21 +282,18 @@ def main():
         import boto3
         from boto3.s3.transfer import TransferConfig
         from botocore.config import Config
+        print(f"上传配置: {CHUNK_SIZE // 1048576} MiB 分片，{UPLOAD_CONCURRENCY} 路并发，"
+              "连接超时 120 秒，响应超时 300 秒，每个请求最多 6 次尝试", flush=True)
         client = boto3.client("s3", endpoint_url=os.environ["S3_ENDPOINT"],
                              region_name=os.environ.get("S3_REGION") or "us-east-1",
-                             config=Config(s3={"addressing_style": "virtual"},
-                                           retries={"mode": "standard", "total_max_attempts": 3},
-                                           connect_timeout=15, read_timeout=90,
-                                           max_pool_connections=10,
-                                           request_checksum_calculation="when_required",
-                                           response_checksum_validation="when_required"))
+                             config=Config(**CLIENT_OPTIONS))
         publish(client, os.environ["S3_BUCKET"], args.directory,
-                TransferConfig(multipart_threshold=CHUNK_SIZE, multipart_chunksize=CHUNK_SIZE,
-                               max_concurrency=10, num_download_attempts=3))
+                TransferConfig(**transfer_options()))
         return 0
     except ReleaseError as error:
         print(f"::error::{error}", flush=True)
-    except Exception:
+    except Exception as error:
+        print(f"::error::存储请求失败: {safe_error_details(error)}", flush=True)
         print("::error::发布阶段未完成。请检查该阶段的网络、授权或存储条件写入支持；未进行无条件清单覆盖。", flush=True)
     return 1
 

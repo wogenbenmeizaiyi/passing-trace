@@ -68,6 +68,32 @@ class FakeS3:
 
 
 class AndroidReleaseTests(unittest.TestCase):
+    def test_slow_link_upload_settings_are_bounded_and_consistent(self):
+        transfer = release.transfer_options()
+        self.assertEqual(5 * 1024 * 1024, transfer['multipart_chunksize'])
+        self.assertEqual(3, transfer['max_concurrency'])
+        self.assertEqual('classic', transfer['preferred_transfer_client'])
+        self.assertEqual(3, release.CLIENT_OPTIONS['max_pool_connections'])
+        self.assertEqual(120, release.CLIENT_OPTIONS['connect_timeout'])
+        self.assertEqual(300, release.CLIENT_OPTIONS['read_timeout'])
+        self.assertEqual(6, release.CLIENT_OPTIONS['retries']['total_max_attempts'])
+
+    def test_error_diagnostics_keep_causes_but_never_exception_payloads(self):
+        inner = StorageError('RequestTimeout')
+        inner.response['Error']['Message'] = 'secret-key signed-url'
+        inner.response['ResponseMetadata'] = {'HTTPStatusCode': 408, 'RetryAttempts': 5,
+                                              'HTTPHeaders': {'Authorization': 'secret-key'}}
+        outer = RuntimeError('secret-key signed-url')
+        outer.__cause__ = inner
+        details = release.safe_error_details(outer)
+        self.assertIn('RequestTimeout', details)
+        self.assertIn('408', details)
+        self.assertNotIn('secret-key', details)
+        self.assertNotIn('signed-url', details)
+        inner.__cause__ = outer
+        self.assertEqual(2, len(json.loads(release.safe_error_details(outer))))
+        self.assertNotIn('secret-key', release.safe_error_details(StorageError('secret-key')))
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
