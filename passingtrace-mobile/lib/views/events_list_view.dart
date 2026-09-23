@@ -252,13 +252,16 @@ class _EventsListViewState extends State<EventsListView> {
           onPressed: () => Scaffold.of(context).openDrawer(),
         ),
       ),
-      trailing: TraceIconButton(
-        glyph: TraceGlyph.add,
+      trailing: _buildFilterButton(),
+    ),
+    floatingActionButton: SizedBox.square(
+      dimension: 48,
+      child: FloatingActionButton(
         tooltip: '新建记录',
         onPressed: _openCreate,
+        child: const TraceIcon(TraceGlyph.add),
       ),
     ),
-    floatingActionButton: _buildFixedFilterButton(),
     floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     body: Column(
       children: [
@@ -286,11 +289,11 @@ class _EventsListViewState extends State<EventsListView> {
     ),
   );
 
-  Widget _buildFixedFilterButton() {
+  Widget _buildFilterButton() {
     final colors = context.traceColors;
     return SizedBox.square(
       key: const Key('events-filter-button'),
-      dimension: 52,
+      dimension: 48,
       child: TraceIconButton(
         glyph: TraceGlyph.filter,
         tooltip: _hasActiveFilters
@@ -298,10 +301,6 @@ class _EventsListViewState extends State<EventsListView> {
             : '筛选记录',
         onPressed: _showFilters,
         color: _hasActiveFilters ? colors.primaryStrong : colors.inkSecondary,
-        backgroundColor: _hasActiveFilters
-            ? colors.primarySoft
-            : colors.surface,
-        borderColor: _hasActiveFilters ? colors.primary : colors.lineStrong,
       ),
     );
   }

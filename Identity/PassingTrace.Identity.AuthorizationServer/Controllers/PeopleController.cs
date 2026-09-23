@@ -29,7 +29,8 @@ public sealed class PeopleController(IdentityDbContext db, IAvatarStorage avatar
         if (!Allowed || !long.TryParse(User.FindFirst("sub")?.Value, out var id)) return Forbid();
         var u = await db.Users.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id && x.Status == UserStatus.Active, ct);
         if (u is null) return NotFound();
-        using var data = QRCodeGenerator.GenerateQrCode($"passingtrace-friend:{u.FriendCode}", QRCodeGenerator.ECCLevel.M);
+        // Leave enough redundancy for clients displaying a small central avatar.
+        using var data = QRCodeGenerator.GenerateQrCode($"passingtrace-friend:{u.FriendCode}", QRCodeGenerator.ECCLevel.H);
         using var qr = new PngByteQRCode(data);
         Response.Headers.CacheControl = "private, no-store";
         return Ok(new { profile = Map(u), qrDataUrl = "data:image/png;base64," + Convert.ToBase64String(qr.GetGraphic(6)) });

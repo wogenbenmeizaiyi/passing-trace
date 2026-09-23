@@ -440,6 +440,22 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('最近消息'), findsOneWidget);
+    final inputRect = tester.getRect(find.byType(TextField));
+    final shareRect = tester.getRect(find.byTooltip('分享内容'));
+    final sendRect = tester.getRect(find.byTooltip('发送'));
+    expect(inputRect.height, 32);
+    expect(shareRect.height, 48);
+    expect(sendRect.height, 48);
+    expect(inputRect.center.dy, sendRect.center.dy);
+    expect(inputRect.center.dy, shareRect.center.dy);
+    await tester.enterText(find.byType(TextField), '第一行\n第二行\n第三行');
+    await tester.pumpAndSettle();
+    expect(tester.getRect(find.byType(TextField)).height, greaterThan(48));
+    expect(
+      tester.getRect(find.byType(TextField)).bottom + 8,
+      tester.getRect(find.byTooltip('发送')).bottom,
+    );
+    expect(tester.takeException(), isNull);
     expect(requests.where((r) => r.path.endsWith('/messages')), hasLength(1));
     await tester.enterText(find.byType(TextField), '你好');
     await tester.tap(find.byTooltip('发送'));

@@ -803,7 +803,7 @@ class _DirectChatViewState extends State<DirectChatView>
         SafeArea(
           top: false,
           child: Padding(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             child: _summary?['canSend'] == false
                 ? const Text('好友关系已结束，无法继续发送消息。')
                 : Column(
@@ -811,44 +811,68 @@ class _DirectChatViewState extends State<DirectChatView>
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
-                          PopupMenuButton<String>(
-                            tooltip: '分享内容',
-                            icon: const Icon(Icons.add_circle_outline),
-                            enabled: !_busy,
-                            onSelected: _share,
-                            itemBuilder: (_) => const [
-                              PopupMenuItem(
-                                value: 'record',
-                                child: Text('分享记录'),
-                              ),
-                              PopupMenuItem(
-                                value: 'storyline',
-                                child: Text('分享故事线'),
-                              ),
-                            ],
+                          SizedBox.square(
+                            dimension: 48,
+                            child: PopupMenuButton<String>(
+                              tooltip: '分享内容',
+                              icon: const Icon(Icons.add_circle_outline),
+                              enabled: !_busy,
+                              onSelected: _share,
+                              itemBuilder: (_) => const [
+                                PopupMenuItem(
+                                  value: 'record',
+                                  child: Text('分享记录'),
+                                ),
+                                PopupMenuItem(
+                                  value: 'storyline',
+                                  child: Text('分享故事线'),
+                                ),
+                              ],
+                            ),
                           ),
                           Expanded(
-                            child: TextField(
-                              controller: _draft,
-                              minLines: 1,
-                              maxLines: 5,
-                              maxLength: 8000,
-                              decoration: const InputDecoration(
-                                hintText: '和好友聊聊…',
-                                counterText: '',
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              child: TextField(
+                                controller: _draft,
+                                minLines: 1,
+                                maxLines: 5,
+                                maxLength: 8000,
+                                style: Theme.of(context).textTheme.bodyLarge
+                                    ?.copyWith(fontSize: 16, height: 1.5),
+                                decoration: const InputDecoration(
+                                  hintText: '和好友聊聊…',
+                                  counterText: '',
+                                  isDense: true,
+                                  constraints: BoxConstraints(minHeight: 32),
+                                  contentPadding: EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 4,
+                                  ),
+                                ),
                               ),
                             ),
                           ),
-                          const SizedBox(width: 8),
-                          IconButton.filled(
-                            tooltip: '发送',
-                            onPressed: _busy ? null : () => _send(),
-                            icon: _busy
-                                ? const SizedBox.square(
-                                    dimension: 20,
-                                    child: CircularProgressIndicator(),
-                                  )
-                                : const Icon(Icons.send),
+                          SizedBox.square(
+                            dimension: 48,
+                            child: IconButton(
+                              style: IconButton.styleFrom(
+                                foregroundColor: Theme.of(context)
+                                    .colorScheme
+                                    .primary,
+                                fixedSize: const Size.square(48),
+                                padding: EdgeInsets.zero,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              ),
+                              tooltip: '发送',
+                              onPressed: _busy ? null : () => _send(),
+                              icon: _busy
+                                  ? const SizedBox.square(
+                                      dimension: 20,
+                                      child: CircularProgressIndicator(),
+                                    )
+                                  : const Icon(Icons.send_outlined, size: 24),
+                            ),
                           ),
                         ],
                       ),

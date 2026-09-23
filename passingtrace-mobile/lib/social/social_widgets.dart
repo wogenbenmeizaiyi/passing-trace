@@ -24,6 +24,7 @@ class _FriendCodeViewState extends State<FriendCodeView> {
   }
 
   Future<void> _load() async {
+    setState(() => _error = null);
     try {
       final data = await widget.api.request(
         'GET',
@@ -39,35 +40,127 @@ class _FriendCodeViewState extends State<FriendCodeView> {
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('我的好友码')),
-    body: SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        children: [
-          if (_error != null) Text(_error!),
-          if (_me == null && _error == null) const CircularProgressIndicator(),
-          if (_me != null) ...[
-            Text(
-              _me!['profile']['nickname'] as String,
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
-            const SizedBox(height: 24),
-            Image.memory(
-              base64Decode((_me!['qrDataUrl'] as String).split(',').last),
-              width: 240,
-              height: 240,
-              semanticLabel: '用于添加好友的二维码',
-            ),
-            const SizedBox(height: 16),
-            SelectableText(_me!['profile']['friendCode'] as String),
-            TextButton(
-              onPressed: () => Clipboard.setData(
-                ClipboardData(text: _me!['profile']['friendCode'] as String),
+    body: SafeArea(
+      child: LayoutBuilder(
+        builder: (context, viewport) {
+          final colors = Theme.of(context).colorScheme;
+          return SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                minHeight: (viewport.maxHeight - 48).clamp(0, double.infinity),
               ),
-              child: const Text('复制好友码'),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 360),
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: colors.surfaceContainerLow,
+                      borderRadius: BorderRadius.circular(28),
+                      border: Border.all(
+                        color: colors.outlineVariant.withValues(alpha: .5),
+                      ),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (_error != null) ...[
+                          Text(_error!, textAlign: TextAlign.center),
+                          const SizedBox(height: 16),
+                          TextButton.icon(
+                            onPressed: _load,
+                            icon: const Icon(Icons.refresh),
+                            label: const Text('重新加载'),
+                          ),
+                        ] else if (_me == null)
+                          const Padding(
+                            padding: EdgeInsets.all(48),
+                            child: CircularProgressIndicator(),
+                          )
+                        else ...[
+                          LayoutBuilder(
+                            builder: (context, box) {
+                              final size = box.maxWidth.clamp(0.0, 280.0);
+                              return Semantics(
+                                label: '我的好友二维码，让朋友扫码添加',
+                                image: true,
+                                child: ExcludeSemantics(
+                                  child: SizedBox.square(
+                                    dimension: size,
+                                    child: Stack(
+                                      alignment: Alignment.center,
+                                      children: [
+                                        // Preserve the supplied quiet zone and black-on-white contrast in both themes.
+                                        Image.memory(
+                                          base64Decode(
+                                            (_me!['qrDataUrl'] as String)
+                                                .split(',')
+                                                .last,
+                                          ),
+                                          width: size,
+                                          height: size,
+                                          filterQuality: FilterQuality.none,
+                                        ),
+                                        Container(
+                                          key: const ValueKey(
+                                            'friend-code-avatar',
+                                          ),
+                                          width: size * .16,
+                                          height: size * .16,
+                                          padding: const EdgeInsets.all(3),
+                                          decoration: BoxDecoration(
+                                            color: Colors.white,
+                                            borderRadius: BorderRadius.circular(
+                                              10,
+                                            ),
+                                          ),
+                                          child: SocialAvatar(
+                                            api: widget.api,
+                                            person: Map<String, dynamic>.from(
+                                              _me!['profile'] as Map,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                          const SizedBox(height: 24),
+                          Text(
+                            '扫一扫，加我为好友',
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                          const SizedBox(height: 16),
+                          TextButton.icon(
+                            onPressed: () async {
+                              await Clipboard.setData(
+                                ClipboardData(
+                                  text: _me!['profile']['friendCode'] as String,
+                                ),
+                              );
+                              if (!context.mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('好友码已复制')),
+                              );
+                            },
+                            icon: const Icon(Icons.copy_outlined, size: 18),
+                            label: const Text('复制好友码'),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ),
             ),
-            const Text('让朋友在“消息 · 好友”中扫码或输入好友码。'),
-          ],
-        ],
+          );
+        },
       ),
     ),
   );

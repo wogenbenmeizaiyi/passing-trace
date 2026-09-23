@@ -164,166 +164,291 @@ class _FriendsViewState extends State<FriendsView> {
       label.dispose();
       return;
     }
-    Widget detail(BuildContext sheet) => SafeArea(
-      child: SingleChildScrollView(
-        padding: EdgeInsets.fromLTRB(
-          24,
-          8,
-          24,
-          24 + MediaQuery.viewInsetsOf(sheet).bottom,
+
+    Widget section(
+      BuildContext sheet,
+      String title,
+      String summary,
+      List<Widget> children,
+    ) => Card(
+      margin: EdgeInsets.zero,
+      elevation: 0,
+      clipBehavior: Clip.antiAlias,
+      color: Theme.of(sheet).colorScheme.surfaceContainerLow,
+      child: ExpansionTile(
+        tilePadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        childrenPadding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+        shape: const Border(),
+        collapsedShape: const Border(),
+        title: Text(title),
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Text(summary),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Center(
-              child: SocialAvatar(
-                api: widget.api,
-                person: Map<String, dynamic>.from(initial['person'] as Map),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              initial['person']['nickname'] as String,
-              style: Theme.of(sheet).textTheme.headlineSmall,
-            ),
-            Text(initial['person']['bio'] as String? ?? ''),
-            const SizedBox(height: 16),
-            TextField(
-              controller: remark,
-              maxLength: 80,
-              decoration: const InputDecoration(
-                labelText: '私人备注',
-                helperText: '仅你和你的 AI 可见',
-              ),
-            ),
-            TextField(
-              controller: label,
-              maxLength: 30,
-              decoration: const InputDecoration(labelText: '私人关系标签'),
-            ),
-            Wrap(
-              spacing: 8,
-              children: [
-                for (final tag in ['朋友', '亲密朋友', '恋人', '家人', '同事', '同学'])
-                  ActionChip(
-                    label: Text(tag),
-                    onPressed: () => label.text = tag,
-                  ),
-              ],
-            ),
-            FilledButton(
-              onPressed: () {
-                Navigator.pop(sheet);
-                _act(
-                  () => widget.api.request(
-                    'PUT',
-                    '/api/v1/friends/${initial['id']}/preference',
-                    body: {'remark': remark.text, 'label': label.text},
-                  ),
-                );
-              },
-              child: const Text('保存私人设置'),
-            ),
-            const Divider(),
-            Text('双方确认的关系：${initial['relationship'] ?? '未设置'}'),
-            const Text('只有你们两人可见，设置需要对方同意。'),
-            if (initial['proposedRelationship'] != null) ...[
-              Text('待确认：${initial['proposedRelationship']}'),
-              if (initial['relationshipRequestedBy'] != me['profile']['id'])
-                Row(
-                  children: [
-                    for (final decision in ['accept', 'reject'])
-                      TextButton(
-                        onPressed: () {
-                          Navigator.pop(sheet);
-                          _act(
-                            () => widget.api.request(
-                              'POST',
-                              '/api/v1/friends/${initial['id']}/relationship/decision',
-                              body: {
-                                'decision': decision,
-                                'version': initial['version'],
-                              },
-                            ),
-                          );
-                        },
-                        child: Text(decision == 'accept' ? '同意关系' : '拒绝'),
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: children,
+          ),
+        ],
+      ),
+    );
+    final detailsRoute = MaterialPageRoute<void>(
+      builder: (sheet) => Scaffold(
+        appBar: AppBar(
+          title: const Text('好友资料'),
+          actions: [
+            PopupMenuButton<bool>(
+              tooltip: '更多好友操作',
+              icon: const Icon(Icons.more_horiz),
+              itemBuilder: (_) => [
+                for (final block in [false, true])
+                  PopupMenuItem(
+                    value: block,
+                    child: Text(
+                      block ? '拉黑好友' : '删除好友',
+                      style: TextStyle(
+                        color: Theme.of(sheet).colorScheme.error,
                       ),
-                  ],
-                ),
-            ],
-            Wrap(
-              spacing: 8,
-              children: [
-                for (final kind in ['亲密朋友', '恋人', '家人'])
-                  OutlinedButton(
-                    onPressed: () {
-                      Navigator.pop(sheet);
-                      _act(
-                        () => widget.api.request(
-                          'POST',
-                          '/api/v1/friends/${initial['id']}/relationship',
-                          body: {'kind': kind, 'version': initial['version']},
-                        ),
-                      );
-                    },
-                    child: Text('申请$kind'),
+                    ),
                   ),
               ],
-            ),
-            TextButton(
-              onPressed: () {
+              onSelected: (block) async {
+                if (!await confirmSocial(
+                  sheet,
+                  '${block ? '拉黑' : '删除'}好友将停止新消息、共同记录关联及双方分享。重新添加不会恢复旧授权。',
+                )) {
+                  return;
+                }
+                if (!sheet.mounted) return;
                 Navigator.pop(sheet);
-                _act(
+                await _act(
                   () => widget.api.request(
-                    'POST',
-                    '/api/v1/friends/${initial['id']}/relationship/decision',
-                    body: {'decision': 'clear', 'version': initial['version']},
+                    'DELETE',
+                    '/api/v1/friends/${initial['id']}?block=$block',
                   ),
                 );
               },
-              child: const Text('解除 / 撤回双方关系'),
             ),
-            const Divider(),
-            FilledButton(
-              onPressed: () {
-                Navigator.pop(sheet);
-                widget.onChat(initial['id'] as String);
-              },
-              child: const Text('发消息'),
-            ),
-            for (final block in [false, true])
-              TextButton(
-                onPressed: () async {
-                  if (!await confirmSocial(
-                    sheet,
-                    '${block ? '拉黑' : '删除'}好友将停止新消息、共同记录关联及双方分享。重新添加不会恢复旧授权。',
-                  )) {
-                    return;
-                  }
-                  if (sheet.mounted) Navigator.pop(sheet);
-                  await _act(
-                    () => widget.api.request(
-                      'DELETE',
-                      '/api/v1/friends/${initial['id']}?block=$block',
-                    ),
-                  );
-                },
-                child: Text(block ? '拉黑好友' : '删除好友'),
-              ),
           ],
         ),
-      ),
-    );
-    await Navigator.push<void>(
-      context,
-      MaterialPageRoute(
-        builder: (sheet) => Scaffold(
-          appBar: AppBar(title: const Text('好友资料')),
-          body: Builder(builder: detail),
+        body: SafeArea(
+          child: SingleChildScrollView(
+            padding: EdgeInsets.fromLTRB(
+              24,
+              24,
+              24,
+              32 + MediaQuery.viewInsetsOf(sheet).bottom,
+            ),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 480),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SizedBox.square(
+                          dimension: 64,
+                          child: SocialAvatar(
+                            api: widget.api,
+                            person: Map<String, dynamic>.from(
+                              initial['person'] as Map,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 20),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                socialName(initial),
+                                style: Theme.of(sheet).textTheme.titleLarge,
+                              ),
+                              if ((initial['remark'] as String? ?? '')
+                                  .trim()
+                                  .isNotEmpty) ...[
+                                const SizedBox(height: 6),
+                                Text(
+                                  '昵称：${initial['person']['nickname']}',
+                                  style: Theme.of(sheet).textTheme.bodyMedium,
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    if ((initial['person']['bio'] as String? ?? '')
+                        .trim()
+                        .isNotEmpty) ...[
+                      const SizedBox(height: 20),
+                      Text(
+                        initial['person']['bio'] as String,
+                        style: Theme.of(sheet).textTheme.bodyMedium,
+                      ),
+                    ],
+                    const SizedBox(height: 32),
+                    section(
+                      sheet,
+                      '备注与标签',
+                      '${initial['label'] ?? '朋友'} · 仅自己可见',
+                      [
+                        TextField(
+                          controller: remark,
+                          maxLength: 80,
+                          decoration: const InputDecoration(
+                            labelText: '私人备注',
+                            helperText: '仅你和你的 AI 可见',
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        TextField(
+                          controller: label,
+                          maxLength: 30,
+                          decoration: const InputDecoration(
+                            labelText: '私人关系标签',
+                          ),
+                        ),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            for (final tag in [
+                              '朋友',
+                              '亲密朋友',
+                              '恋人',
+                              '家人',
+                              '同事',
+                              '同学',
+                            ])
+                              ActionChip(
+                                label: Text(tag),
+                                onPressed: () => label.text = tag,
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 20),
+                        FilledButton(
+                          onPressed: () {
+                            Navigator.pop(sheet);
+                            _act(
+                              () => widget.api.request(
+                                'PUT',
+                                '/api/v1/friends/${initial['id']}/preference',
+                                body: {
+                                  'remark': remark.text,
+                                  'label': label.text,
+                                },
+                              ),
+                            );
+                          },
+                          child: const Text('保存'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    section(
+                      sheet,
+                      '双方关系',
+                      initial['proposedRelationship'] != null
+                          ? '待确认：${initial['proposedRelationship']}'
+                          : '${initial['relationship'] ?? '未设置'}',
+                      [
+                        const Text('只有你们两人可见，设置需要对方同意。'),
+                        const SizedBox(height: 20),
+                        if (initial['proposedRelationship'] != null) ...[
+                          Text('待确认：${initial['proposedRelationship']}'),
+                          if (initial['relationshipRequestedBy'] !=
+                              me['profile']['id'])
+                            Wrap(
+                              children: [
+                                for (final decision in ['accept', 'reject'])
+                                  TextButton(
+                                    onPressed: () {
+                                      Navigator.pop(sheet);
+                                      _act(
+                                        () => widget.api.request(
+                                          'POST',
+                                          '/api/v1/friends/${initial['id']}/relationship/decision',
+                                          body: {
+                                            'decision': decision,
+                                            'version': initial['version'],
+                                          },
+                                        ),
+                                      );
+                                    },
+                                    child: Text(
+                                      decision == 'accept' ? '同意关系' : '拒绝',
+                                    ),
+                                  ),
+                              ],
+                            ),
+                        ],
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            for (final kind in ['亲密朋友', '恋人', '家人'])
+                              OutlinedButton(
+                                onPressed: () {
+                                  Navigator.pop(sheet);
+                                  _act(
+                                    () => widget.api.request(
+                                      'POST',
+                                      '/api/v1/friends/${initial['id']}/relationship',
+                                      body: {
+                                        'kind': kind,
+                                        'version': initial['version'],
+                                      },
+                                    ),
+                                  );
+                                },
+                                child: Text('申请$kind'),
+                              ),
+                          ],
+                        ),
+                        if (initial['relationship'] != null ||
+                            initial['proposedRelationship'] != null)
+                          TextButton(
+                            onPressed: () {
+                              Navigator.pop(sheet);
+                              _act(
+                                () => widget.api.request(
+                                  'POST',
+                                  '/api/v1/friends/${initial['id']}/relationship/decision',
+                                  body: {
+                                    'decision': 'clear',
+                                    'version': initial['version'],
+                                  },
+                                ),
+                              );
+                            },
+                            child: const Text('解除 / 撤回双方关系'),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 32),
+                    FilledButton.icon(
+                      onPressed: () {
+                        Navigator.pop(sheet);
+                        widget.onChat(initial['id'] as String);
+                      },
+                      icon: const Icon(Icons.chat_bubble_outline, size: 20),
+                      label: const Text('发消息'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
         ),
       ),
     );
+    await Navigator.of(context).push(detailsRoute);
+    await detailsRoute.completed;
     remark.dispose();
     label.dispose();
   }

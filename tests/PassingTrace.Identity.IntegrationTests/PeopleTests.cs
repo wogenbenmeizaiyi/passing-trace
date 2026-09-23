@@ -19,6 +19,9 @@ public sealed partial class IdentityFlowTests
         var code = person.GetProperty("friendCode").GetString()!;
         Assert.Matches("^[0-9A-F]{16}$", code);
         Assert.StartsWith("data:image/png;base64,", me.GetProperty("qrDataUrl").GetString());
+        using var qrData = QRCoder.QRCodeGenerator.GenerateQrCode($"passingtrace-friend:{code}", QRCoder.QRCodeGenerator.ECCLevel.H);
+        using var qr = new QRCoder.PngByteQRCode(qrData);
+        Assert.Equal("data:image/png;base64," + Convert.ToBase64String(qr.GetGraphic(6)), me.GetProperty("qrDataUrl").GetString());
         using var response = await client.PostAsJsonAsync("/api/v1/people/profiles", new[] { person.GetProperty("id").GetString() });
         response.EnsureSuccessStatusCode();
         var profile = (await response.Content.ReadFromJsonAsync<JsonElement>())[0];

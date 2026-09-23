@@ -10,7 +10,7 @@ import 'package:passingtrace_mobile/theme/passingtrace_theme.dart';
 import 'package:passingtrace_mobile/views/events_list_view.dart';
 
 void main() {
-  testWidgets('筛选按钮在时间线滚动后保持固定位置', (tester) async {
+  testWidgets('右上角筛选、右下角紧凑添加，滚动不改变位置', (tester) async {
     final events = List.generate(
       30,
       (index) => {
@@ -70,6 +70,15 @@ void main() {
     await tester.pumpAndSettle();
 
     final filter = find.byKey(const Key('events-filter-button'));
+    final add = find.byType(FloatingActionButton);
+    final filterRect = tester.getRect(filter);
+    final addRect = tester.getRect(add);
+    expect(filterRect.top, lessThan(80));
+    expect(filterRect.center.dx, greaterThan(400));
+    expect(addRect.center.dx, greaterThan(400));
+    expect(addRect.top, greaterThan(400));
+    expect(addRect.size, const Size(48, 48));
+    expect(tester.widget<FloatingActionButton>(add).tooltip, '新建记录');
     final before = tester.getTopLeft(filter);
     await tester.drag(find.byType(ListView), const Offset(0, -700));
     await tester.pumpAndSettle();
@@ -77,6 +86,10 @@ void main() {
 
     expect(filter, findsOneWidget);
     expect(after, before);
+    expect(tester.getRect(add), addRect);
+    await tester.tap(filter);
+    await tester.pumpAndSettle();
+    expect(find.text('筛选记录'), findsOneWidget);
     api.close();
   });
 

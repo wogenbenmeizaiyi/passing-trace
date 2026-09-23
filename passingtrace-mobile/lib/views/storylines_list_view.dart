@@ -301,10 +301,13 @@ class _StorylinesListViewState extends State<StorylinesListView> {
         onPressed: _filters,
       ),
     ),
-    floatingActionButton: FloatingActionButton(
-      onPressed: _create,
-      tooltip: '新建故事线',
-      child: const TraceIcon(TraceGlyph.add),
+    floatingActionButton: SizedBox.square(
+      dimension: 48,
+      child: FloatingActionButton(
+        onPressed: _create,
+        tooltip: '新建故事线',
+        child: const TraceIcon(TraceGlyph.add),
+      ),
     ),
     body: RefreshIndicator(onRefresh: _load, child: _body()),
   );
