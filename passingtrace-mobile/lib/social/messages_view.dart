@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../auth_service.dart';
 import '../user_facing_error.dart';
 import 'friends_view.dart';
+import 'add_friend_view.dart';
 import 'shared_content_view.dart';
 import 'social_api.dart';
 import 'social_widgets.dart';
@@ -38,8 +39,8 @@ class _MessagesViewState extends State<MessagesView> {
   int _revision = -1;
   String _me = '';
   SocialRow? _myProfile, _notificationSummary;
-  int _tab = 0;
-  bool _friendsVisited = false;
+  final _search = TextEditingController();
+  bool _searching = false;
   @override
   void initState() {
     super.initState();
@@ -49,6 +50,7 @@ class _MessagesViewState extends State<MessagesView> {
 
   @override
   void dispose() {
+    _search.dispose();
     widget.feed.removeListener(_changed);
     _api.close();
     super.dispose();
@@ -144,146 +146,204 @@ class _MessagesViewState extends State<MessagesView> {
     if (mounted) await _load();
   }
 
+  Future<void> _contacts() async {
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        settings: const RouteSettings(name: '/contacts'),
+        builder: (_) =>
+            FriendsView(api: _api, onChat: _friendChat, feed: widget.feed),
+      ),
+    );
+    if (mounted) await _load();
+  }
+
+  Future<void> _add(String action) async {
+    String code = '';
+    if (action == 'scan') {
+      final scanned = await Navigator.push<String>(
+        context,
+        MaterialPageRoute(builder: (_) => const FriendScannerView()),
+      );
+      if (!mounted || scanned == null) return;
+      code = scanned;
+    }
+    if (!mounted) return;
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => action == 'code'
+            ? FriendCodeView(api: _api)
+            : AddFriendView(api: _api, initialCode: code),
+      ),
+    );
+  }
+
   @override
-  Widget build(BuildContext context) => Scaffold(
-    drawer: widget.drawer,
-    bottomNavigationBar: widget.bottomNavigationBar,
-    appBar: AppBar(title: const Text('消息')),
-    body: Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: SegmentedButton<int>(
-            expandedInsets: EdgeInsets.zero,
-            segments: const [
-              ButtonSegment(
-                value: 0,
-                label: Text('聊天'),
-                icon: Icon(Icons.chat_bubble_outline),
-              ),
-              ButtonSegment(
-                value: 1,
-                label: Text('好友'),
-                icon: Icon(Icons.people_outline),
-              ),
-            ],
-            selected: {_tab},
-            onSelectionChanged: (value) => setState(() {
-              _tab = value.first;
-              if (_tab == 1) _friendsVisited = true;
+  Widget build(BuildContext context) {
+    final query = _search.text.trim().toLowerCase();
+    final visible = _items
+        .where(
+          (item) =>
+              query.isEmpty ||
+              '${item['person']['nickname']} ${item['preview']}'
+                  .toLowerCase()
+                  .contains(query),
+        )
+        .toList();
+    return Scaffold(
+      drawer: widget.drawer,
+      bottomNavigationBar: widget.bottomNavigationBar,
+      appBar: AppBar(
+        title: const Text('消息'),
+        centerTitle: false,
+        titleSpacing: 8,
+        actions: [
+          IconButton(
+            tooltip: _searching ? '关闭搜索' : '搜索会话',
+            icon: Icon(_searching ? Icons.search_off : Icons.search),
+            onPressed: () => setState(() {
+              _searching = !_searching;
+              if (!_searching) _search.clear();
             }),
           ),
-        ),
-        if (widget.feed.reconnecting)
-          const Padding(
-            padding: EdgeInsets.all(12),
-            child: Text('新消息同步暂时中断，正在重试', semanticsLabel: '新消息同步暂时中断，正在重试'),
+          IconButton(
+            tooltip: '联系人',
+            icon: const Icon(Icons.people_outline),
+            onPressed: _contacts,
           ),
-        Expanded(
-          child: IndexedStack(
-            index: _tab,
-            children: [
-              RefreshIndicator(
-                onRefresh: _load,
-                child: ListView.builder(
-                  key: const PageStorageKey('conversations'),
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  itemCount: _items.length + 2,
-                  itemBuilder: (context, index) {
-                    if (index == 0) {
-                      final latest = _notificationSummary?['latest'] as Map?;
-                      if (latest == null) return const SizedBox.shrink();
-                      final unread =
-                          (_notificationSummary?['unreadCount'] as num?) ?? 0;
-                      return ListTile(
-                        leading: const CircleAvatar(
-                          child: Icon(Icons.people_alt_outlined),
-                        ),
-                        title: const Text('好友通知'),
-                        subtitle: Text(
-                          latest['text'] as String? ?? '',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        trailing: unread > 0
-                            ? Badge(label: Text('$unread'))
-                            : const Icon(Icons.chevron_right),
-                        onTap: _notifications,
-                      );
-                    }
-                    if (index > _items.length) {
-                      return Padding(
-                        padding: const EdgeInsets.all(24),
-                        child: Column(
-                          children: [
-                            if (_error != null) Text(_error!),
-                            if (_items.isEmpty) ...[
-                              const Text('还没有聊天，和好友聊聊共同的生活吧。'),
-                              TextButton(
-                                onPressed: () => setState(() {
-                                  _tab = 1;
-                                  _friendsVisited = true;
-                                }),
-                                child: const Text('查看好友'),
-                              ),
-                            ],
-                            if (_cursor != null)
-                              TextButton(
-                                onPressed: () => _load(more: true),
-                                child: const Text('加载更多'),
-                              ),
-                          ],
-                        ),
-                      );
-                    }
-                    final c = _items[index - 1];
-                    return ListTile(
-                      key: ValueKey(c['id']),
-                      leading: SocialAvatar(
-                        api: _api,
-                        person: Map<String, dynamic>.from(c['person'] as Map),
-                      ),
-                      title: Text(
-                        c['person']['nickname'] as String,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      subtitle: Text(
-                        c['preview'] as String,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      trailing: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            socialMessageTime(c['updatedAt'] as String? ?? ''),
-                            style: Theme.of(context).textTheme.labelSmall,
-                          ),
-                          if ((c['unreadCount'] as num) > 0)
-                            Badge(label: Text('${c['unreadCount']}')),
-                        ],
-                      ),
-                      onTap: () => _chat(c['id'] as String),
-                    );
-                  },
-                ),
-              ),
-              if (_friendsVisited)
-                FriendsView(
-                  api: _api,
-                  onChat: _friendChat,
-                  feed: widget.feed,
-                  embedded: true,
-                )
-              else
-                const SizedBox.shrink(),
+          PopupMenuButton<String>(
+            tooltip: '添加',
+            icon: const Icon(Icons.add),
+            onSelected: _add,
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'add', child: Text('添加好友')),
+              PopupMenuItem(value: 'scan', child: Text('扫码添加')),
+              PopupMenuItem(value: 'code', child: Text('我的好友码')),
             ],
           ),
-        ),
-      ],
-    ),
-  );
+        ],
+      ),
+      body: Column(
+        children: [
+          if (_searching)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+              child: TextField(
+                controller: _search,
+                autofocus: true,
+                onChanged: (_) => setState(() {}),
+                decoration: InputDecoration(
+                  hintText: '搜索已加载的会话',
+                  prefixIcon: const Icon(Icons.search),
+                  suffixIcon: IconButton(
+                    tooltip: '清空搜索',
+                    icon: const Icon(Icons.close),
+                    onPressed: () => setState(_search.clear),
+                  ),
+                ),
+              ),
+            ),
+          if (widget.feed.reconnecting)
+            const Padding(
+              padding: EdgeInsets.all(12),
+              child: Text('新消息同步暂时中断，正在重试'),
+            ),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: _load,
+              child: ListView.builder(
+                key: const PageStorageKey('conversations'),
+                physics: const AlwaysScrollableScrollPhysics(),
+                itemCount: visible.length + 2,
+                itemBuilder: (context, index) {
+                  if (index == 0) {
+                    final latest = _notificationSummary?['latest'] as Map?;
+                    if (_searching || latest == null) {
+                      return const SizedBox.shrink();
+                    }
+                    final unread =
+                        (_notificationSummary?['unreadCount'] as num?) ?? 0;
+                    return ListTile(
+                      leading: const CircleAvatar(
+                        child: Icon(Icons.people_alt_outlined),
+                      ),
+                      title: const Text('好友通知'),
+                      subtitle: Text(
+                        latest['text'] as String? ?? '',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      trailing: unread > 0
+                          ? Badge(label: Text('$unread'))
+                          : const Icon(Icons.chevron_right),
+                      onTap: _notifications,
+                    );
+                  }
+                  if (index > visible.length) {
+                    return Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        children: [
+                          if (_error != null) Text(_error!),
+                          if (visible.isEmpty) ...[
+                            Text(
+                              _searching
+                                  ? '已加载的会话中没有匹配结果。'
+                                  : '还没有聊天，和好友聊聊共同的生活吧。',
+                            ),
+                            TextButton(
+                              onPressed: _contacts,
+                              child: const Text('查看好友'),
+                            ),
+                          ],
+                          if (_cursor != null)
+                            TextButton(
+                              onPressed: () => _load(more: true),
+                              child: const Text('加载更多'),
+                            ),
+                        ],
+                      ),
+                    );
+                  }
+                  final c = visible[index - 1];
+                  return ListTile(
+                    key: ValueKey(c['id']),
+                    leading: SocialAvatar(
+                      api: _api,
+                      person: Map<String, dynamic>.from(c['person'] as Map),
+                    ),
+                    title: Text(
+                      c['person']['nickname'] as String,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    subtitle: Text(
+                      c['preview'] as String,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    trailing: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          socialMessageTime(c['updatedAt'] as String? ?? ''),
+                          style: Theme.of(context).textTheme.labelSmall,
+                        ),
+                        if ((c['unreadCount'] as num) > 0)
+                          Badge(label: Text('${c['unreadCount']}')),
+                      ],
+                    ),
+                    onTap: () => _chat(c['id'] as String),
+                  );
+                },
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class DirectChatView extends StatefulWidget {

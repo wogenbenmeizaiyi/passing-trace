@@ -6,9 +6,10 @@ import 'social_widgets.dart';
 
 /// Adding a friend is a separate task, not a form inside the contact list.
 class AddFriendView extends StatefulWidget {
-  const AddFriendView({super.key, required this.api});
+  const AddFriendView({super.key, required this.api, this.initialCode = ''});
 
   final SocialApi api;
+  final String initialCode;
 
   @override
   State<AddFriendView> createState() => _AddFriendViewState();
@@ -23,6 +24,12 @@ class _AddFriendViewState extends State<AddFriendView> {
   String? _error;
 
   bool get _sent => _sentCode == _code.text.trim();
+
+  @override
+  void initState() {
+    super.initState();
+    _code.text = widget.initialCode;
+  }
 
   @override
   void dispose() {

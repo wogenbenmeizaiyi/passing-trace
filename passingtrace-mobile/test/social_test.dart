@@ -75,7 +75,7 @@ class _ConnectionApi extends SocialApi {
 }
 
 void main() {
-  testWidgets('消息页只加载摘要，通知合并，好友内切换不残留聊天列表', (tester) async {
+  testWidgets('消息页只加载摘要，联系人独立进入，返回恢复消息列表', (tester) async {
     FlutterSecureStorage.setMockInitialValues({});
     final paths = <String>[];
     final auth = _Auth();
@@ -121,14 +121,109 @@ void main() {
     expect(paths, contains('PUT /api/v1/notifications/read?visibleOnly=true'));
     await tester.pageBack();
     await tester.pumpAndSettle();
-    await tester.tap(find.text('好友', skipOffstage: true));
+    expect(find.byType(SegmentedButton<int>), findsNothing);
+    expect(find.byTooltip('搜索会话'), findsOneWidget);
+    expect(find.byTooltip('添加'), findsOneWidget);
+    await tester.tap(find.byTooltip('联系人'));
     await tester.pumpAndSettle();
-    expect(find.text('我的好友'), findsOneWidget);
+    expect(find.text('好友'), findsOneWidget);
     expect(find.text('好友通知'), findsNothing);
     expect(find.text('还没有聊天，和好友聊聊共同的生活吧。'), findsNothing);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text('好友通知'), findsOneWidget);
+    await tester.tap(find.byTooltip('添加'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('添加好友'));
+    await tester.pumpAndSettle();
+    expect(find.text('发送申请'), findsOneWidget);
+    expect(find.text('好友通知'), findsNothing);
     await tester.pumpWidget(const SizedBox());
     feed.dispose();
   });
+  for (final dark in [false, true]) {
+    testWidgets('紧凑工具栏和按需搜索在小屏大字体${dark ? '深色' : '浅色'}可用', (tester) async {
+      tester.view.physicalSize = const Size(640, 1400);
+      tester.view.devicePixelRatio = 2;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final auth = _Auth();
+      final feed = _Feed(auth, session);
+      final paths = <String>[];
+      final api = SocialApi(
+        auth,
+        session,
+        client: MockClient((r) async {
+          paths.add(r.url.path);
+          if (r.url.path == '/api/v1/people/me') {
+            return json({
+              'profile': {'id': 'me', 'nickname': '我'},
+            });
+          }
+          if (r.url.path == '/api/v1/notifications/summary') {
+            return json({'latest': null, 'unreadCount': 0});
+          }
+          return json({
+            'items': [
+              {
+                'id': '1',
+                'person': {
+                  'id': 'friend',
+                  'nickname': '小王',
+                  'hasAvatar': false,
+                },
+                'preview': '一起散步',
+                'unreadCount': 0,
+                'updatedAt': '2026-09-23T12:00:00Z',
+              },
+            ],
+            'nextCursor': 'next',
+          });
+        }),
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: dark
+              ? PassingTraceTheme.dark(PassingTracePalette.pine)
+              : PassingTraceTheme.light(PassingTracePalette.pine),
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: TextScaler.linear(1.6)),
+            child: child!,
+          ),
+          home: MessagesView(
+            auth: auth,
+            session: session,
+            feed: feed,
+            api: api,
+            drawer: const Drawer(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(TextField), findsNothing);
+      expect(find.text('小王'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.tap(find.byTooltip('搜索会话'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), '不存在');
+      await tester.pumpAndSettle();
+      expect(find.text('小王'), findsNothing);
+      expect(find.text('已加载的会话中没有匹配结果。'), findsOneWidget);
+      expect(find.text('加载更多'), findsOneWidget);
+      await tester.tap(find.byTooltip('关闭搜索'));
+      await tester.pumpAndSettle();
+      expect(find.text('小王'), findsOneWidget);
+      expect(find.byType(TextField), findsNothing);
+      expect(
+        paths.any((p) => p.contains('/messages') || p.contains('/friends')),
+        isFalse,
+      );
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+      feed.dispose();
+    });
+  }
   testWidgets('断线十秒才显示同步提示，恢复不丢未读或要求退出', (tester) async {
     final auth = _Auth(), api = _ConnectionApi(_Auth(), session);
     final feed = SocialFeed(auth, session, apiFactory: () => api)..start();
