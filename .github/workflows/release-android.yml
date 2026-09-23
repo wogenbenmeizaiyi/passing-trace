@@ -8,9 +8,11 @@ on:
       - passingtrace-mobile/**
       - .github/workflows/release-android.yml
       - tools/publish_android_release.py
+      - tools/relay_android_release.py
       - tools/ci_timed.py
       - tools/android-release-requirements.txt
       - tools/tests/test_publish_android_release.py
+      - tools/tests/test_relay_android_release.py
   workflow_dispatch:
     inputs:
       version_name:
@@ -29,7 +31,6 @@ on:
         description: Chinese release notes
         required: true
         default: 修复高德地图正式版闪退，并完善自动发布链路。
-
 
 permissions:
   contents: read
@@ -68,7 +69,7 @@ jobs:
         working-directory: passingtrace-mobile
         run: python3 ../tools/ci_timed.py "Flutter 测试" flutter test --no-pub
       - name: Test release safety
-        run: python3 tools/ci_timed.py "发布保护测试" python3 -m unittest discover -s tools/tests -p test_publish_android_release.py -v
+        run: python3 tools/ci_timed.py "发布保护测试" python3 -m unittest discover -s tools/tests -p 'test_*android_release.py' -v
       - name: Cache summary
         if: always()
         run: |
@@ -184,8 +185,11 @@ jobs:
     name: Publish verified APK
     needs: [verify, build]
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 30
     environment: production
+    permissions:
+      contents: read
+      actions: read
     # Global across branches and manual runs. Queued runs can be superseded;
     # the version check handles GitHub's non-FIFO scheduling.
     concurrency:
@@ -197,14 +201,30 @@ jobs:
       S3_REGION: ${{ vars.S3_REGION }}
       AWS_ACCESS_KEY_ID: ${{ secrets.S3_ACCESS_KEY }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_KEY }}
+      DEPLOY_HOST: 154.36.164.76
+      DEPLOY_USER: weiyn
+      EXPECTED_HOST_FINGERPRINT: SHA256:HSTFK3KSm+b/+X9G1UQwgcclC13T6EcQeUEJVFS5+5w
+      RELEASE_ARTIFACT_NAME: android-production-${{ github.run_id }}
     steps:
       - uses: actions/checkout@v6
-      - name: Download this run's verified artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: android-production-${{ github.run_id }}
-          path: release
-      - name: Prepare upload dependencies
-        run: python3 tools/ci_timed.py "上传依赖准备" python3 -m pip install --disable-pip-version-check --quiet -r tools/android-release-requirements.txt
-      - name: Upload APK, verify and commit latest manifest
-        run: python3 tools/publish_android_release.py publish
+      - name: Configure verified SSH connection
+        env:
+          DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_PRIVATE_KEY" > ~/.ssh/passingtrace_ci
+          chmod 600 ~/.ssh/passingtrace_ci
+          host_key="$(ssh-keyscan -t ed25519 "$DEPLOY_HOST" 2>/dev/null)"
+          actual="$(printf '%s\n' "$host_key" | ssh-keygen -lf - | awk '{print $2}')"
+          test "$actual" = "$EXPECTED_HOST_FINGERPRINT"
+          printf '%s\n' "$host_key" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+      - name: Publish this run's verified APK through Hong Kong
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 tools/relay_android_release.py
+      - name: Remove ephemeral SSH key
+        if: always()
+        run: rm -f -- ~/.ssh/passingtrace_ci
