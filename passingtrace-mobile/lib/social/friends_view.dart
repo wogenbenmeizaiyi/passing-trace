@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../user_facing_error.dart';
+import 'add_friend_view.dart';
 import 'social_api.dart';
 import 'social_widgets.dart';
 
@@ -28,7 +29,7 @@ class FriendsView extends StatefulWidget {
 }
 
 class _FriendsViewState extends State<FriendsView> {
-  final _query = TextEditingController(), _code = TextEditingController();
+  final _query = TextEditingController();
   List<SocialRow> _friends = [], _requests = [];
   List<String> _blocks = [];
   Map<String, String> _blockedNames = {};
@@ -39,6 +40,7 @@ class _FriendsViewState extends State<FriendsView> {
   String? _notice;
   int _revision = -1;
   void _changed() {
+    if (widget.initialPanel == 'add') return;
     if (_revision == widget.feed?.revision) return;
     _revision = widget.feed?.revision ?? -1;
     _load();
@@ -47,6 +49,7 @@ class _FriendsViewState extends State<FriendsView> {
   @override
   void initState() {
     super.initState();
+    if (widget.initialPanel == 'add') return;
     widget.feed?.addListener(_changed);
     _load().then((_) {
       final matches = _friends.where((x) => x['id'] == widget.selectedId);
@@ -58,7 +61,6 @@ class _FriendsViewState extends State<FriendsView> {
   void dispose() {
     widget.feed?.removeListener(_changed);
     _query.dispose();
-    _code.dispose();
     super.dispose();
   }
 
@@ -330,12 +332,14 @@ class _FriendsViewState extends State<FriendsView> {
     await Navigator.push<void>(
       context,
       MaterialPageRoute(
-        builder: (_) => FriendsView(
-          api: widget.api,
-          onChat: widget.onChat,
-          initialPanel: panel,
-          feed: widget.feed,
-        ),
+        builder: (_) => panel == 'add'
+            ? AddFriendView(api: widget.api)
+            : FriendsView(
+                api: widget.api,
+                onChat: widget.onChat,
+                initialPanel: panel,
+                feed: widget.feed,
+              ),
       ),
     );
     if (mounted) await _load();
@@ -378,8 +382,8 @@ class _FriendsViewState extends State<FriendsView> {
   @override
   Widget build(BuildContext context) {
     final panel = widget.initialPanel;
+    if (panel == 'add') return AddFriendView(api: widget.api);
     final title = switch (panel) {
-      'add' => '添加好友',
       'requests' => '新的好友',
       'blocks' => '已拉黑的用户',
       _ => '好友',
@@ -554,61 +558,6 @@ class _FriendsViewState extends State<FriendsView> {
               physics: const AlwaysScrollableScrollPhysics(),
               children: [
                 header,
-                if (panel == 'add') ...[
-                  TextField(
-                    controller: _code,
-                    onChanged: (_) => setState(() {}),
-                    maxLength: 100,
-                    decoration: const InputDecoration(
-                      labelText: '好友码',
-                      hintText: '输入或粘贴好友码',
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  FilledButton(
-                    onPressed: _busy || _code.text.trim().isEmpty
-                        ? null
-                        : () => _act(
-                            () => widget.api.request(
-                              'POST',
-                              '/api/v1/friend-requests',
-                              body: {'code': _code.text.trim()},
-                            ),
-                            '好友申请已发送，等待对方确认。',
-                          ),
-                    child: Text(_busy ? '正在发送…' : '发送申请'),
-                  ),
-                  const SizedBox(height: 12),
-                  OutlinedButton.icon(
-                    onPressed: _busy
-                        ? null
-                        : () async {
-                            final code = await Navigator.push<String>(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => const FriendScannerView(),
-                              ),
-                            );
-                            if (code != null && mounted) {
-                              setState(() => _code.text = code);
-                            }
-                          },
-                    icon: const Icon(Icons.qr_code_scanner),
-                    label: const Text('扫码添加'),
-                  ),
-                  const SizedBox(height: 24),
-                  ListTile(
-                    leading: const Icon(Icons.qr_code),
-                    title: const Text('我的好友码'),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => Navigator.push<void>(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => FriendCodeView(api: widget.api),
-                      ),
-                    ),
-                  ),
-                ],
                 if (panel == 'requests') ...[
                   if (_requests.isEmpty)
                     const Padding(

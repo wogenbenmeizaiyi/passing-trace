@@ -666,7 +666,7 @@ onDeactivated(() => {
   min-height: 0;
   background: var(--surface-soft);
 }
-header {
+.messages-workspace header {
   display: flex;
   align-items: center;
   justify-content: space-between;

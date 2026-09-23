@@ -1390,10 +1390,6 @@ watch(
   border: 0;
 }
 @media (max-width: 820px) {
-  .assistant-shell :deep(.site-header__inner) {
-    padding-right: 20px;
-    padding-left: 20px;
-  }
   .assistant-page {
     grid-template-columns: 1fr;
   }

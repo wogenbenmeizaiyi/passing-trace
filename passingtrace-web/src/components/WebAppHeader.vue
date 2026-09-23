@@ -111,7 +111,9 @@ function download(event: MouseEvent) {
 
 <style scoped>
 .message-badge {
-  margin-left: 0.4rem;
+  position: absolute;
+  left: calc(100% - 2px);
+  top: 0;
   padding: 0.1rem 0.4rem;
   border-radius: 1rem;
   background: var(--primary);

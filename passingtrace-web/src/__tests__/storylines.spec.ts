@@ -10,7 +10,8 @@ import { storylinesApi } from '@/api/storylines'
 import { StorylineStatus, type SaveStorylineRequest } from '@/api/storylines-types'
 import { useAuthStore } from '@/stores/auth'
 import StorylinesListView from '@/views/StorylinesListView.vue'
-import { mount } from '@vue/test-utils'
+import FloatingFilters from '@/components/FloatingFilters.vue'
+import { flushPromises, mount } from '@vue/test-utils'
 
 const body: SaveStorylineRequest = {
   title: '黄山旅行',
@@ -93,9 +94,52 @@ describe('故事线筛选界面', () => {
       },
     })
 
-    expect(wrapper.get('.story-filter__heading').text()).toContain('筛选故事线')
-    expect(wrapper.get('.date-range').text()).toContain('日期范围')
-    expect(wrapper.get('input[aria-label="开始日期"]').attributes('type')).toBe('date')
-    expect(wrapper.get('input[aria-label="结束日期"]').attributes('type')).toBe('date')
+    const filters = wrapper.getComponent(FloatingFilters)
+    expect(filters.props('title')).toBe('筛选故事线')
+    expect(filters.props('fields')).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: 'from', label: '开始日期', type: 'date' }),
+        expect.objectContaining({ key: 'to', label: '结束日期', type: 'date' }),
+      ]),
+    )
+    expect(wrapper.find('.story-filter').exists()).toBe(false)
+    wrapper.unmount()
+  })
+  it('应用统一筛选才请求组合条件，移除条件重新查询', async () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    useAuthStore().user = { access_token: 'token', profile: { sub: '7' }, expired: false } as User
+    const list = vi.spyOn(storylinesApi, 'list').mockResolvedValue({ items: [], nextCursor: null })
+    const wrapper = mount(StorylinesListView, {
+      global: { plugins: [pinia], stubs: { WebAppHeader: true, RouterLink: true } },
+    })
+    await flushPromises()
+    const filters = wrapper.getComponent(FloatingFilters)
+    filters.vm.$emit('apply', {
+      status: String(StorylineStatus.Ongoing),
+      category: 'trip',
+      from: '2026-09-01',
+      to: '2026-09-23',
+    })
+    await flushPromises()
+    expect(list).toHaveBeenLastCalledWith({
+      status: StorylineStatus.Ongoing,
+      categoryKey: 'trip',
+      from: new Date('2026-09-01T00:00:00').toISOString(),
+      to: new Date('2026-09-23T23:59:59.999').toISOString(),
+      limit: 60,
+    })
+    expect(wrapper.text()).toContain('没有符合条件的故事线')
+    await wrapper.get('.filter-clear').trigger('click')
+    await flushPromises()
+    expect(list).toHaveBeenLastCalledWith({
+      status: undefined,
+      categoryKey: undefined,
+      from: undefined,
+      to: undefined,
+      limit: 60,
+    })
+    wrapper.unmount()
+    list.mockRestore()
   })
 })

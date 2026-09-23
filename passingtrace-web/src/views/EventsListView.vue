@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import FloatingFilters from '@/components/FloatingFilters.vue'
+import { dateBoundary, type FilterField, type FilterValues } from '@/components/filter-types'
+import type { EventTaxonomyResponse } from '@/api/events-types'
 import JointRecordsList from '@/components/JointRecordsList.vue'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
@@ -33,6 +36,89 @@ const loadingMore = ref(false)
 const error = ref<string | null>(null)
 const filterKind = ref<EventKindT | ''>('')
 const filterStatus = ref<EventStatusT | ''>('')
+const extraFilters = ref({ from: '', to: '', category: '', tags: [] as string[] })
+const taxonomy = ref<EventTaxonomyResponse | null>(null)
+const filterFields = computed<FilterField[]>(() => [
+  {
+    key: 'scope',
+    label: '记录来源',
+    defaultValue: 'own',
+    options: [
+      { value: 'own', label: '我创建的' },
+      { value: 'joint', label: '共同参与的' },
+    ],
+  },
+  { key: 'from', label: '开始日期', type: 'date', ownOnly: true },
+  { key: 'to', label: '结束日期', type: 'date', ownOnly: true },
+  {
+    key: 'kind',
+    label: '记录类型',
+    ownOnly: true,
+    options: [EventKind.Trace, EventKind.Plan].map((value) => ({
+      value: String(value),
+      label: EventKindLabel[value],
+    })),
+  },
+  {
+    key: 'status',
+    label: '记录状态',
+    ownOnly: true,
+    options: [EventStatus.Planned, EventStatus.Completed, EventStatus.Cancelled].map((value) => ({
+      value: String(value),
+      label: EventStatusLabel[value],
+    })),
+  },
+  {
+    key: 'category',
+    label: '主分类',
+    ownOnly: true,
+    unavailable: !taxonomy.value,
+    options: taxonomy.value?.categories.map((v) => ({ value: v.key, label: v.label })),
+  },
+  {
+    key: 'tags',
+    label: '行为标签',
+    type: 'tags',
+    ownOnly: true,
+    unavailable: !taxonomy.value,
+    options: taxonomy.value?.behaviorTags.map((v) => ({ value: v.key, label: v.label })),
+  },
+])
+const filterValues = computed<FilterValues>(() => ({
+  scope: recordScope.value,
+  kind: String(filterKind.value),
+  status: String(filterStatus.value),
+  ...extraFilters.value,
+}))
+async function loadTaxonomy() {
+  if (!auth.isAuthenticated || taxonomy.value) return
+  try {
+    taxonomy.value = await eventsApi.taxonomy()
+  } catch {
+    /* Other filters remain available. */
+  }
+}
+function applyFilters(values: FilterValues) {
+  recordScope.value = String(values.scope || 'own')
+  filterKind.value = values.kind === '' ? '' : (Number(values.kind) as EventKindT)
+  filterStatus.value = values.status === '' ? '' : (Number(values.status) as EventStatusT)
+  extraFilters.value = {
+    from: String(values.from || ''),
+    to: String(values.to || ''),
+    category: String(values.category || ''),
+    tags: Array.isArray(values.tags) ? [...values.tags] : [],
+  }
+  if (recordScope.value === 'own' && auth.isAuthenticated) void reload()
+}
+const hasFilters = computed(
+  () =>
+    filterKind.value !== '' ||
+    filterStatus.value !== '' ||
+    !!extraFilters.value.from ||
+    !!extraFilters.value.to ||
+    !!extraFilters.value.category ||
+    extraFilters.value.tags.length > 0,
+)
 const collapsedYears = ref(new Set<number>())
 const collapsedMonths = ref(new Set<string>())
 const knownYears = new Set<number>()
@@ -115,6 +201,10 @@ const archiveGroups = computed<YearGroup[]>(() => {
 
 function buildQuery(cursor: number | null) {
   return {
+    from: dateBoundary(extraFilters.value.from),
+    to: dateBoundary(extraFilters.value.to, true),
+    categoryKey: extraFilters.value.category || undefined,
+    tagKeys: extraFilters.value.tags.length ? extraFilters.value.tags : undefined,
     limit: 20,
     cursor: cursor ?? undefined,
     kind: filterKind.value === '' ? undefined : filterKind.value,
@@ -284,58 +374,21 @@ onUnmounted(() => activeController?.abort())
         </RouterLink>
       </header>
 
-      <nav v-if="auth.isAuthenticated" class="record-scope" aria-label="记录归属">
-        <button
-          class="button"
-          :class="recordScope === 'own' ? 'button-primary' : 'button-secondary'"
-          @click="recordScope = 'own'"
-        >
-          我创建的</button
-        ><button
-          class="button"
-          :class="recordScope === 'joint' ? 'button-primary' : 'button-secondary'"
-          @click="recordScope = 'joint'"
-        >
-          共同参与的
-        </button>
-      </nav>
-      <JointRecordsList v-if="recordScope === 'joint'" />
-      <div v-else class="records-workspace">
-        <aside class="records-sidebar" aria-label="筛选与日期">
-          <section class="record-toolbar" aria-label="记录筛选">
-            <h2>筛选记录</h2>
-            <label
-              ><span>类型</span
-              ><select v-model="filterKind" @change="reload">
-                <option value="">全部</option>
-                <option :value="EventKind.Trace">{{ EventKindLabel[EventKind.Trace] }}</option>
-                <option :value="EventKind.Plan">{{ EventKindLabel[EventKind.Plan] }}</option>
-              </select></label
-            >
-            <label
-              ><span>状态</span
-              ><select v-model="filterStatus" @change="reload">
-                <option value="">全部</option>
-                <option :value="EventStatus.Planned">
-                  {{ EventStatusLabel[EventStatus.Planned] }}
-                </option>
-                <option :value="EventStatus.Completed">
-                  {{ EventStatusLabel[EventStatus.Completed] }}
-                </option>
-                <option :value="EventStatus.Cancelled">
-                  {{ EventStatusLabel[EventStatus.Cancelled] }}
-                </option>
-              </select></label
-            >
-            <button class="toolbar-refresh" :disabled="loading" @click="reload">
-              <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M20 11a8 8 0 1 0-2.3 5.7M20 5v6h-6" />
-              </svg>
-              刷新
-            </button>
-          </section>
-
-          <nav v-if="items.length" class="archive-nav" aria-label="按月份查找记录">
+      <FloatingFilters
+        title="筛选记录"
+        :fields="filterFields"
+        :values="filterValues"
+        @apply="applyFilters"
+        @open="loadTaxonomy"
+      />
+      <div class="records-workspace">
+        <details v-if="recordScope === 'own' && items.length" class="records-calendar">
+          <summary>按月回看</summary>
+          <nav
+            v-if="recordScope === 'own' && items.length"
+            class="archive-nav"
+            aria-label="按月份查找记录"
+          >
             <h2>按月回看</h2>
             <p>已加载 {{ items.length }} 条记录</p>
             <section v-for="year in archiveGroups" :key="year.year">
@@ -352,9 +405,10 @@ onUnmounted(() => activeController?.abort())
               </button>
             </section>
           </nav>
-        </aside>
+        </details>
 
-        <div class="records-content">
+        <JointRecordsList v-if="recordScope === 'joint'" />
+        <div v-else class="records-content">
           <section v-if="!auth.isAuthenticated" class="empty-panel">
             <h2>登录后查看你的时间线</h2>
             <p>网页端会跳转到安全登录页，并支持手机扫码批准。</p>
@@ -369,9 +423,17 @@ onUnmounted(() => activeController?.abort())
             <h2>正在整理时间线</h2>
           </section>
           <section v-else-if="isEmpty" class="empty-panel">
-            <h2>记忆盒还是空的</h2>
-            <p>从一段文字、一张照片或一个地点开始。</p>
-            <RouterLink class="button button-primary" to="/events/new">写下第一条</RouterLink>
+            <h2>{{ hasFilters ? '没有符合条件的记录' : '记忆盒还是空的' }}</h2>
+            <p>
+              {{
+                hasFilters
+                  ? '试试调整筛选条件，或清除全部条件。'
+                  : '从一段文字、一张照片或一个地点开始。'
+              }}
+            </p>
+            <RouterLink v-if="!hasFilters" class="button button-primary" to="/events/new"
+              >写下第一条</RouterLink
+            >
           </section>
 
           <div v-else class="archive-groups">
@@ -474,22 +536,22 @@ onUnmounted(() => activeController?.abort())
 <style scoped>
 .records-page {
   min-height: calc(100dvh - 152px);
+  padding-bottom: 100px;
 }
 .records-workspace {
   display: grid;
-  grid-template-columns: minmax(13rem, 16%) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--workspace-gap);
   align-items: start;
 }
-.records-sidebar {
-  position: sticky;
-  top: 88px;
-  max-height: calc(100dvh - 104px);
-  overflow-y: auto;
-  scrollbar-width: thin;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  background: var(--surface);
+.records-calendar {
+  margin-bottom: 16px;
+}
+.records-calendar > summary {
+  cursor: pointer;
+  width: fit-content;
+  padding: 12px 16px;
+  color: var(--ink-secondary);
 }
 .records-content,
 .year-group,
@@ -501,7 +563,6 @@ onUnmounted(() => activeController?.abort())
   padding: 20px 16px;
   border-top: 1px solid var(--line);
 }
-.record-toolbar h2,
 .archive-nav h2 {
   margin: 0;
   font-size: 15px;
@@ -551,46 +612,6 @@ onUnmounted(() => activeController?.abort())
 .records-heading div > p:last-child {
   margin: 10px 0 0;
   color: var(--ink-secondary);
-}
-.record-toolbar {
-  padding: 20px 16px;
-  display: grid;
-  gap: 16px;
-}
-.record-toolbar label {
-  display: grid;
-  gap: 8px;
-  color: var(--ink-tertiary);
-  font-size: 12px;
-}
-.record-toolbar select {
-  width: 100%;
-  min-width: 0;
-  min-height: 42px;
-  padding: 0 36px 0 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  color: var(--ink);
-  background: var(--surface-soft);
-}
-.toolbar-refresh {
-  min-height: 44px;
-  padding: 0 10px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 7px;
-  border: 0;
-  border-radius: var(--radius-md);
-  color: var(--primary-strong);
-  background: transparent;
-}
-.toolbar-refresh:hover {
-  background: var(--primary-soft);
-}
-.toolbar-refresh .ui-icon {
-  width: 18px;
-  height: 18px;
 }
 .archive-groups {
   display: grid;
@@ -831,18 +852,6 @@ onUnmounted(() => activeController?.abort())
   .records-workspace {
     grid-template-columns: minmax(0, 1fr);
   }
-  .records-sidebar {
-    position: static;
-    max-height: none;
-    overflow: visible;
-  }
-  .record-toolbar {
-    grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
-    align-items: end;
-  }
-  .record-toolbar h2 {
-    grid-column: 1 / -1;
-  }
   .archive-nav {
     display: none;
   }
@@ -851,12 +860,6 @@ onUnmounted(() => activeController?.abort())
   .records-heading {
     align-items: flex-start;
     flex-direction: column;
-  }
-  .record-toolbar {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .toolbar-refresh {
-    grid-column: 1 / -1;
   }
   .month-heading {
     scroll-margin-top: 148px;
