@@ -332,7 +332,7 @@ public sealed class PersonalRecordTools(
         return new EvidenceBundle(records, [], TimeRange: BuildTimeRange(from, to), Places: places);
     }
 
-    [Description("对当前用户记录执行精确统计：金额或消费合计用 expense_total，记录数量用 count，月度趋势用 trend，计划完成率用 plan_completion_rate。不接受其他统计类型，不执行模型生成的 SQL。用户询问所有记录时不要添加时间范围；缺少金额事实不能解释为没有消费。")]
+    [Description("对当前用户记录执行精确统计：金额或消费合计用 expense_total，记录数量用 count，月度趋势用 trend，计划完成率用 plan_completion_rate。总金额跨主分类汇总所有金额事实，不依赖搜索分页或金额标签，不要自行限定美食、购物等分类。不接受其他统计类型，不执行模型生成的 SQL。用户询问所有记录时不要添加时间范围；缺少金额事实不能解释为没有消费。")]
     public async Task<EvidenceBundle> AggregateMyRecordsAsync(
         [Description("必填：金额合计 expense_total；数量 count；月度趋势 trend；计划完成率 plan_completion_rate。")] RecordAggregateMetric metric,
         [DataType(DataType.DateTime), Description("时间范围起点，ISO 8601，带时区；统计全部时留空。")] string? from = null,
@@ -359,7 +359,8 @@ public sealed class PersonalRecordTools(
             events = events.Where(e => db.EventLabelIndexes.Any(x => x.UserId == userId && x.EventId == e.Id && x.IsCurrent &&
                 x.Type == EventLabelType.PrimaryCategory && x.TaxonomyKey == key));
         }
-        if (!string.IsNullOrWhiteSpace(tag))
+        if (!string.IsNullOrWhiteSpace(tag) &&
+            !(metric == RecordAggregateMetric.ExpenseTotal && string.Equals(tag, "amount", StringComparison.OrdinalIgnoreCase)))
         {
             var key = tag.ToLowerInvariant();
             events = events.Where(e => db.EventLabelIndexes.Any(x => x.UserId == userId && x.EventId == e.Id && x.IsCurrent &&
@@ -509,6 +510,8 @@ public sealed class PersonalRecordTools(
             join evt in ids on new { Id = run.EventId, CurrentSourceRevision = run.SourceRevision }
                 equals new { evt.Id, evt.CurrentSourceRevision }
             where expense.UserId == userId && run.UserId == userId && run.Status == SemanticRunStatus.Completed && expense.Currency == currency
+                && !db.EventSemanticRuns.Any(newer => newer.EventId == run.EventId && newer.UserId == userId &&
+                    newer.SourceRevision == run.SourceRevision && newer.Status == SemanticRunStatus.Completed && newer.Id > run.Id)
             select expense.Amount);
         var total = await amounts.GroupBy(_ => 1)
             .Select(group => new { Value = group.Sum(), Count = group.LongCount() })

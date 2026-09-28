@@ -1,17 +1,14 @@
 <script setup lang="ts">
-import { computed, nextTick, ref } from 'vue'
+import { nextTick, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 
 import BrandMark from '@/components/BrandMark.vue'
 import WebAppHeader from '@/components/WebAppHeader.vue'
 import { getLatestAndroidDownloadUrl } from '@/api/app-updates'
-import { useAuthStore } from '@/stores/auth'
 import { defaultWebEntry } from '@/utils/device'
 
-const auth = useAuthStore()
 const eventsApiBase = (import.meta.env.VITE_EVENTS_API_BASE_URL ?? '').replace(/\/$/, '')
 const androidDownloadUrl = `${eventsApiBase}/api/v1/app-updates/android/latest/download`
-const webActionLabel = computed(() => (auth.isAuthenticated ? '打开我的记录' : '在网页端登录'))
 const loginDestination = defaultWebEntry()
 const downloadBusy = ref(false)
 const downloadError = ref<string | null>(null)
@@ -73,17 +70,9 @@ async function downloadAndroid(event?: MouseEvent) {
               </svg>
               {{ downloadBusy ? '正在准备下载…' : '下载 Android 版' }}
             </a>
-            <RouterLink v-if="auth.isAuthenticated" class="button button-secondary" to="/events">
-              {{ webActionLabel }}
+            <RouterLink class="button button-secondary" :to="loginDestination">
+              进入网页应用
             </RouterLink>
-            <button
-              v-else
-              class="button button-secondary"
-              :disabled="auth.busy"
-              @click="auth.login(loginDestination)"
-            >
-              {{ auth.busy ? '正在打开…' : webActionLabel }}
-            </button>
           </div>
           <div
             v-if="downloadError"
@@ -106,10 +95,6 @@ async function downloadAndroid(event?: MouseEvent) {
               <path d="m9.2 12 1.8 1.8 3.8-4" />
             </svg>
             记录不公开，AI 回答里的相关记录可以点开查看。
-          </p>
-          <p v-if="auth.error" class="inline-error" role="alert">
-            {{ auth.error }}
-            <button class="text-button" @click="auth.clearError">关闭</button>
           </p>
         </div>
 
@@ -278,8 +263,8 @@ async function downloadAndroid(event?: MouseEvent) {
               >
             </li>
           </ul>
-          <RouterLink v-if="auth.isAuthenticated" class="storyline-link" to="/storylines">
-            打开我的故事线
+          <RouterLink class="storyline-link" to="/storylines">
+            进入应用体验故事线
             <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
               <path d="m9 5 7 7-7 7" />
             </svg>

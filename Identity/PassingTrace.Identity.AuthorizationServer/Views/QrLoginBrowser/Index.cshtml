@@ -1,13 +1,59 @@
 @model PassingTrace.Identity.AuthorizationServer.Controllers.QrLoginPageModel
 @{
     Layout = "~/Pages/Shared/_Layout.cshtml";
-    ViewData["Title"] = "手机扫码登录";
+    ViewData["Title"] = "登录星期八";
 }
 
+@if (Model.PasswordMode)
+{
+<section class="card compact password-login">
+    <p class="eyebrow">欢迎回来</p>
+    <h1>账号密码登录</h1>
+    <p class="lede">使用与手机端相同的账号，继续记录生活。</p>
+    <form method="post" action="/account/qr-login/@Model.Id/password" id="password-login-form">
+        @Html.AntiForgeryToken()
+        <input type="hidden" name="code" value="@Model.Code" />
+        <div asp-validation-summary="ModelOnly" class="validation" role="alert"></div>
+        <label for="login-username">账号</label>
+        <input id="login-username" name="username" value="@ViewData["LoginUsername"]" autocomplete="username" maxlength="256" required autofocus />
+        <label for="login-password">密码</label>
+        <input id="login-password" name="password" type="password" autocomplete="current-password" maxlength="4096" required />
+        <button type="button" class="password-toggle" aria-controls="login-password" aria-pressed="false">显示密码</button>
+        <button class="button full" type="submit">登录</button>
+    </form>
+    <p class="footnote"><a href="/account/qr-login/@Model.Id?code=@Uri.EscapeDataString(Model.Code)">使用手机扫码登录</a></p>
+</section>
+<script>
+(() => {
+    const form = document.getElementById('password-login-form');
+    const toggle = form.querySelector('.password-toggle');
+    const password = document.getElementById('login-password');
+    toggle.addEventListener('click', () => {
+        const visible = password.type === 'password';
+        password.type = visible ? 'text' : 'password';
+        toggle.setAttribute('aria-pressed', String(visible));
+        toggle.textContent = visible ? '隐藏密码' : '显示密码';
+    });
+    form.addEventListener('submit', () => {
+        const submit = form.querySelector('[type=submit]');
+        submit.disabled = true;
+        submit.textContent = '正在登录…';
+    });
+    window.addEventListener('pageshow', () => {
+        const submit = form.querySelector('[type=submit]');
+        submit.disabled = false;
+        submit.textContent = '登录';
+    });
+})();
+</script>
+}
+else
+{
 <section class="card qr-login" data-transaction-id="@Model.Id" data-poll-seconds="@Model.PollIntervalSeconds" data-state="waiting">
     <div class="qr-login__copy">
         <p class="eyebrow">手机确认登录</p>
         <h1>用星期八扫描二维码</h1>
+        <p><a href="/account/qr-login/@Model.Id?code=@Uri.EscapeDataString(Model.Code)&amp;mode=password">使用账号密码登录 →</a></p>
         <p class="lede">你正在登录 <strong>@Model.ClientDisplayName</strong>。打开手机端左侧菜单里的“扫一扫”，并确认本次浏览器登录。</p>
 
         <ol class="qr-steps" aria-label="扫码登录步骤">
@@ -93,3 +139,4 @@
     window.setTimeout(poll, delay);
 })();
 </script>
+}

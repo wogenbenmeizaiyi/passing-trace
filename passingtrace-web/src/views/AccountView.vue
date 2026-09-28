@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import FriendCodeCard from '@/components/FriendCodeCard.vue'
+import AppearanceMenu from '@/components/AppearanceMenu.vue'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink, onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import WebAppHeader from '@/components/WebAppHeader.vue'
@@ -159,6 +160,19 @@ function leave(event: BeforeUnloadEvent) {
     event.returnValue = ''
   }
 }
+async function logout() {
+  if (saving.value || auth.busy) return
+  if (
+    !window.confirm(
+      dirty.value ? '个人资料尚未保存，放弃修改并退出登录吗？' : '确定退出当前账号吗？',
+    )
+  )
+    return
+  const wasEditing = editing.value
+  editing.value = false
+  await auth.logout()
+  if (auth.error) editing.value = wasEditing
+}
 onBeforeRouteLeave(() =>
   saving.value ? false : !dirty.value || window.confirm('资料尚未保存，确定离开吗？'),
 )
@@ -177,12 +191,37 @@ onBeforeUnmount(() => {
   <main class="account-page">
     <header class="account-heading">
       <button class="text-button" @click="router.push(back)">← 返回原页面</button>
-      <h1>用户中心</h1>
+      <div class="account-heading__row">
+        <h1>用户中心</h1>
+        <details
+          v-if="auth.isAuthenticated"
+          class="account-settings"
+          @keydown.esc="($event.currentTarget as HTMLDetailsElement).open = false"
+        >
+          <summary>
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.6"
+              aria-hidden="true"
+            >
+              <path
+                d="m9 3-.7 2.4-2.4 1L3.7 6l-2 3.5 1.8 1.8v2.8l-1.8 1.8 2 3.5 2.2-.4 2.4 1L9 22h4l.7-2 2.4-1 2.2.4 2-3.5-1.8-1.8v-2.8l1.8-1.8-2-3.5-2.2.4-2.4-1L13 3Z"
+                transform="translate(1 -1) scale(.95)"
+              />
+              <circle cx="12" cy="12" r="3" />
+            </svg>
+            设置
+          </summary>
+          <div class="account-settings__panel"><AppearanceMenu inline /></div>
+        </details>
+      </div>
       <p>管理个人资料。头像、昵称和简介供好友认识你，账号信息仅自己可见。</p>
     </header>
     <section v-if="!auth.isAuthenticated" class="account-panel">
       <p>登录后可以查看和编辑个人资料。</p>
-      <button class="button button-primary" @click="auth.login(route.fullPath)">扫码登录</button>
+      <button class="button button-primary" @click="auth.login(route.fullPath)">登录</button>
     </section>
     <template v-else>
       <p v-if="error" ref="errorNotice" class="account-error" role="alert">
@@ -335,6 +374,14 @@ onBeforeUnmount(() => {
           </form>
         </section>
       </div>
+      <section class="account-preferences" aria-label="设置与账号操作">
+        <div class="account-signout">
+          <p v-if="auth.error" role="alert" class="account-error">{{ auth.error }}</p>
+          <button class="text-button" :disabled="saving || auth.busy" @click="logout">
+            {{ auth.busy ? '正在退出…' : '退出登录' }}
+          </button>
+        </div>
+      </section>
     </template>
     <AvatarCropper v-if="cropFile" :file="cropFile" @cancel="cropFile = null" @confirm="cropped" />
   </main>
@@ -348,6 +395,68 @@ onBeforeUnmount(() => {
 }
 .account-heading {
   margin-bottom: 28px;
+}
+.account-heading__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.account-preferences {
+  max-width: 560px;
+  margin-top: 28px;
+}
+.account-settings {
+  position: relative;
+  flex-shrink: 0;
+}
+.account-settings summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  cursor: pointer;
+  padding: 0 12px;
+  list-style: none;
+  border-radius: var(--radius-md);
+  color: var(--ink-secondary);
+}
+.account-settings summary::-webkit-details-marker {
+  display: none;
+}
+.account-settings summary svg {
+  width: 20px;
+  height: 20px;
+}
+.account-settings summary:hover,
+.account-settings[open] summary {
+  background: var(--surface-soft);
+  color: var(--ink);
+}
+.account-settings__panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 20;
+  width: min(360px, calc(100vw - 40px));
+  padding: 0 20px 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 15%);
+}
+.account-settings summary:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 4px;
+}
+.account-signout {
+  margin-top: 20px;
+  padding: 16px 24px;
+  border-top: 1px solid var(--line);
+}
+.account-signout > button {
+  min-height: 44px;
+  color: var(--danger);
 }
 h1 {
   margin: 14px 0 6px;

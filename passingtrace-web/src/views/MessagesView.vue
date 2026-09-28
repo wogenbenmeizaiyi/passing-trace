@@ -373,7 +373,7 @@ onDeactivated(() => {
     <WebAppHeader />
     <main v-if="!auth.isAuthenticated" class="login-prompt">
       <h1>和好友聊聊共同的经历</h1>
-      <button class="button button-primary" @click="auth.login('/messages')">扫码登录</button>
+      <button class="button button-primary" @click="auth.login('/messages')">登录</button>
     </main>
     <main v-else class="messages-workspace" :class="{ 'has-chat': id && tab === 'chats' }">
       <nav class="social-nav" aria-label="消息分类">

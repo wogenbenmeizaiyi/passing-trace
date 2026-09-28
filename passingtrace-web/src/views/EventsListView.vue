@@ -411,8 +411,8 @@ onUnmounted(() => activeController?.abort())
         <div v-else class="records-content">
           <section v-if="!auth.isAuthenticated" class="empty-panel">
             <h2>登录后查看你的时间线</h2>
-            <p>网页端会跳转到安全登录页，并支持手机扫码批准。</p>
-            <button class="button button-primary" @click="auth.login('/events')">扫码登录</button>
+            <p>使用账号密码登录，或用手机扫码确认。</p>
+            <button class="button button-primary" @click="auth.login('/events')">登录</button>
           </section>
           <section v-else-if="error" class="error-banner" role="alert">
             <span>{{ error }}</span

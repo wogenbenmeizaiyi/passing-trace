@@ -24,7 +24,7 @@ public enum SourceLabelDecision
 
 public static partial class EventTaxonomy
 {
-    public const string Version = "life-v1";
+    public const string Version = "life-v2";
 
     public static readonly IReadOnlyDictionary<string, string> Categories =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -47,6 +47,7 @@ public static partial class EventTaxonomy
     public static readonly IReadOnlyDictionary<string, string> BehaviorTags =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
+            ["amount"] = "金额",
             ["dining"] = "聚餐",
             ["restaurant"] = "探店",
             ["cooking"] = "做饭",

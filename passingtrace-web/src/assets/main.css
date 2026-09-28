@@ -652,6 +652,108 @@ summary:focus-visible {
     padding-inline: 13px;
   }
 }
+/* Reserve the same rail width for every app route, including full-height workspaces. */
+#app:has(.site-header--app) {
+  --app-rail-width: 76px;
+  padding-left: var(--app-rail-width);
+}
+.site-header.site-header--app {
+  position: fixed;
+  inset: 0 auto 0 0;
+  width: var(--app-rail-width, 76px);
+  height: 100dvh;
+  border-bottom: 0;
+  border-right: 1px solid var(--line);
+  background: var(--surface);
+  backdrop-filter: none;
+}
+.site-header--app .site-header__inner {
+  height: 100%;
+  min-height: 0;
+  padding: 20px 8px max(16px, env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+.site-header--app .site-brand__copy,
+.site-header--app .account-entry > span:last-child {
+  display: none;
+}
+.site-header--app .site-nav--app {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border: 0;
+  overflow: visible;
+}
+.site-header--app .site-nav--app a {
+  flex: none;
+  width: 48px;
+  height: 48px;
+  justify-content: center;
+  padding: 0;
+  border-radius: var(--radius-md);
+}
+.site-header--app .site-nav--app a::after {
+  display: none;
+}
+.site-header--app .site-nav--app a:hover,
+.site-header--app .site-nav--app a.router-link-active {
+  color: var(--primary-strong);
+  background: var(--primary-soft);
+}
+.site-header--app .nav-tooltip {
+  position: absolute;
+  left: calc(100% + 12px);
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  color: var(--ink);
+  white-space: nowrap;
+  visibility: hidden;
+  pointer-events: none;
+}
+.site-header--app a:hover .nav-tooltip,
+.site-header--app a:focus-visible .nav-tooltip {
+  visibility: visible;
+}
+.site-header--app .site-header__actions {
+  margin-top: auto;
+  flex-direction: column;
+  gap: 12px;
+}
+.site-header--app .site-header__actions .button {
+  padding: 8px 6px;
+  min-height: 44px;
+}
+.site-header--app .account-entry {
+  justify-content: center;
+  width: 48px;
+}
+.site-header--app .message-badge {
+  left: auto;
+  right: -4px;
+  top: -3px;
+}
+@media (max-width: 600px) {
+  #app:has(.site-header--app) {
+    --app-rail-width: 60px;
+  }
+  .site-header--app .site-header__inner {
+    padding-inline: 6px;
+    gap: 24px;
+  }
+  .site-header--app .site-brand__mark {
+    width: 36px;
+    height: 36px;
+  }
+  .site-header--app .site-nav--app a {
+    width: 44px;
+    height: 44px;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;

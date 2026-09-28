@@ -141,6 +141,14 @@ public sealed class QrLoginService(
         Guid id,
         string? browserBinding,
         CancellationToken cancellationToken)
+        => await ConsumeCoreAsync(id, browserBinding, null, cancellationToken);
+
+    public Task<ConsumedQrLogin> ConsumePasswordLoginAsync(Guid id, string? browserBinding,
+        long authenticatedUserId, CancellationToken cancellationToken) =>
+        ConsumeCoreAsync(id, browserBinding, authenticatedUserId, cancellationToken);
+
+    private async Task<ConsumedQrLogin> ConsumeCoreAsync(Guid id, string? browserBinding,
+        long? authenticatedUserId, CancellationToken cancellationToken)
     {
         var entity = await dbContext.QrLoginTransactions
             .SingleOrDefaultAsync(value => value.Id == id, cancellationToken)
@@ -151,7 +159,13 @@ public sealed class QrLoginService(
             throw new QrLoginException("invalid_browser", "浏览器绑定无效。", 403);
         }
         await ExpireIfNeededAsync(entity, cancellationToken);
-        if (entity.Status != QrLoginStatus.Approved || entity.ApprovedUserId is null)
+        if (authenticatedUserId.HasValue)
+        {
+            if (entity.Status != QrLoginStatus.Pending)
+                throw new QrLoginException("invalid_state", "本次登录已过期或已完成，请重新登录。", 409);
+            entity.ApprovedUserId = authenticatedUserId;
+        }
+        else if (entity.Status != QrLoginStatus.Approved || entity.ApprovedUserId is null)
         {
             throw new QrLoginException("invalid_state", "扫码事务尚未批准。", 409);
         }

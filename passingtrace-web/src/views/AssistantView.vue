@@ -675,7 +675,7 @@ watch(
       <span><BrandMark /></span>
       <h1>登录后问问你的记录</h1>
       <p>AI 只会在当前登录用户的数据中检索。</p>
-      <button class="button button-primary" @click="auth.login(route.fullPath)">扫码登录</button>
+      <button class="button button-primary" @click="auth.login(route.fullPath)">登录</button>
     </main>
 
     <dialog

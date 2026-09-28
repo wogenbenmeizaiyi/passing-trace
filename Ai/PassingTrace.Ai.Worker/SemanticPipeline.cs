@@ -41,6 +41,8 @@ public sealed class SemanticPipeline(
         PrimaryCategory.taxonomyKey 必须从 food,shopping,travel,scenery,entertainment,exercise,work,study,social,home,health,transport,other 中选择一个。
         BehaviorTags 最多 5 个，taxonomyKey 必须从系统提供的行为标签 Key 中选择，不得自创；每个分类和标签必须给出置信度及正文位置或 mediaId 证据。
         expenses 仅在金额和币种足够明确时输出；memories 只输出可由本记录证据支持、以后有稳定价值的偏好/背景/习惯/目标/约束。
+        金额是跨分类标签 amount，不替代美食、购物、交通等主分类。有明确金额事实时提取 expenses 并标记 amount；日期、人数、距离、编号不是金额。
+        同一笔金额不要把合计和其明细重复提取；未发生的预算、标价或他人的消费不能当作本人实际支出，不明确时保留在摘要中说明，不猜测金额。
         每条 memory 的 evidence 必须说明来自正文或哪个 mediaId。图片描述写入 images，不能把图片里看不清的内容当事实。
         """;
 
@@ -171,7 +173,7 @@ public sealed class SemanticPipeline(
 
         try
         {
-            var envelope = await ExtractSemanticAsync(source, cancellationToken);
+            var envelope = (await ExtractSemanticAsync(source, cancellationToken)).WithAmountTag();
             await db.Entry(evt).ReloadAsync(cancellationToken);
             if (evt.DeletedAt is not null || evt.CurrentSourceRevision != source.Revision)
             {

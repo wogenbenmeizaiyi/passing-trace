@@ -44,8 +44,19 @@ async function open(props = {}) {
 }
 
 describe('应用与产品导航层级', () => {
+  it.each([true, false])('产品页不展示用户身份，登录状态为 %s', async (signedIn) => {
+    auth.isAuthenticated = signedIn
+    await open({ variant: 'marketing' })
+    expect(wrapper.find('.account-entry').exists()).toBe(false)
+    expect(wrapper.find('account-avatar-stub').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('我的昵称')
+    expect(wrapper.get('.site-header__actions').text()).toBe('进入应用')
+    expect(auth.login).not.toHaveBeenCalled()
+  })
   it('应用主导航包含消息，头像仍能进入用户中心', async () => {
     const router = await open()
+    expect(wrapper.find('appearance-menu-stub').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('退出')
     const nav = wrapper.get('nav[aria-label="应用导航"]')
     expect(nav.findAll('a').map((link) => [link.text(), link.attributes('href')])).toEqual([
       ['我的记录', '/events'],
@@ -54,21 +65,23 @@ describe('应用与产品导航层级', () => {
       ['消息', '/messages'],
     ])
     expect(nav.get('[href="/assistant"]').attributes('aria-current')).toBe('page')
-    expect(wrapper.find('[href="/product"]').exists()).toBe(false)
+    expect(nav.findAll('svg')).toHaveLength(4)
+    expect(nav.findAll('a').every((link) => !!link.attributes('aria-label'))).toBe(true)
+    expect(wrapper.get('.site-brand').attributes('href')).toBe('/product')
     await wrapper.get('[aria-label="进入用户中心"]').trigger('click')
     await flushPromises()
     expect(router.currentRoute.value.path).toBe('/account')
     expect(router.currentRoute.value.query.from).toBe('/assistant?conversation=abc')
   })
-  it('未登录也能从右侧下载 App，不混入主导航或触发扫码登录', async () => {
+  it('未登录也能从顶部产品标识进入产品页，不混入主导航或触发登录', async () => {
     auth.isAuthenticated = false
     const router = await open()
     const nav = wrapper.get('nav')
     expect(nav.findAll('a')).toHaveLength(4)
     expect(nav.text()).not.toContain('下载')
-    expect(wrapper.text()).toContain('扫码登录')
-    const download = wrapper.get('.site-header__actions .app-download-link')
-    expect(download.text()).toBe('下载 App')
+    expect(wrapper.text()).toContain('登录')
+    expect(wrapper.text()).not.toContain('扫码登录')
+    const download = wrapper.get('.site-brand')
     expect(download.attributes('href')).toBe('/product')
     await download.trigger('click')
     await flushPromises()

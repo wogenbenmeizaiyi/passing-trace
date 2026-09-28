@@ -267,6 +267,25 @@ public sealed class PersonalRecordToolsTests : IClassFixture<StorylinePostgresFi
         Assert.True(aggregate.RootElement.GetProperty("hasAmountData").GetBoolean());
     }
 
+    [Fact]
+    public async Task Amount_total_includes_unlabelled_records_beyond_search_pages_and_counts_reanalysis_once()
+    {
+        const long userId = 91_205;
+        for (var i = 0; i < 60; i++) AddExpenseEvent(userId, 1m);
+        var repeated = AddExpenseEvent(userId, 100m);
+        await _db.SaveChangesAsync();
+        repeated.SemanticRuns.Add(CreateExpenseRun(userId, 20m));
+        AddExpenseEvent(userId, 999m, deleted: true);
+        AddExpenseEvent(userId, 999m, currency: "USD");
+        AddExpenseEvent(userId + 1, 999m);
+        await _db.SaveChangesAsync();
+        var tools = new PersonalRecordTools(_db, CreateCurrentUser(userId), new UnavailableEmbeddingGenerator());
+        var result = await tools.AggregateMyRecordsAsync(RecordAggregateMetric.ExpenseTotal, tag: "amount");
+        using var aggregate = JsonDocument.Parse(result.Aggregate!);
+        Assert.Equal(80m, aggregate.RootElement.GetProperty("value").GetDecimal());
+        Assert.Equal(61, aggregate.RootElement.GetProperty("amountFactCount").GetInt32());
+    }
+
     private Event AddExpenseEvent(long userId, decimal amount, string currency = "CNY", bool deleted = false)
     {
         var now = DateTimeOffset.UtcNow;

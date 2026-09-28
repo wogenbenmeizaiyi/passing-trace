@@ -7,13 +7,14 @@ import HomeView from '@/views/HomeView.vue'
 describe('星期八 Web 产品介绍页', () => {
   afterEach(() => vi.unstubAllGlobals())
 
-  it('默认展示产品介绍、Android 下载和 Web 登录入口', () => {
+  it('默认展示产品介绍、Android 下载和应用入口，不展示账号入口', () => {
     const wrapper = mount(HomeView, {
       global: { plugins: [createPinia()], stubs: { RouterLink: { template: '<a><slot /></a>' } } },
     })
     expect(wrapper.text()).toContain('星期八')
     expect(wrapper.text()).toContain('下载 Android 版')
-    expect(wrapper.text()).toContain('在网页端登录')
+    expect(wrapper.text()).toContain('进入网页应用')
+    expect(wrapper.find('.account-entry').exists()).toBe(false)
     expect(wrapper.text()).toContain('记录每个当下')
     expect(wrapper.text()).toContain('拼成完整故事线')
     expect(wrapper.text()).toContain('问回自己的生活')

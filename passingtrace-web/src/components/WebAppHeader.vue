@@ -5,7 +5,6 @@ import { useProfileStore } from '@/stores/profile'
 import { useSocialStore } from '@/stores/social'
 
 import BrandMark from '@/components/BrandMark.vue'
-import AppearanceMenu from '@/components/AppearanceMenu.vue'
 import { useAuthStore } from '@/stores/auth'
 import { defaultWebEntry } from '@/utils/device'
 
@@ -23,6 +22,24 @@ const auth = useAuthStore()
 const account = useProfileStore()
 const social = useSocialStore()
 const route = useRoute()
+const navigation = [
+  {
+    to: '/events',
+    label: '我的记录',
+    path: 'M6 3h13v18H6a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3Zm0 0v18M9 8h7M9 12h7M9 16h4',
+  },
+  {
+    to: '/storylines',
+    label: '故事线',
+    path: 'M8 6h5a5 5 0 0 1 5 5v5M6 8v8M8 18h8M8 6a2 2 0 1 1-4 0 2 2 0 0 1 4 0ZM8 18a2 2 0 1 1-4 0 2 2 0 0 1 4 0ZM20 18a2 2 0 1 1-4 0 2 2 0 0 1 4 0Z',
+  },
+  {
+    to: '/assistant',
+    label: '问问 AI',
+    path: 'm12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5L12 3Z',
+  },
+  { to: '/messages', label: '消息', path: 'M4 4h16v13H9l-5 4V4Zm4 5h8M8 13h5' },
+]
 
 function login() {
   const destination = props.variant === 'marketing' ? defaultWebEntry() : window.location.pathname
@@ -40,8 +57,9 @@ function download(event: MouseEvent) {
     <div class="site-header__inner">
       <RouterLink
         class="site-brand"
-        :to="variant === 'marketing' ? '/product' : '/'"
-        aria-label="星期八首页"
+        to="/product"
+        aria-label="星期八产品介绍"
+        title="星期八 · 产品介绍"
       >
         <span class="site-brand__mark"><BrandMark /></span>
         <span class="site-brand__copy"><strong>星期八</strong><small>把生活收进记忆盒</small></span>
@@ -55,26 +73,28 @@ function download(event: MouseEvent) {
         }}</a>
       </nav>
       <nav v-else class="site-nav site-nav--app" aria-label="应用导航">
-        <RouterLink to="/events">我的记录</RouterLink
-        ><RouterLink to="/storylines">故事线</RouterLink
-        ><RouterLink to="/assistant">问问 AI</RouterLink
-        ><RouterLink to="/messages"
-          >消息<span v-if="social.unread" class="message-badge">{{
+        <RouterLink
+          v-for="item in navigation"
+          :key="item.to"
+          :to="item.to"
+          :aria-label="item.label"
+        >
+          <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path :d="item.path" /></svg>
+          <span class="nav-tooltip">{{ item.label }}</span>
+          <span v-if="item.to === '/messages' && social.unread" class="message-badge">{{
             social.unread > 99 ? '99+' : social.unread
           }}</span></RouterLink
         >
       </nav>
 
       <div class="site-header__actions">
-        <AppearanceMenu />
         <RouterLink
-          v-if="variant === 'app' && !auth.isAuthenticated"
-          class="app-download-link"
-          to="/product"
+          v-if="variant === 'marketing'"
+          class="button button-primary button-compact"
+          :to="defaultWebEntry()"
+          >进入应用</RouterLink
         >
-          下载 App
-        </RouterLink>
-        <template v-if="auth.isAuthenticated">
+        <template v-else-if="auth.isAuthenticated">
           <RouterLink
             class="account-entry"
             :to="{
@@ -86,15 +106,6 @@ function download(event: MouseEvent) {
           >
             <AccountAvatar :src="account.avatarUrl" /><span>{{ account.nickname }}</span>
           </RouterLink>
-          <RouterLink
-            v-if="variant === 'marketing'"
-            class="button button-primary button-compact"
-            to="/events"
-            >进入应用</RouterLink
-          >
-          <button v-else class="text-button" :disabled="auth.busy" @click="auth.logout">
-            退出
-          </button>
         </template>
         <button
           v-else
@@ -102,7 +113,7 @@ function download(event: MouseEvent) {
           :disabled="auth.busy"
           @click="login"
         >
-          {{ auth.busy ? '正在打开…' : '扫码登录' }}
+          {{ auth.busy ? '正在打开…' : '登录' }}
         </button>
       </div>
     </div>
@@ -156,13 +167,6 @@ function download(event: MouseEvent) {
   white-space: nowrap;
 }
 @media (max-width: 760px) {
-  .site-nav--app {
-    gap: 0.5rem;
-    overflow-x: auto;
-  }
-  .site-nav--app a {
-    white-space: nowrap;
-  }
   .account-entry > span:last-child {
     display: none;
   }

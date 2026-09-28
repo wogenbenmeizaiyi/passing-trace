@@ -638,6 +638,17 @@ small {
   }
 }
 
+.password-login .password-toggle {
+  display: block;
+  margin: 0 0 16px auto;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--primary);
+  cursor: pointer;
+}
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;

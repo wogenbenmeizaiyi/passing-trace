@@ -8,11 +8,15 @@ import { profileApi, type AccountProfile } from '@/api/profile'
 import { HttpError } from '@/api/http-client'
 import { accountReturnPath, avatarCropRect, profileTextLength } from '@/utils/avatar-crop'
 
+const logout = vi.hoisted(() => vi.fn<() => Promise<void>>())
 vi.mock('@/stores/auth', () => ({
   useAuthStore: () => ({
     isAuthenticated: true,
     username: 'login_user',
     user: { profile: { sub: 'one' } },
+    busy: false,
+    error: null,
+    logout,
   }),
 }))
 vi.mock('@/api/profile', async (importOriginal) => {
@@ -36,6 +40,7 @@ const profile: AccountProfile = {
 }
 let wrapper: VueWrapper
 beforeEach(() => {
+  logout.mockReset().mockResolvedValue(undefined)
   vi.mocked(profileApi.get).mockResolvedValue({ ...profile })
   vi.mocked(profileApi.save).mockReset()
   vi.spyOn(window, 'confirm').mockReturnValue(false)
@@ -66,6 +71,36 @@ function button(label: string) {
 }
 
 describe('用户中心', () => {
+  it('将主题内嵌在设置中，切换后保存设备偏好', async () => {
+    await open()
+    const settings = wrapper.get('details.account-settings')
+    expect(wrapper.get('.account-heading').find('details.account-settings').exists()).toBe(true)
+    expect(wrapper.find('.account-preferences details').exists()).toBe(false)
+    expect(settings.get('summary').text()).toBe('设置')
+    expect(settings.attributes('open')).toBeUndefined()
+    expect(settings.find('.appearance-trigger').exists()).toBe(false)
+    await button('深色').trigger('click')
+    expect(localStorage.getItem('passingtrace.appearance.mode')).toBe('dark')
+    expect(button('深色').attributes('aria-pressed')).toBe('true')
+    await button('跟随系统').trigger('click')
+  })
+  it('退出登录需要确认，取消时保留账号', async () => {
+    await open()
+    await button('退出登录').trigger('click')
+    expect(logout).not.toHaveBeenCalled()
+    vi.mocked(window.confirm).mockReturnValue(true)
+    await button('退出登录').trigger('click')
+    expect(logout).toHaveBeenCalledTimes(1)
+  })
+  it('退出时提醒尚未保存的资料，取消不丢失编辑', async () => {
+    await open()
+    await button('编辑个人资料').trigger('click')
+    await wrapper.get('#profile-nickname').setValue('还没保存')
+    await button('退出登录').trigger('click')
+    expect(window.confirm).toHaveBeenCalledWith('个人资料尚未保存，放弃修改并退出登录吗？')
+    expect(logout).not.toHaveBeenCalled()
+    expect((wrapper.get('#profile-nickname').element as HTMLInputElement).value).toBe('还没保存')
+  })
   it('从独立的手机入口进入产品介绍，不触发保存或直接下载', async () => {
     const router = await open()
     const link = wrapper.get('.account-companion__link')
