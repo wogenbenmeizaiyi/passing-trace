@@ -1,3 +1,4 @@
+using PassingTrace.Infrastructure.Persistence.Ai;
 using System.Security.Claims;
 using System.Text.Json;
 using Microsoft.AspNetCore.Http;
@@ -26,7 +27,7 @@ public sealed class PersonalMcpSchemaTests
                 User = new ClaimsPrincipal(new ClaimsIdentity([new Claim("sub", "17")], "test")),
             },
         });
-        var tools = new PersonalRecordTools(db, user, new NoEmbedding());
+        var tools = new PersonalRecordTools(new PersonalRecordQueries(db), user, new NoEmbedding());
         var definitions = new PersonalRecordsCapabilityPackage(tools).CreateTools().OfType<AIFunction>()
             .ToDictionary(x => x.Name, x => new ValidatedMcpServerTool(McpServerTool.Create(x)).ProtocolTool.InputSchema);
         Assert.Equal(9, definitions.Count);
@@ -56,7 +57,7 @@ public sealed class PersonalMcpSchemaTests
     {
         await using var db = new TraceDbContext(new DbContextOptionsBuilder<TraceDbContext>()
             .UseNpgsql("Host=127.0.0.1;Port=1;Database=unused;Username=test", options => options.UseVector()).Options);
-        var tools = new PersonalRecordTools(db, new CurrentUserContext(new HttpContextAccessor()), new NoEmbedding());
+        var tools = new PersonalRecordTools(new PersonalRecordQueries(db), new CurrentUserContext(new HttpContextAccessor()), new NoEmbedding());
         var function = new PersonalRecordsCapabilityPackage(tools).CreateTools().OfType<AIFunction>()
             .Single(x => x.Name == "SearchMyRecords");
         await using var session = await InternalMcpToolSession.CreateAsync([function]);

@@ -2,24 +2,18 @@ using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.Globalization;
 using System.Text.Json;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 using PassingTrace.Core.Ai;
 using PassingTrace.Core.Events;
 using PassingTrace.Core.Storylines;
-using PassingTrace.Infrastructure;
-using Pgvector;
-using Pgvector.EntityFrameworkCore;
-using PassingTrace.Events.Api.Social;
 
 namespace PassingTrace.Events.Api.Ai;
 
 /// <summary>通过内部 MCP 暴露的只读工具。所有查询首先强制当前用户过滤。</summary>
 public sealed class PersonalRecordTools(
-    TraceDbContext db,
+    IPersonalRecordQueries queries,
     CurrentUserContext currentUser,
-    IEmbeddingGenerator<string, Embedding<float>> embeddingGenerator,
-    SharedContentService? sharedContent = null)
+    IEmbeddingGenerator<string, Embedding<float>> embeddingGenerator)
 {
     private readonly HashSet<long> _retrievedEventIds = [];
     private readonly List<RecordEvidence> _recordEvidence = [];
@@ -67,53 +61,33 @@ public sealed class PersonalRecordTools(
     {
         limit = Math.Clamp(limit, 1, 10);
         var userId = currentUser.UserId;
-        var indexes = db.StorylineSearchIndexes.AsNoTracking()
-            .Where(x => x.UserId == userId && x.IsCurrent &&
-                db.Storylines.Any(s => s.Id == x.StorylineId && s.UserId == userId && s.DeletedAt == null));
-        if (!string.IsNullOrWhiteSpace(category))
-        {
-            var key = category.Trim().ToLowerInvariant();
-            indexes = indexes.Where(x => db.Storylines.Any(s => s.Id == x.StorylineId && s.UserId == userId && s.CategoryKey == key));
-        }
-        if (Enum.TryParse<StorylineStatus>(status, true, out var parsedStatus))
-            indexes = indexes.Where(x => db.Storylines.Any(s => s.Id == x.StorylineId && s.UserId == userId && s.Status == parsedStatus));
         query = query?.Trim() ?? string.Empty;
+        var filter = new StorylineSearchFilter(query, string.IsNullOrWhiteSpace(category) ? null : category.Trim().ToLowerInvariant(),
+            Enum.TryParse<StorylineStatus>(status, true, out var parsedStatus) ? parsedStatus : null);
         var scores = new Dictionary<Guid, double>();
-        var recent = await indexes.OrderByDescending(x => x.UpdatedAt).Take(30).Select(x => x.StorylineId).ToListAsync(cancellationToken);
-        AddRanking(scores, recent);
+        AddRanking(scores, await queries.RankStorylinesAsync(userId, filter, AiSearchOrder.Recent, null, cancellationToken));
         if (query.Length > 0)
         {
-            var text = await indexes.OrderByDescending(x => EF.Functions.TrigramsSimilarity(x.RetrievalText, query))
-                .Take(30).Select(x => x.StorylineId).ToListAsync(cancellationToken);
-            AddRanking(scores, text);
+            AddRanking(scores, await queries.RankStorylinesAsync(userId, filter, AiSearchOrder.Text, null, cancellationToken));
             try
             {
                 var generated = await embeddingGenerator.GenerateAsync([query], cancellationToken: cancellationToken);
-                var vector = new Vector(generated[0].Vector);
-                var semantic = await indexes.Where(x => EF.Property<Vector?>(x, "Embedding") != null)
-                    .OrderBy(x => EF.Property<Vector>(x, "Embedding").CosineDistance(vector)).Take(30)
-                    .Select(x => x.StorylineId).ToListAsync(cancellationToken);
-                AddRanking(scores, semantic);
+                AddRanking(scores, await queries.RankStorylinesAsync(userId, filter, AiSearchOrder.Vector, generated[0].Vector.ToArray(), cancellationToken));
             }
             catch (Exception exception) when (exception is not OperationCanceledException) { }
         }
         var ids = scores.OrderByDescending(x => x.Value).Take(limit).Select(x => x.Key).ToArray();
-        var storylines = await db.Storylines.AsNoTracking().Where(x => x.UserId == userId && ids.Contains(x.Id) && x.DeletedAt == null)
-            .ToListAsync(cancellationToken);
-        var revisions = await db.StorylineRevisions.AsNoTracking().Include(x => x.Stages)
-            .Include(x => x.Nodes).ThenInclude(x => x.Event).ThenInclude(x => x.SourceRevisions)
-            .Include(x => x.Edges).Where(x => ids.Contains(x.StorylineId)).AsSplitQuery().ToListAsync(cancellationToken);
-        var indexRows = await indexes.Where(x => ids.Contains(x.StorylineId)).ToListAsync(cancellationToken);
-        var evidence = ids.Select(id =>
+        var matches = await queries.ReadStorylinesAsync(userId, ids, cancellationToken);
+        var evidence = ids.Where(id => matches.Any(x => x.Storyline.Id == id)).Select(id =>
         {
-            var story = storylines.Single(x => x.Id == id);
-            var revision = revisions.Single(x => x.StorylineId == id && x.Revision == story.CurrentRevision);
-            var index = indexRows.Single(x => x.StorylineId == id && x.Revision == story.CurrentRevision);
+            var match = matches.Single(x => x.Storyline.Id == id);
+            var story = match.Storyline;
+            var revision = match.Revision;
             var stages = revision.Stages.OrderBy(x => x.SemanticOrder).Select(stage => new StorylineStageEvidence(
                 stage.Key, stage.Title, revision.Nodes.Where(x => x.StageKey == stage.Key).OrderBy(x => x.SemanticOrder)
                     .Select(x => PinnedSource(x).Title ?? "无标题记录").ToArray())).ToArray();
             return new StorylineEvidence(id, revision.Revision, story.Title, StorylineTaxonomy.Label(story.CategoryKey),
-                story.Status.ToString(), Snippet(index.RetrievalText, query), story.RangeStart, story.RangeEnd, stages,
+                story.Status.ToString(), Snippet(match.RetrievalText, query), story.RangeStart, story.RangeEnd, stages,
                 revision.Nodes.Where(x => x.Event.DeletedAt == null).Select(x => x.EventId).Distinct().ToArray(), scores[id]);
         }).ToArray();
         foreach (var item in evidence) { _storylineEvidence.Add(item); _retrievedStorylineIds.Add(item.StorylineId); }
@@ -125,12 +99,9 @@ public sealed class PersonalRecordTools(
     {
         if (!_retrievedStorylineIds.Contains(storylineId)) return null;
         var userId = currentUser.UserId;
-        var story = await db.Storylines.AsNoTracking().FirstOrDefaultAsync(
-            x => x.Id == storylineId && x.UserId == userId && x.DeletedAt == null, cancellationToken);
-        if (story is null) return null;
-        var revision = await db.StorylineRevisions.AsNoTracking().Include(x => x.Stages)
-            .Include(x => x.Nodes).ThenInclude(x => x.Event).ThenInclude(x => x.SourceRevisions)
-            .Include(x => x.Edges).FirstAsync(x => x.StorylineId == storylineId && x.Revision == story.CurrentRevision, cancellationToken);
+        var revision = await queries.FindStorylineRevisionAsync(userId, storylineId, cancellationToken);
+        if (revision is null) return null;
+        var story = revision.Storyline;
         return new
         {
             storylineId,
@@ -183,131 +154,50 @@ public sealed class PersonalRecordTools(
     {
         limit = Math.Clamp(limit, 1, 20);
         var userId = currentUser.UserId;
-        var visible = sharedContent?.ReadableEvents(userId) ?? db.Events.Where(x => x.UserId == userId && x.DeletedAt == null);
-        if (participantFriendId is { } friendId)
-        {
-            var friend = await db.Friendships.AsNoTracking().SingleOrDefaultAsync(x => x.Id == friendId && x.Active &&
-                (x.FirstUserId == userId || x.SecondUserId == userId), cancellationToken)
-                ?? throw new DomainValidationException("这位好友已不可查询，请重新查找好友。");
-            var other = FriendService.Other(friend, userId);
-            visible = visible.Where(e => e.UserId == other || db.EventParticipants.Any(p => p.EventId == e.Id && p.UserId == other && p.Active &&
-                db.Friendships.Any(f => f.Id == p.FriendshipId && f.Active)));
-        }
-        var indexes = db.EventSearchIndexes.AsNoTracking()
-            .Where(x => x.IsCurrent && visible.Any(e => e.Id == x.EventId && e.UserId == x.UserId));
-        if (DateTimeOffset.TryParse(from, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var fromValue))
-        {
-            indexes = indexes.Where(x => visible.Any(e => e.Id == x.EventId &&
-                (e.HappenedAt ?? e.CreatedAt) >= fromValue.ToUniversalTime()));
-        }
-        if (DateTimeOffset.TryParse(to, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var toValue))
-        {
-            indexes = indexes.Where(x => visible.Any(e => e.Id == x.EventId &&
-                (e.HappenedAt ?? e.CreatedAt) <= toValue.ToUniversalTime()));
-        }
-        if (Enum.TryParse<EventKind>(kind, true, out var eventKind))
-        {
-            indexes = indexes.Where(x => visible.Any(e => e.Id == x.EventId && e.EventKind == eventKind));
-        }
-        if (Enum.TryParse<EventStatus>(status, true, out var eventStatus))
-        {
-            indexes = indexes.Where(x => visible.Any(e => e.Id == x.EventId && e.Status == eventStatus));
-        }
-        if (!string.IsNullOrWhiteSpace(category))
-        {
-            var key = category.ToLowerInvariant();
-            indexes = indexes.Where(x => db.EventLabelIndexes.Any(m => m.UserId == x.UserId && m.EventId == x.EventId &&
-                m.IsCurrent && m.Type == EventLabelType.PrimaryCategory && m.TaxonomyKey == key));
-        }
-        if (!string.IsNullOrWhiteSpace(tag))
-        {
-            var key = tag.ToLowerInvariant();
-            indexes = indexes.Where(x => db.EventLabelIndexes.Any(m => m.UserId == x.UserId && m.EventId == x.EventId &&
-                m.IsCurrent && m.Type == EventLabelType.BehaviorTag && m.TaxonomyKey == key));
-        }
-        if (!string.IsNullOrWhiteSpace(adCode))
-            indexes = indexes.Where(x => db.EventLocations.Any(l => l.UserId == x.UserId && l.EventId == x.EventId &&
-                l.SourceRevision == x.SourceRevision && l.AdCode == adCode));
-        if (centerLatitude.HasValue && centerLongitude.HasValue)
-        {
-            var radius = Math.Clamp(radiusMeters ?? 1000, 100, 100000);
-            var latitudeDelta = (decimal)radius / 111_320m;
-            var longitudeDelta = latitudeDelta / (decimal)Math.Max(0.1, Math.Cos((double)centerLatitude.Value * Math.PI / 180));
-            var minLat = centerLatitude.Value - latitudeDelta; var maxLat = centerLatitude.Value + latitudeDelta;
-            var minLon = centerLongitude.Value - longitudeDelta; var maxLon = centerLongitude.Value + longitudeDelta;
-            indexes = indexes.Where(x => db.EventLocations.Any(l => l.UserId == x.UserId && l.EventId == x.EventId &&
-                l.SourceRevision == x.SourceRevision && l.Latitude >= minLat && l.Latitude <= maxLat &&
-                l.Longitude >= minLon && l.Longitude <= maxLon));
-        }
-        if (!string.IsNullOrWhiteSpace(location))
-        {
-            indexes = indexes.Where(x => x.SemanticRunId != null && db.SemanticMentions.Any(m =>
-                m.UserId == x.UserId && m.SemanticRunId == x.SemanticRunId && m.Category == "location" &&
-                EF.Functions.TrigramsSimilarity(m.NormalizedValue, location) > 0.15));
-        }
-
-        var rankings = new List<IReadOnlyList<long>>();
-        rankings.Add(await indexes.OrderByDescending(x => x.UpdatedAt).Take(40)
-            .Select(x => x.EventId).ToListAsync(cancellationToken));
-
         query = query?.Trim() ?? string.Empty;
+        var filter = new RecordSearchFilter(query, ParseTime(from), ParseTime(to),
+            Enum.TryParse<EventKind>(kind, true, out var eventKind) ? eventKind : null,
+            Enum.TryParse<EventStatus>(status, true, out var eventStatus) ? eventStatus : null,
+            NormalizeKey(category), NormalizeKey(tag), string.IsNullOrWhiteSpace(location) ? null : location,
+            string.IsNullOrWhiteSpace(adCode) ? null : adCode, centerLatitude, centerLongitude, radiusMeters, participantFriendId);
+        var rankings = new List<IReadOnlyList<long>>
+        {
+            await queries.RankRecordsAsync(userId, filter, AiSearchOrder.Recent, null, cancellationToken)
+        };
         if (query.Length > 0)
         {
-            rankings.Add(await indexes
-                .OrderByDescending(x => EF.Functions.TrigramsSimilarity(x.RetrievalText, query))
-                .ThenByDescending(x => x.UpdatedAt)
-                .Take(40)
-                .Select(x => x.EventId)
-                .ToListAsync(cancellationToken));
+            rankings.Add(await queries.RankRecordsAsync(userId, filter, AiSearchOrder.Text, null, cancellationToken));
             try
             {
                 var generated = await embeddingGenerator.GenerateAsync([query], cancellationToken: cancellationToken);
-                var vector = new Vector(generated[0].Vector);
-                rankings.Add(await indexes
-                    .Where(x => EF.Property<Vector?>(x, "Embedding") != null)
-                    .OrderBy(x => EF.Property<Vector>(x, "Embedding").CosineDistance(vector))
-                    .Take(40)
-                    .Select(x => x.EventId)
-                    .ToListAsync(cancellationToken));
+                rankings.Add(await queries.RankRecordsAsync(userId, filter, AiSearchOrder.Vector, generated[0].Vector.ToArray(), cancellationToken));
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
-                // 未配置 Embedding 时仍保留结构化与 pg_trgm 检索。
+                // Embedding failure retains relational and text candidates.
             }
         }
-
         var scores = new Dictionary<long, double>();
         foreach (var ranking in rankings)
-        {
             for (var rank = 0; rank < ranking.Count; rank++)
-            {
-                scores[ranking[rank]] = scores.GetValueOrDefault(ranking[rank]) + 1d / (60 + rank + 1);
-            }
-        }
+                scores[ranking[rank]] = scores.GetValueOrDefault(ranking[rank]) + 1d / (61 + rank);
         var ids = scores.OrderByDescending(x => x.Value).Take(limit).Select(x => x.Key).ToArray();
-        var rows = await (
-            from index in db.EventSearchIndexes.AsNoTracking()
-            join evt in visible.AsNoTracking() on index.EventId equals evt.Id
-            where ids.Contains(index.EventId) && index.UserId == evt.UserId &&
-                  index.IsCurrent && evt.DeletedAt == null
-            select new { index, evt }).ToListAsync(cancellationToken);
-        var labelRows = await db.EventLabelIndexes.AsNoTracking().Where(x => x.IsCurrent && ids.Contains(x.EventId) && visible.Any(e => e.Id == x.EventId && e.UserId == x.UserId))
-            .ToListAsync(cancellationToken);
-        var locationRows = await db.EventLocations.AsNoTracking().Where(x => ids.Contains(x.EventId) && visible.Any(e => e.Id == x.EventId && e.UserId == x.UserId))
-            .ToListAsync(cancellationToken);
-        var records = ids.Where(id => rows.Any(x => x.index.EventId == id)).Select(id => rows.Single(x => x.index.EventId == id))
+        var rows = await queries.ReadRecordsAsync(userId, ids, participantFriendId, cancellationToken);
+        var labelRows = rows.SelectMany(x => x.Labels).ToArray();
+        var locationRows = rows.SelectMany(x => x.Locations).ToArray();
+        var records = ids.Where(id => rows.Any(x => x.Index.EventId == id)).Select(id => rows.Single(x => x.Index.EventId == id))
             .Select(x => new RecordEvidence(
-                x.evt.Id,
-                x.index.SourceRevision,
-                x.evt.Title,
-                Snippet(x.index.RetrievalText, query),
-                string.IsNullOrWhiteSpace(x.index.AiSummary) ? null : x.index.AiSummary,
-                x.evt.HappenedAt,
-                x.evt.CreatedAt,
-                scores[x.evt.Id],
-                labelRows.Where(l => l.EventId == x.evt.Id).Select(l => l.DisplayName).ToArray(),
-                locationRows.FirstOrDefault(l => l.EventId == x.evt.Id && l.SourceRevision == x.index.SourceRevision)?.Name,
-                x.evt.UserId.ToString(), x.evt.UserId == userId ? null : $"/joint-records/{x.evt.Id}"))
+                x.Event.Id,
+                x.Index.SourceRevision,
+                x.Event.Title,
+                Snippet(x.Index.RetrievalText, query),
+                string.IsNullOrWhiteSpace(x.Index.AiSummary) ? null : x.Index.AiSummary,
+                x.Event.HappenedAt,
+                x.Event.CreatedAt,
+                scores[x.Event.Id],
+                labelRows.Where(l => l.EventId == x.Event.Id).Select(l => l.DisplayName).ToArray(),
+                locationRows.FirstOrDefault(l => l.EventId == x.Event.Id && l.SourceRevision == x.Index.SourceRevision)?.Name,
+                x.Event.UserId.ToString(), x.Event.UserId == userId ? null : $"/joint-records/{x.Event.Id}"))
             .ToArray();
         foreach (var record in records)
         {
@@ -350,29 +240,17 @@ public sealed class PersonalRecordTools(
             to = _currentMonthRange.ToText;
         }
         var userId = currentUser.UserId;
-        var events = db.Events.AsNoTracking().Where(x => x.UserId == userId && x.DeletedAt == null);
-        if (DateTimeOffset.TryParse(from, out var fromValue)) events = events.Where(x => (x.HappenedAt ?? x.CreatedAt) >= fromValue.ToUniversalTime());
-        if (DateTimeOffset.TryParse(to, out var toValue)) events = events.Where(x => (x.HappenedAt ?? x.CreatedAt) <= toValue.ToUniversalTime());
-        if (!string.IsNullOrWhiteSpace(category))
-        {
-            var key = category.ToLowerInvariant();
-            events = events.Where(e => db.EventLabelIndexes.Any(x => x.UserId == userId && x.EventId == e.Id && x.IsCurrent &&
-                x.Type == EventLabelType.PrimaryCategory && x.TaxonomyKey == key));
-        }
-        if (!string.IsNullOrWhiteSpace(tag) &&
-            !(metric == RecordAggregateMetric.ExpenseTotal && string.Equals(tag, "amount", StringComparison.OrdinalIgnoreCase)))
-        {
-            var key = tag.ToLowerInvariant();
-            events = events.Where(e => db.EventLabelIndexes.Any(x => x.UserId == userId && x.EventId == e.Id && x.IsCurrent &&
-                x.Type == EventLabelType.BehaviorTag && x.TaxonomyKey == key));
-        }
-
+        var filter = new RecordStatisticsFilter(
+            DateTimeOffset.TryParse(from, out var fromValue) ? fromValue.ToUniversalTime() : null,
+            DateTimeOffset.TryParse(to, out var toValue) ? toValue.ToUniversalTime() : null,
+            NormalizeKey(category), metric == RecordAggregateMetric.ExpenseTotal && string.Equals(tag, "amount", StringComparison.OrdinalIgnoreCase)
+                ? null : NormalizeKey(tag));
         object result = metric switch
         {
-            RecordAggregateMetric.Count => new { metric = "count", value = await events.LongCountAsync(cancellationToken) },
-            RecordAggregateMetric.ExpenseTotal => await AggregateExpensesAsync(events, userId, currency, cancellationToken),
-            RecordAggregateMetric.PlanCompletionRate => await AggregateCompletionAsync(events, cancellationToken),
-            RecordAggregateMetric.Trend => await AggregateTrendAsync(events, cancellationToken),
+            RecordAggregateMetric.Count => new { metric = "count", value = await queries.CountRecordsAsync(userId, filter, cancellationToken) },
+            RecordAggregateMetric.ExpenseTotal => await AggregateExpensesAsync(filter, userId, currency, cancellationToken),
+            RecordAggregateMetric.PlanCompletionRate => await AggregateCompletionAsync(filter, userId, cancellationToken),
+            RecordAggregateMetric.Trend => await AggregateTrendAsync(filter, userId, cancellationToken),
             _ => throw new AssistantStatisticsToolException(),
         };
         _aggregateEvidence = JsonSerializer.Serialize(result);
@@ -388,25 +266,10 @@ public sealed class PersonalRecordTools(
         var ids = eventIds.Distinct().Where(_retrievedEventIds.Contains).Take(20).ToArray();
         if (ids.Length == 0) return [];
         var userId = currentUser.UserId;
-        var rows = await (
-            from evt in (sharedContent?.ReadableEvents(userId) ?? db.Events.Where(x => x.UserId == userId && x.DeletedAt == null)).AsNoTracking()
-            join index in db.EventSearchIndexes.AsNoTracking() on evt.Id equals index.EventId
-            where ids.Contains(evt.Id) && index.UserId == evt.UserId && index.IsCurrent && evt.DeletedAt == null
-            select new { evt, index }).ToListAsync(cancellationToken);
-        var details = new List<RecordEvidenceDetail>();
-        foreach (var row in rows)
-        {
-            var mentions = row.index.SemanticRunId is null
-                ? []
-                : await db.SemanticMentions.AsNoTracking()
-                    .Where(x => x.UserId == row.evt.UserId && x.SemanticRunId == row.index.SemanticRunId)
-                    .Take(100)
-                    .Select(x => $"{x.Category}: {x.NormalizedValue} (confidence={x.Confidence})")
-                    .ToListAsync(cancellationToken);
-            details.Add(new RecordEvidenceDetail(row.evt.Id, row.index.SourceRevision, row.evt.Title,
-                row.evt.RawContent, row.index.ImageDescriptions, row.evt.HappenedAt, row.evt.CreatedAt, mentions));
-        }
-        return details;
+        var rows = await queries.ReadRecordDetailsAsync(userId, ids, cancellationToken);
+        return rows.Select(row => new RecordEvidenceDetail(row.Event.Id, row.Index.SourceRevision, row.Event.Title,
+            row.Event.RawContent, row.Index.ImageDescriptions, row.Event.HappenedAt, row.Event.CreatedAt,
+            row.Mentions.Select(x => $"{x.Category}: {x.NormalizedValue} (confidence={x.Confidence})").ToArray())).ToArray();
     }
 
     [Description("搜索当前用户有证据的长期记忆。拒绝状态不会返回；不接受 userId。")]
@@ -417,29 +280,18 @@ public sealed class PersonalRecordTools(
     {
         var userId = currentUser.UserId;
         limit = Math.Clamp(limit, 1, 10);
-        var memories = db.UserMemories.AsNoTracking()
-            .Where(x => x.UserId == userId && x.Status != UserMemoryStatus.Rejected);
-        List<long> ids;
+        IReadOnlyList<UserMemory> result;
         try
         {
             var generated = await embeddingGenerator.GenerateAsync([query], cancellationToken: cancellationToken);
-            var vector = new Vector(generated[0].Vector);
-            ids = await memories.Where(x => EF.Property<Vector?>(x, "Embedding") != null)
-                .OrderBy(x => EF.Property<Vector>(x, "Embedding").CosineDistance(vector))
-                .Take(limit).Select(x => x.Id).ToListAsync(cancellationToken);
+            result = await queries.SearchMemoriesAsync(userId, query, limit, generated[0].Vector.ToArray(), cancellationToken);
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
-            ids = await memories.Where(x => EF.Functions.TrigramsSimilarity(x.Content, query) > 0.1)
-                .OrderByDescending(x => x.UpdatedAt).Take(limit).Select(x => x.Id).ToListAsync(cancellationToken);
+            result = await queries.SearchMemoriesAsync(userId, query, limit, null, cancellationToken);
         }
-        var result = await db.UserMemories.AsNoTracking().Include(x => x.Evidence)
-            .Where(x => ids.Contains(x.Id) && x.UserId == userId && x.Status != UserMemoryStatus.Rejected)
-            .ToListAsync(cancellationToken);
-        var ordered = ids.Select(id => result.Single(x => x.Id == id))
-            .Select(x => new MemoryEvidence(x.Id, x.Type.ToString(), x.Content, x.Status.ToString(),
-                x.Confidence, x.Evidence.Select(e => e.EventId).Distinct().ToArray()))
-            .ToArray();
+        var ordered = result.Select(x => new MemoryEvidence(x.Id, x.Type.ToString(), x.Content, x.Status.ToString(),
+            x.Confidence, x.Evidence.Select(e => e.EventId).Distinct().ToArray())).ToArray();
         _memoryEvidence.AddRange(ordered);
         foreach (var eventId in ordered.SelectMany(x => x.EventIds)) _retrievedEventIds.Add(eventId);
         return ordered;
@@ -452,15 +304,8 @@ public sealed class PersonalRecordTools(
         var userId = currentUser.UserId;
         limit = Math.Clamp(limit, 1, 20);
         var retrievedEventIds = _recordEvidence.Select(x => x.EventId).Distinct().Take(limit).ToArray();
-        var places = await (from location in db.EventLocations.AsNoTracking()
-                            join evt in db.Events.AsNoTracking() on location.EventId equals evt.Id
-                            where location.UserId == userId && evt.UserId == userId && evt.DeletedAt == null &&
-                                  location.UserConfirmed && location.SourceRevision == evt.CurrentSourceRevision &&
-                                  (query == "" || retrievedEventIds.Contains(evt.Id) ||
-                                   EF.Functions.TrigramsSimilarity(location.Name + " " + location.Address, query) > 0.1)
-                            orderby evt.HappenedAt ?? evt.CreatedAt descending
-                            select new PlaceEvidence(location.Id, evt.Id, evt.Title ?? "无标题", location.Name, location.Address,
-                                location.AdCode, evt.HappenedAt, 1)).Take(limit).ToListAsync(cancellationToken);
+        var values = await queries.SearchPlacesAsync(userId, query, retrievedEventIds, limit, cancellationToken);
+        var places = values.Select(x => new PlaceEvidence(x.LocationId, x.EventId, x.EventTitle, x.Name, x.Address, x.AdCode, x.HappenedAt, 1)).ToArray();
         foreach (var place in places) { _retrievedLocationIds.Add(place.LocationId); _retrievedEventIds.Add(place.EventId); }
         _placeEvidence.AddRange(places);
         return places;
@@ -476,22 +321,7 @@ public sealed class PersonalRecordTools(
     {
         if (!_retrievedLocationIds.Contains(locationId)) return null;
         var userId = currentUser.UserId;
-        var target = await (from location in db.EventLocations.AsNoTracking()
-                            join evt in db.Events.AsNoTracking() on location.EventId equals evt.Id
-                            where location.Id == locationId && location.UserId == userId && evt.UserId == userId && evt.DeletedAt == null &&
-                                  location.SourceRevision == evt.CurrentSourceRevision && location.UserConfirmed && location.Latitude != null &&
-                                  location.Longitude != null && location.CoordinateSystem == "GCJ02"
-                            select new
-                            {
-                                EventId = evt.Id,
-                                LocationId = location.Id,
-                                location.Name,
-                                location.Address,
-                                Latitude = location.Latitude!.Value,
-                                Longitude = location.Longitude!.Value,
-                                location.ProviderPoiId,
-                            })
-            .FirstOrDefaultAsync(cancellationToken);
+        var target = await queries.FindNavigationLocationAsync(userId, locationId, cancellationToken);
         if (target is null) return null;
         _navigationTarget = new AssistantAction(
             "amap-navigation", "amap", $"导航到{target.Name}", target.Name, target.Address,
@@ -500,51 +330,44 @@ public sealed class PersonalRecordTools(
         return _navigationTarget;
     }
 
-    private async Task<object> AggregateExpensesAsync(IQueryable<Event> events, long userId, string? currency, CancellationToken cancellationToken)
+    private async Task<object> AggregateExpensesAsync(RecordStatisticsFilter filter, long userId, string? currency, CancellationToken cancellationToken)
     {
         currency = string.IsNullOrWhiteSpace(currency) ? "CNY" : currency.ToUpperInvariant();
-        var ids = events.Select(x => new { x.Id, x.CurrentSourceRevision });
-        var amounts = (
-            from expense in db.ExpenseFacts.AsNoTracking()
-            join run in db.EventSemanticRuns.AsNoTracking() on expense.SemanticRunId equals run.Id
-            join evt in ids on new { Id = run.EventId, CurrentSourceRevision = run.SourceRevision }
-                equals new { evt.Id, evt.CurrentSourceRevision }
-            where expense.UserId == userId && run.UserId == userId && run.Status == SemanticRunStatus.Completed && expense.Currency == currency
-                && !db.EventSemanticRuns.Any(newer => newer.EventId == run.EventId && newer.UserId == userId &&
-                    newer.SourceRevision == run.SourceRevision && newer.Status == SemanticRunStatus.Completed && newer.Id > run.Id)
-            select expense.Amount);
-        var total = await amounts.GroupBy(_ => 1)
-            .Select(group => new { Value = group.Sum(), Count = group.LongCount() })
-            .SingleOrDefaultAsync(cancellationToken);
+        var total = await queries.SumExpensesAsync(userId, filter, currency, cancellationToken);
         return new
         {
             metric = "expense_total",
-            value = total is null ? (decimal?)null : total.Value,
+            value = total.Value,
             currency,
-            amountFactCount = total?.Count ?? 0,
-            hasAmountData = total is not null,
-            explanation = total is null
+            amountFactCount = total.Count,
+            hasAmountData = total.Value is not null,
+            explanation = total.Value is null
                 ? "所选范围内没有可核实的金额，无法确认消费合计；不能解释为消费为零。"
                 : "仅汇总所选范围内已确认的金额，不代表没有记下的实际消费。",
         };
     }
 
-    private static async Task<object> AggregateCompletionAsync(IQueryable<Event> events, CancellationToken cancellationToken)
+    private async Task<object> AggregateCompletionAsync(RecordStatisticsFilter filter, long userId, CancellationToken cancellationToken)
     {
-        var plans = events.Where(x => x.EventKind == EventKind.Plan);
-        var total = await plans.LongCountAsync(cancellationToken);
-        var completed = await plans.LongCountAsync(x => x.Status == EventStatus.Completed, cancellationToken);
-        return new { metric = "plan_completion_rate", completed, total, value = total == 0 ? 0 : completed / (double)total };
+        var result = await queries.CountPlanCompletionAsync(userId, filter, cancellationToken);
+        return new
+        {
+            metric = "plan_completion_rate",
+            completed = result.Completed,
+            total = result.Total,
+            value = result.Total == 0 ? 0 : result.Completed / (double)result.Total
+        };
     }
 
-    private static async Task<object> AggregateTrendAsync(IQueryable<Event> events, CancellationToken cancellationToken)
+    private async Task<object> AggregateTrendAsync(RecordStatisticsFilter filter, long userId, CancellationToken cancellationToken)
     {
-        var rows = await events.GroupBy(x => new { x.CreatedAt.Year, x.CreatedAt.Month })
-            .Select(x => new { x.Key.Year, x.Key.Month, count = x.LongCount() })
-            .OrderBy(x => x.Year).ThenBy(x => x.Month).Take(24).ToListAsync(cancellationToken);
-        // Formatting is a presentation step; PostgreSQL sorts the numeric buckets before materializing.
-        return new { metric = "trend", points = rows.Select(x => new { month = $"{x.Year:D4}-{x.Month:D2}", x.count }).ToArray() };
+        var rows = await queries.CountMonthlyRecordsAsync(userId, filter, cancellationToken);
+        return new { metric = "trend", points = rows.Select(x => new { month = $"{x.Year:D4}-{x.Month:D2}", count = x.Count }).ToArray() };
     }
+
+    private static string? NormalizeKey(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.ToLowerInvariant();
+    private static DateTimeOffset? ParseTime(string? value) =>
+        DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var parsed) ? parsed.ToUniversalTime() : null;
 
     private static string Snippet(string text, string query)
     {

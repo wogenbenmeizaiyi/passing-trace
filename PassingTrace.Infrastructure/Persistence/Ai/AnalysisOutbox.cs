@@ -1,17 +1,7 @@
 using PassingTrace.Core.Ai;
 using PassingTrace.Core.Events;
-using PassingTrace.Infrastructure;
 
-namespace PassingTrace.Events.Api.Ai;
-
-public interface IAnalysisOutbox
-{
-    void EnqueueEvent(Event evt, int sourceRevision, DateTimeOffset now, int priority = 100, string messageType = "event.analyze");
-    void EnqueueMedia(long userId, Guid mediaAssetId, DateTimeOffset now, int priority = 100);
-    Task IncrementWatermarkAsync(long userId, DateTimeOffset now, CancellationToken cancellationToken);
-    void EnqueueStoryline(long userId, Guid storylineId, int revision, DateTimeOffset now,
-        string messageType = "storyline.index", int priority = 110);
-}
+namespace PassingTrace.Infrastructure.Persistence.Ai;
 
 /// <summary>只向当前 EF 工作单元追加任务，提交由调用方统一完成。</summary>
 public sealed class AnalysisOutbox(TraceDbContext dbContext) : IAnalysisOutbox

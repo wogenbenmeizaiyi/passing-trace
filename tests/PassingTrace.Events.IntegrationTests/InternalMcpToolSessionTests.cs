@@ -1,3 +1,4 @@
+using PassingTrace.Infrastructure.Persistence.Ai;
 using System.Runtime.CompilerServices;
 using System.Security.Claims;
 using System.Text;
@@ -154,7 +155,7 @@ public sealed class InternalMcpToolSessionTests
         {
             User = new ClaimsPrincipal(new ClaimsIdentity([new Claim("sub", "71")], "test")),
         };
-        var state = new PersonalRecordTools(db, new CurrentUserContext(new HttpContextAccessor { HttpContext = context }),
+        var state = new PersonalRecordTools(new PersonalRecordQueries(db), new CurrentUserContext(new HttpContextAccessor { HttpContext = context }),
             new NoEmbeddingGenerator());
         var registered = new PersonalRecordsCapabilityPackage(state).CreateTools().OfType<AIFunction>().ToArray();
         await using var session = await InternalMcpToolSession.CreateAsync(registered);

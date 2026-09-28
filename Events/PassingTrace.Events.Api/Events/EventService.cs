@@ -1,3 +1,4 @@
+using PassingTrace.Core.Ai;
 using PassingTrace.Core.Events;
 using PassingTrace.Core.Media;
 using PassingTrace.Events.Api.Ai;

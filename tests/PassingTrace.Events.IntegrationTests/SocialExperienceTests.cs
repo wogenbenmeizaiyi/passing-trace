@@ -1,3 +1,4 @@
+using PassingTrace.Infrastructure.Persistence.Ai;
 using System.Security.Claims;
 using System.Text.Json;
 using System.Net;
@@ -143,7 +144,7 @@ public sealed class SocialExperienceTests : IClassFixture<StorylinePostgresFixtu
             HttpContext = new DefaultHttpContext
             { User = new ClaimsPrincipal(new ClaimsIdentity([new Claim("sub", user.ToString())], "test")) }
         });
-        var tools = new SocialAiTools(_db, current, _friends, _shares, _clock);
+        var tools = new SocialAiTools(new SocialAiQueries(_db), current, _friends, _shares, _clock);
         tools.Configure(AssistantCalendarContext.Create(_clock.GetUtcNow(), "Asia/Shanghai"), question, false);
         return tools;
     }
@@ -281,15 +282,15 @@ public sealed class SocialExperienceTests : IClassFixture<StorylinePostgresFixtu
         var ai = Ai(B); await ai.AggregateMyFriendActivities();
         var evidence = ai.Merge(new EvidenceBundle([], [], null, ""));
         var json = JsonSerializer.Serialize(evidence);
-        Assert.Single((await SocialEvidenceGuard.ReadAsync(_db, B, json, default))!.Records);
+        Assert.Single((await SocialEvidenceGuard.ReadAsync(new AiConversationRepository(_db), B, json, default))!.Records);
         await _participants.DetachAsync(B, e.Id, default);
-        Assert.Empty((await SocialEvidenceGuard.ReadAsync(_db, B, json, default))!.Records);
+        Assert.Empty((await SocialEvidenceGuard.ReadAsync(new AiConversationRepository(_db), B, json, default))!.Records);
         _db.ChangeTracker.Clear();
         e = (await _events.GetAsync(_a, e.Id, default))!;
         await Assert.ThrowsAsync<DomainValidationException>(() => Edit(e, "试图重新标记", [B.ToString()]));
         _db.ChangeTracker.Clear();
         await _friends.RemoveAsync(_a, f, false, default);
-        Assert.Empty((await SocialEvidenceGuard.ReadAsync(_db, B, json, default))!.Friends!);
+        Assert.Empty((await SocialEvidenceGuard.ReadAsync(new AiConversationRepository(_db), B, json, default))!.Friends!);
     }
 
     [Fact]
@@ -544,13 +545,13 @@ public sealed class SocialExperienceTests : IClassFixture<StorylinePostgresFixtu
             UpdatedAt = now
         });
         await _db.SaveChangesAsync();
-        var context = await ConversationContextSnapshot.LoadAsync(_db, _a, conversation.Id, long.MaxValue, now, default);
+        var context = await ConversationContextSnapshot.LoadAsync(new AiConversationRepository(_db), _a, conversation.Id, long.MaxValue, now, default);
         Assert.Empty(context.Summary);
         Assert.Equal(message.Content, Assert.Single(context.RecentMessages).Content);
         Assert.Equal(second, context.RecentFriends![1].Id);
         Assert.Equal("我和第二位上次去哪了？", context.BuildPromptMessages("我和第二位上次去哪了？").Last().Text);
         await _friends.RemoveAsync(_a, second, false, default);
-        context = await ConversationContextSnapshot.LoadAsync(_db, _a, conversation.Id, long.MaxValue, now, default);
+        context = await ConversationContextSnapshot.LoadAsync(new AiConversationRepository(_db), _a, conversation.Id, long.MaxValue, now, default);
         Assert.DoesNotContain(context.RecentFriends!, x => x.Id == second);
         Assert.Contains("已发生变化", Assert.Single(context.RecentMessages).Content);
     }

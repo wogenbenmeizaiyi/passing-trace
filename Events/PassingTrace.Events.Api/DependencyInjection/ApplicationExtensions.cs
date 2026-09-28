@@ -1,3 +1,5 @@
+using PassingTrace.Infrastructure.Persistence.Ai;
+using PassingTrace.Core.Ai;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
 using PassingTrace.Events.Api.Ai;
@@ -78,11 +80,17 @@ public static class ApplicationExtensions
         services.AddScoped<FriendService>();
         services.AddScoped<SharedContentService>();
         services.AddScoped<DirectChatService>();
+        services.AddScoped<ISocialAiQueries, SocialAiQueries>();
         services.AddScoped<SocialAiTools>();
         services.AddScoped<IAiCapabilityPackage, FriendsCapabilityPackage>();
         services.AddScoped<EventParticipationService>();
         services.AddScoped<IEventParticipationService>(p => p.GetRequiredService<EventParticipationService>());
         services.AddScoped<CurrentUserContext>();
+        services.AddScoped<IPersonalRecordQueries, PersonalRecordQueries>();
+        services.AddScoped<IAiConversationRepository, AiConversationRepository>();
+        services.AddScoped<IUserMemoryRepository, UserMemoryRepository>();
+        services.AddScoped<IEventSemanticRepository, EventSemanticRepository>();
+        services.AddScoped<EventSemanticService>();
         services.AddScoped<PersonalRecordTools>();
         services.AddScoped<AmapAiTools>();
         services.AddScoped<IAiCapabilityPackage, PersonalRecordsCapabilityPackage>();

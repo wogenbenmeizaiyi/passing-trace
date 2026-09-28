@@ -1,3 +1,4 @@
+using PassingTrace.Core.Ai;
 using Microsoft.EntityFrameworkCore;
 using PassingTrace.Core.Events;
 using PassingTrace.Core.Social;

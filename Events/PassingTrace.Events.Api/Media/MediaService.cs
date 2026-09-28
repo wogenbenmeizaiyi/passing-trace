@@ -1,3 +1,4 @@
+using PassingTrace.Core.Ai;
 using System.Security.Cryptography;
 using Amazon.S3;
 using Microsoft.EntityFrameworkCore;

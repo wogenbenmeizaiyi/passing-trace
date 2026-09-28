@@ -28,6 +28,8 @@ MCP 服务端复用当前请求内已绑定的 `PersonalRecordTools`，而非创
 
 同一会话工具调用串行执行，以保护 DbContext 和快照集合。内部协议不配置帧日志，错误不包含参数原值或底层异常。模型不获得任意 CLI/shell 执行权限。
 
+应用工具通过 Core 中的查询接口调用 `Infrastructure/Persistence/Ai`，数据库查询在持久化层执行。接口只返回已执行的数据；参数归一化、排名合并和证据整理保留在应用层。具体职责与工作单元约定见 [AI 应用层的数据访问](ai-data-access.md)。
+
 ## 扩展
 
 `IAiCapabilityPackage.UsesInternalMcp` 默认为 `true`。新增内部只读工具包注册后走相同 MCP 会话、校验、错误和释放边界。高德因已经有外部 MCP 适配与配额策略，显式设为 `false`，避免重复包裹。

@@ -1,9 +1,7 @@
 using System.Text.Json;
 using Microsoft.Agents.AI;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 using PassingTrace.Core.Ai;
-using PassingTrace.Infrastructure;
 
 namespace PassingTrace.Events.Api.Ai;
 
@@ -67,30 +65,20 @@ public sealed record ConversationContextSnapshot(
     }
 
     public static async Task<ConversationContextSnapshot> LoadAsync(
-        TraceDbContext db,
+        IAiConversationRepository repository,
         long userId,
         Guid conversationId,
         long beforeMessageId,
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
-        var summary = await db.ConversationSummaries.AsNoTracking()
-            .Where(x => x.ConversationId == conversationId && x.UserId == userId)
-            .Select(x => new { x.Content, x.ThroughMessageId })
-            .FirstOrDefaultAsync(cancellationToken);
-        var hasSocial = await db.Friendships.AnyAsync(x => x.FirstUserId == userId || x.SecondUserId == userId, cancellationToken);
-        // A discarded summary must not also discard the latest twelve messages it covered.
+        var summary = await repository.FindSummaryAsync(userId, conversationId, cancellationToken);
+        var hasSocial = await repository.HasSocialHistoryAsync(userId, cancellationToken);
+        // A discarded summary must not discard the latest messages it covered.
         var throughMessageId = hasSocial ? 0 : summary?.ThroughMessageId ?? 0;
-        var rows = await db.AiMessages.AsNoTracking()
-            .Where(x => x.ConversationId == conversationId && x.UserId == userId &&
-                x.Id > throughMessageId && x.Id < beforeMessageId &&
-                (x.ExpiresAt == null || x.ExpiresAt > now))
-            .OrderByDescending(x => x.Id)
-            .Take(12)
-            .OrderBy(x => x.Id)
-            .Select(x => new { x.Id, x.Role, x.Content, x.EvidenceSnapshotJson, x.DataWatermark })
-            .ToListAsync(cancellationToken);
-        var watermark = await db.UserDataWatermarks.Where(x => x.UserId == userId).Select(x => (long?)x.Version).SingleOrDefaultAsync(cancellationToken) ?? 0;
+        var rows = (await repository.ReadMessagesAsync(userId, conversationId,
+            new(BeforeId: beforeMessageId, AfterId: throughMessageId, Limit: 12, NewestFirst: true, NotExpiredAt: now), cancellationToken)).Reverse().ToArray();
+        var watermark = await repository.ReadWatermarkAsync(userId, cancellationToken);
         var recent = rows.Select(x => new ConversationContextMessage(x.Id, x.Role,
             Social.SocialEvidenceGuard.IsSocial(x.EvidenceSnapshotJson) && x.DataWatermark != watermark
                 ? "此前回答涉及的好友或共享内容已发生变化，请重新检索后回答。" : x.Content)).ToArray();
@@ -99,7 +87,7 @@ public sealed record ConversationContextSnapshot(
             .TakeLast(12)
             .ToArray();
         var latestSocial = rows.LastOrDefault(x => Social.SocialEvidenceGuard.IsSocial(x.EvidenceSnapshotJson));
-        var socialEvidence = latestSocial == null ? null : await Social.SocialEvidenceGuard.ReadAsync(db, userId, latestSocial.EvidenceSnapshotJson, cancellationToken);
+        var socialEvidence = latestSocial == null ? null : await Social.SocialEvidenceGuard.ReadAsync(repository, userId, latestSocial.EvidenceSnapshotJson, cancellationToken);
         var friendCandidates = socialEvidence?.FriendActivities?.Items.Select(x => x.Friend).ToArray() ?? socialEvidence?.Friends;
         return new ConversationContextSnapshot(hasSocial ? "" : summary?.Content ?? string.Empty, throughMessageId, recent, amapPlaces,
             friendCandidates, socialEvidence?.SharedContents?.Count > 0);

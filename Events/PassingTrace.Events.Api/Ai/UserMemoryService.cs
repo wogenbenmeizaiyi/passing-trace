@@ -1,28 +1,20 @@
 using System.Security.Cryptography;
 using System.Text;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 using PassingTrace.Core.Ai;
 using PassingTrace.Core.Events;
-using PassingTrace.Infrastructure;
-using Pgvector;
 
 namespace PassingTrace.Events.Api.Ai;
 
 public sealed class UserMemoryService(
-    TraceDbContext db,
+    IUserMemoryRepository repository,
     CurrentUserContext currentUser,
     IEmbeddingGenerator<string, Embedding<float>> embeddings,
     TimeProvider clock)
 {
     public async Task<IReadOnlyList<UserMemoryResponse>> ListAsync(CancellationToken cancellationToken)
     {
-        var values = await db.UserMemories.AsNoTracking().Include(x => x.Evidence)
-            .Where(x => x.UserId == currentUser.UserId && x.Status != UserMemoryStatus.Rejected)
-            .OrderByDescending(x => x.Status == UserMemoryStatus.Corrected)
-            .ThenByDescending(x => x.Status == UserMemoryStatus.Confirmed)
-            .ThenByDescending(x => x.UpdatedAt)
-            .ToListAsync(cancellationToken);
+        var values = await repository.ListAsync(currentUser.UserId, cancellationToken);
         return values.Select(ToResponse).ToArray();
     }
 
@@ -51,26 +43,24 @@ public sealed class UserMemoryService(
         }
         if (memory.Status == UserMemoryStatus.Rejected) memory.RejectedAt = clock.GetUtcNow();
         memory.Fingerprint = Fingerprint(memory.Type, memory.Content);
-        var duplicate = await db.UserMemories.AnyAsync(x => x.UserId == currentUser.UserId &&
-            x.Fingerprint == memory.Fingerprint && x.Id != memory.Id, cancellationToken);
+        var duplicate = await repository.HasDuplicateAsync(currentUser.UserId, memory.Id, memory.Fingerprint, cancellationToken);
         if (duplicate) throw new DomainValidationException("已经存在相同的记忆。");
         if (changedContent)
         {
             try
             {
                 var vector = await embeddings.GenerateAsync([memory.Content], cancellationToken: cancellationToken);
-                db.Entry(memory).Property<Vector?>("Embedding").CurrentValue = new Vector(vector[0].Vector);
+                repository.SetEmbedding(memory, vector[0].Vector.ToArray());
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
                 // 用户修正是事实操作，不能因为 Embedding 服务暂时不可用而回滚。
                 // 向量为空时仍可通过关系型字段读取，后续补算再生成向量。
-                db.Entry(memory).Property<Vector?>("Embedding").CurrentValue = null;
+                repository.SetEmbedding(memory, null);
             }
         }
         memory.UpdatedAt = clock.GetUtcNow();
-        await IncrementWatermarkAsync(cancellationToken);
-        await db.SaveChangesAsync(cancellationToken);
+        await repository.SaveAsync(currentUser.UserId, clock.GetUtcNow(), cancellationToken);
         return ToResponse(memory);
     }
 
@@ -80,41 +70,14 @@ public sealed class UserMemoryService(
         memory.Status = UserMemoryStatus.Rejected;
         memory.RejectedAt = clock.GetUtcNow();
         memory.UpdatedAt = clock.GetUtcNow();
-        await IncrementWatermarkAsync(cancellationToken);
-        await db.SaveChangesAsync(cancellationToken);
+        await repository.SaveAsync(currentUser.UserId, clock.GetUtcNow(), cancellationToken);
     }
 
-    public async Task RejectAllAsync(CancellationToken cancellationToken)
-    {
-        var now = clock.GetUtcNow();
-        await db.UserMemories.Where(x => x.UserId == currentUser.UserId && x.Status != UserMemoryStatus.Rejected)
-            .ExecuteUpdateAsync(setters => setters
-                .SetProperty(x => x.Status, UserMemoryStatus.Rejected)
-                .SetProperty(x => x.RejectedAt, now)
-                .SetProperty(x => x.UpdatedAt, now), cancellationToken);
-        await IncrementWatermarkAsync(cancellationToken);
-        await db.SaveChangesAsync(cancellationToken);
-    }
+    public Task RejectAllAsync(CancellationToken cancellationToken) =>
+        repository.RejectAllAsync(currentUser.UserId, clock.GetUtcNow(), cancellationToken);
 
     private async Task<UserMemory> FindOwnedAsync(long id, CancellationToken cancellationToken) =>
-        await db.UserMemories.Include(x => x.Evidence)
-            .FirstOrDefaultAsync(x => x.Id == id && x.UserId == currentUser.UserId, cancellationToken)
-        ?? throw new KeyNotFoundException("记忆不存在。");
-
-    private async Task IncrementWatermarkAsync(CancellationToken cancellationToken)
-    {
-        var watermark = await db.UserDataWatermarks.FindAsync([currentUser.UserId], cancellationToken);
-        if (watermark is null)
-        {
-            db.UserDataWatermarks.Add(new UserDataWatermark
-            { UserId = currentUser.UserId, Version = 1, UpdatedAt = clock.GetUtcNow() });
-        }
-        else
-        {
-            watermark.Version++;
-            watermark.UpdatedAt = clock.GetUtcNow();
-        }
-    }
+        await repository.FindAsync(currentUser.UserId, id, cancellationToken) ?? throw new KeyNotFoundException("记忆不存在。");
 
     private static UserMemoryResponse ToResponse(UserMemory x) => new(x.Id, x.Type.ToString(), x.Content,
         x.Confidence, x.Status.ToString(), x.UpdatedAt, x.Evidence.Select(e => e.EventId).Distinct().ToArray());

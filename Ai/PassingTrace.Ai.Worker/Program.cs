@@ -1,8 +1,10 @@
 using Microsoft.EntityFrameworkCore;
 using PassingTrace.Ai.Worker;
+using PassingTrace.Core.Ai;
 using PassingTrace.Events.Api.Ai;
 using PassingTrace.Events.Api.Media;
 using PassingTrace.Infrastructure;
+using PassingTrace.Infrastructure.Persistence.Ai;
 using Pgvector.EntityFrameworkCore;
 
 var builder = Host.CreateApplicationBuilder(args);
@@ -22,6 +24,9 @@ builder.Services.AddSingleton<AiClientFactory>();
 builder.Services.AddSingleton(provider => provider.GetRequiredService<AiClientFactory>().SemanticChatClient);
 builder.Services.AddSingleton(provider => provider.GetRequiredService<AiClientFactory>().EmbeddingGenerator);
 builder.Services.AddScoped<SemanticPipeline>();
+builder.Services.AddScoped<ISemanticPipelineRepository, SemanticPipelineRepository>();
+builder.Services.AddScoped<IAnalysisJobRepository, AnalysisJobRepository>();
+builder.Services.AddScoped<IAnalysisOutbox, AnalysisOutbox>();
 builder.Services.AddSingleton<ImageDerivativeProcessor>();
 builder.Services.AddHostedService<AnalysisWorker>();
 

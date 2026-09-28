@@ -1,3 +1,4 @@
+using PassingTrace.Infrastructure.Persistence.Ai;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;

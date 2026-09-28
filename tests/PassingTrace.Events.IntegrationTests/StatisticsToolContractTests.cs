@@ -1,3 +1,4 @@
+using PassingTrace.Infrastructure.Persistence.Ai;
 using System.Runtime.CompilerServices;
 using System.Security.Claims;
 using System.Text.Json;
@@ -112,7 +113,7 @@ public sealed class StatisticsToolContractTests
         {
             User = new ClaimsPrincipal(new ClaimsIdentity([new Claim("sub", "91999")], "test")),
         };
-        tools = new PersonalRecordTools(db, new CurrentUserContext(new HttpContextAccessor { HttpContext = context }),
+        tools = new PersonalRecordTools(new PersonalRecordQueries(db), new CurrentUserContext(new HttpContextAccessor { HttpContext = context }),
             new UnavailableEmbeddingGenerator());
         return new PersonalRecordsCapabilityPackage(tools).CreateTools().OfType<AIFunction>()
             .Single(tool => tool.Name == "AggregateMyRecords");

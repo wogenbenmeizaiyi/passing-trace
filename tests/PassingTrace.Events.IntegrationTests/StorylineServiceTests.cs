@@ -1,3 +1,4 @@
+using PassingTrace.Infrastructure.Persistence.Ai;
 using Microsoft.EntityFrameworkCore;
 using PassingTrace.Core.Ai;
 using PassingTrace.Core.Events;
@@ -267,7 +268,7 @@ public sealed class StorylineServiceTests : IClassFixture<StorylinePostgresFixtu
         await _db.SaveChangesAsync();
 
         var snapshot = await ConversationContextSnapshot.LoadAsync(
-            _db, 501, conversation.Id, long.MaxValue, now, default);
+            new AiConversationRepository(_db), 501, conversation.Id, long.MaxValue, now, default);
 
         Assert.Equal("用户在追问上一轮问题。", snapshot.Summary);
         var recent = Assert.Single(snapshot.RecentMessages);

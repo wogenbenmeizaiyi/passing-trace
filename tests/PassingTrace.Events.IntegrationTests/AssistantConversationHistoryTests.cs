@@ -1,3 +1,4 @@
+using PassingTrace.Infrastructure.Persistence.Ai;
 using System.Data.Common;
 using System.Reflection;
 using System.Security.Claims;
@@ -49,11 +50,11 @@ public sealed class AssistantConversationHistoryTests(StorylinePostgresFixture f
         await _db.SaveChangesAsync();
         _probe.Commands.Clear();
 
-        var first = await AssistantConversationHistory.ListPageAsync(_db, userId, 2, null, default);
+        var first = await AssistantConversationHistory.ListPageAsync(new AiConversationRepository(_db), userId, 2, null, default);
         Assert.Equal(2, first.Items.Count);
         Assert.NotNull(first.NextCursor);
-        var second = await AssistantConversationHistory.ListPageAsync(_db, userId, 2, first.NextCursor, default);
-        var third = await AssistantConversationHistory.ListPageAsync(_db, userId, 2, second.NextCursor, default);
+        var second = await AssistantConversationHistory.ListPageAsync(new AiConversationRepository(_db), userId, 2, first.NextCursor, default);
+        var third = await AssistantConversationHistory.ListPageAsync(new AiConversationRepository(_db), userId, 2, second.NextCursor, default);
         var rows = first.Items.Concat(second.Items).Concat(third.Items).ToArray();
         Assert.Equal(5, rows.Length);
         Assert.Equal(5, rows.Select(x => x.Id).Distinct().Count());
@@ -79,24 +80,24 @@ public sealed class AssistantConversationHistoryTests(StorylinePostgresFixture f
         _db.AiConversations.Add(conversation);
         await _db.SaveChangesAsync();
 
-        var first = await AssistantConversationHistory.GetMessagesPageAsync(_db, userId, conversation.Id, 30, null, default);
+        var first = await AssistantConversationHistory.GetMessagesPageAsync(new AiConversationRepository(_db), userId, conversation.Id, 30, null, default);
         Assert.NotNull(first);
         Assert.Equal(30, first.Items.Count);
         Assert.True(first.HasMore);
         Assert.Equal("message-35", first.Items[0].Content);
         Assert.Equal("message-64", first.Items[^1].Content);
-        var second = await AssistantConversationHistory.GetMessagesPageAsync(_db, userId, conversation.Id, 30, first.NextBeforeId, default);
-        var third = await AssistantConversationHistory.GetMessagesPageAsync(_db, userId, conversation.Id, 30, second!.NextBeforeId, default);
+        var second = await AssistantConversationHistory.GetMessagesPageAsync(new AiConversationRepository(_db), userId, conversation.Id, 30, first.NextBeforeId, default);
+        var third = await AssistantConversationHistory.GetMessagesPageAsync(new AiConversationRepository(_db), userId, conversation.Id, 30, second!.NextBeforeId, default);
         Assert.NotNull(third);
         Assert.Equal(5, third.Items.Count);
         Assert.False(third.HasMore);
         Assert.Null(third.NextBeforeId);
         Assert.Equal(65, first.Items.Concat(second.Items).Concat(third.Items).Select(x => x.Id).Distinct().Count());
-        Assert.Null(await AssistantConversationHistory.GetMessagesPageAsync(_db, userId + 1, conversation.Id, 30, null, default));
-        Assert.Null(await AssistantConversationHistory.GetSummaryAsync(_db, userId + 1, conversation.Id, default));
+        Assert.Null(await AssistantConversationHistory.GetMessagesPageAsync(new AiConversationRepository(_db), userId + 1, conversation.Id, 30, null, default));
+        Assert.Null(await AssistantConversationHistory.GetSummaryAsync(new AiConversationRepository(_db), userId + 1, conversation.Id, default));
         conversation.DeletedAt = now;
         await _db.SaveChangesAsync();
-        Assert.Null(await AssistantConversationHistory.GetMessagesPageAsync(_db, userId, conversation.Id, 30, null, default));
+        Assert.Null(await AssistantConversationHistory.GetMessagesPageAsync(new AiConversationRepository(_db), userId, conversation.Id, 30, null, default));
     }
 
     [Fact]
@@ -107,11 +108,11 @@ public sealed class AssistantConversationHistoryTests(StorylinePostgresFixture f
         for (var index = 0; index < 55; index++)
             _db.AiConversations.Add(Conversation(userId, now));
         await _db.SaveChangesAsync();
-        var page = await AssistantConversationHistory.ListPageAsync(_db, userId, 100_000, null, default);
+        var page = await AssistantConversationHistory.ListPageAsync(new AiConversationRepository(_db), userId, 100_000, null, default);
         Assert.Equal(50, page.Items.Count);
         Assert.NotNull(page.NextCursor);
         await Assert.ThrowsAsync<ArgumentException>(() =>
-            AssistantConversationHistory.ListPageAsync(_db, userId, 20, "not-a-cursor", default));
+            AssistantConversationHistory.ListPageAsync(new AiConversationRepository(_db), userId, 20, "not-a-cursor", default));
     }
 
     [Fact]
@@ -203,7 +204,7 @@ public sealed class AssistantConversationHistoryTests(StorylinePostgresFixture f
                 User = new ClaimsPrincipal(new ClaimsIdentity([new Claim("sub", userId.ToString())], "test")),
             }
         };
-        return new AssistantService(_db, new CurrentUserContext(accessor), null!, null!, [], client,
+        return new AssistantService(new AiConversationRepository(_db), new CurrentUserContext(accessor), null!, null!, [], client,
             null!, Options.Create(new AiModelOptions()), NullLoggerFactory.Instance,
             new ServiceCollection().BuildServiceProvider(), TimeProvider.System);
     }

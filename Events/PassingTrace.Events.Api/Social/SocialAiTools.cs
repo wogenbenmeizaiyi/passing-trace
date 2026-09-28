@@ -1,11 +1,10 @@
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
-using Microsoft.EntityFrameworkCore;
+using PassingTrace.Core.Ai;
 using Microsoft.Extensions.AI;
 using PassingTrace.Core.Events;
 using PassingTrace.Events.Api.Ai;
 using PassingTrace.Events.Api.Ai.Capabilities;
-using PassingTrace.Infrastructure;
 
 namespace PassingTrace.Events.Api.Social;
 
@@ -15,7 +14,7 @@ public sealed record FriendActivityResult(DateTimeOffset From, DateTimeOffset To
     IReadOnlyList<FriendActivity> Items);
 public sealed record SharedEvidence(Guid ShareId, string Title, string AuthorId, string Snippet, string AccessPath);
 
-public sealed class SocialAiTools(TraceDbContext db, CurrentUserContext currentUser, FriendService friends,
+public sealed class SocialAiTools(ISocialAiQueries queries, CurrentUserContext currentUser, FriendService friends,
     SharedContentService content, TimeProvider clock)
 {
     private readonly List<FriendView> _friends = [];
@@ -68,15 +67,9 @@ public sealed class SocialAiTools(TraceDbContext db, CurrentUserContext currentU
         var results = new List<FriendActivity>();
         foreach (var friend in all)
         {
-            var other = long.Parse(friend.Person.Id);
-            var query = content.ReadableEvents(me).AsNoTracking().Where(e => e.UserId == other ||
-                db.EventParticipants.Any(p => p.EventId == e.Id && p.UserId == other && p.Active && db.Friendships.Any(f => f.Id == p.FriendshipId && f.Active)));
-            var completed = query.Where(e => e.Status == EventStatus.Completed && e.HappenedAt >= start && e.HappenedAt <= end);
-            var count = await completed.LongCountAsync(cancellationToken);
-            var recent = await completed.OrderByDescending(x => x.HappenedAt).ThenByDescending(x => x.Id).Take(5).ToListAsync(cancellationToken);
-            var planned = await query.LongCountAsync(e => e.Status == EventStatus.Planned && e.PlannedAt >= start && e.PlannedAt <= end, cancellationToken);
-            var undated = await query.LongCountAsync(e => e.Status == EventStatus.Completed && e.HappenedAt == null, cancellationToken);
-            results.Add(new(friend, count, recent.FirstOrDefault()?.HappenedAt, planned, undated, recent.Select(e => new RecordEvidence(
+            var activity = await queries.ReadFriendActivitiesAsync(me, friend.Id, start, end, cancellationToken);
+            var recent = activity.RecentRecords;
+            results.Add(new(friend, activity.RecordCount, recent.FirstOrDefault()?.HappenedAt, activity.PlannedCount, activity.UndatedCount, recent.Select(e => new RecordEvidence(
                 e.Id, e.CurrentSourceRevision, e.Title, e.RawContent is { Length: > 240 } raw ? raw[..240] : e.RawContent ?? "",
                 null, e.HappenedAt, e.CreatedAt, 1, AuthorId: e.UserId.ToString(), AccessPath: e.UserId == me ? null : $"/joint-records/{e.Id}")).ToArray()));
         }
@@ -92,11 +85,7 @@ public sealed class SocialAiTools(TraceDbContext db, CurrentUserContext currentU
     {
         if (!_sharedRequested) return [];
         var me = currentUser.UserId;
-        var q = db.ContentShares.AsNoTracking().Where(x => x.RecipientId == me && x.RevokedAt == null &&
-            db.Friendships.Any(f => f.Id == x.FriendshipId && f.Active));
-        if (friendshipId != null) q = q.Where(x => x.FriendshipId == friendshipId);
-        if (!string.IsNullOrWhiteSpace(query)) q = q.Where(x => x.SearchText.Contains(query));
-        var candidates = await q.OrderByDescending(x => x.CreatedAt).Take(Math.Clamp(limit, 1, 20)).Select(x => x.Id).ToListAsync(cancellationToken);
+        var candidates = await queries.SearchSharesAsync(me, query, friendshipId, limit, cancellationToken);
         var result = new List<SharedEvidence>();
         foreach (var id in candidates)
         {

@@ -1,3 +1,4 @@
+using PassingTrace.Infrastructure.Persistence.Ai;
 using System.Data.Common;
 using System.Reflection;
 using System.Runtime.CompilerServices;
@@ -60,7 +61,7 @@ public sealed class AssistantSkillServiceTests(StorylinePostgresFixture fixture)
         db.AiConversations.Add(conversation);
         await db.SaveChangesAsync();
         probe.Commands.Clear();
-        var personal = new PersonalRecordTools(db, user, new NoEmbedding());
+        var personal = new PersonalRecordTools(new PersonalRecordQueries(db), user, new NoEmbedding());
         var maps = new AmapAiTools(new NoMaps(), new NoQuota(), TimeProvider.System);
         using var model = new ScenarioModel(question, skill, answer);
         // Only cache reads are allowed. A text-only answer must never be written to the 24-hour evidence cache.
@@ -69,7 +70,7 @@ public sealed class AssistantSkillServiceTests(StorylinePostgresFixture fixture)
         var redis = StrictProxy.Create<IConnectionMultiplexer>(method => method.Name == "GetDatabase"
             ? cache : throw new InvalidOperationException("Unexpected Redis operation."));
         using var services = new ServiceCollection().BuildServiceProvider();
-        var service = new AssistantService(db, user, personal, maps, [new PersonalRecordsCapabilityPackage(personal)],
+        var service = new AssistantService(new AiConversationRepository(db), user, personal, maps, [new PersonalRecordsCapabilityPackage(personal)],
             model, redis, Options.Create(new AiModelOptions()), NullLoggerFactory.Instance, services, TimeProvider.System);
 
         var stream = new List<AssistantStreamEvent>();

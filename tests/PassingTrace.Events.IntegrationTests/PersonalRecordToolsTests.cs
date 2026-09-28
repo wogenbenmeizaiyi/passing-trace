@@ -1,3 +1,4 @@
+using PassingTrace.Infrastructure.Persistence.Ai;
 using System.Security.Claims;
 using System.Text.Json;
 using Microsoft.AspNetCore.Http;
@@ -66,7 +67,7 @@ public sealed class PersonalRecordToolsTests : IClassFixture<StorylinePostgresFi
         _db.Events.Add(evt);
         await _db.SaveChangesAsync();
 
-        var tools = new PersonalRecordTools(_db, CreateCurrentUser(userId), new UnavailableEmbeddingGenerator());
+        var tools = new PersonalRecordTools(new PersonalRecordQueries(_db), CreateCurrentUser(userId), new UnavailableEmbeddingGenerator());
         var search = await tools.SearchMyRecordsAsync("定位出我最近吃过的一家烤肉店", limit: 5);
 
         var place = Assert.Single(search.Places!);
@@ -99,7 +100,7 @@ public sealed class PersonalRecordToolsTests : IClassFixture<StorylinePostgresFi
         AddExpenseEvent(userId, 700m).SemanticRuns[0].Status = SemanticRunStatus.Failed;
         await _db.SaveChangesAsync();
         _db.ChangeTracker.Clear();
-        var tools = new PersonalRecordTools(_db, CreateCurrentUser(userId), new UnavailableEmbeddingGenerator());
+        var tools = new PersonalRecordTools(new PersonalRecordQueries(_db), CreateCurrentUser(userId), new UnavailableEmbeddingGenerator());
         var function = new PersonalRecordsCapabilityPackage(tools).CreateTools().OfType<AIFunction>()
             .Single(tool => tool.Name == "AggregateMyRecords");
 
@@ -131,7 +132,7 @@ public sealed class PersonalRecordToolsTests : IClassFixture<StorylinePostgresFi
     [InlineData("plan_completion_rate")]
     public async Task Every_registered_metric_is_invocable_as_a_stable_json_string(string metric)
     {
-        var tools = new PersonalRecordTools(_db, CreateCurrentUser(91_099), new UnavailableEmbeddingGenerator());
+        var tools = new PersonalRecordTools(new PersonalRecordQueries(_db), CreateCurrentUser(91_099), new UnavailableEmbeddingGenerator());
         var function = new PersonalRecordsCapabilityPackage(tools).CreateTools().OfType<AIFunction>()
             .Single(tool => tool.Name == "AggregateMyRecords");
         var result = Assert.IsType<JsonElement>(await function.InvokeAsync(new AIFunctionArguments
@@ -152,7 +153,7 @@ public sealed class PersonalRecordToolsTests : IClassFixture<StorylinePostgresFi
         AddExpenseEvent(userId, 888m, deleted: true);
         await _db.SaveChangesAsync();
         _db.ChangeTracker.Clear();
-        var tools = new PersonalRecordTools(_db, CreateCurrentUser(userId), new UnavailableEmbeddingGenerator());
+        var tools = new PersonalRecordTools(new PersonalRecordQueries(_db), CreateCurrentUser(userId), new UnavailableEmbeddingGenerator());
         await using var session = await InternalMcpToolSession.CreateAsync(
             new PersonalRecordsCapabilityPackage(tools).CreateTools().OfType<AIFunction>());
         var function = session.Tools.OfType<AIFunction>().Single(x => x.Name == "AggregateMyRecords");
@@ -177,7 +178,7 @@ public sealed class PersonalRecordToolsTests : IClassFixture<StorylinePostgresFi
         AddExpenseEvent(userId, 1m).CreatedAt = new DateTimeOffset(2025, 12, 1, 0, 0, 0, TimeSpan.Zero);
         AddExpenseEvent(userId, 1m).CreatedAt = new DateTimeOffset(2025, 12, 2, 0, 0, 0, TimeSpan.Zero);
         await _db.SaveChangesAsync();
-        var tools = new PersonalRecordTools(_db, CreateCurrentUser(userId), new UnavailableEmbeddingGenerator());
+        var tools = new PersonalRecordTools(new PersonalRecordQueries(_db), CreateCurrentUser(userId), new UnavailableEmbeddingGenerator());
         var result = await tools.AggregateMyRecordsAsync(RecordAggregateMetric.Trend);
         using var aggregate = JsonDocument.Parse(result.Aggregate!);
         var points = aggregate.RootElement.GetProperty("points").EnumerateArray().ToArray();
@@ -196,7 +197,7 @@ public sealed class PersonalRecordToolsTests : IClassFixture<StorylinePostgresFi
         AddExpenseEvent(userId, 38m).HappenedAt = calendar.CurrentMonth.To.ToUniversalTime();
         AddExpenseEvent(userId, 800m).HappenedAt = calendar.CurrentMonth.To.ToUniversalTime().AddTicks(10);
         await _db.SaveChangesAsync();
-        var tools = new PersonalRecordTools(_db, CreateCurrentUser(userId), new UnavailableEmbeddingGenerator());
+        var tools = new PersonalRecordTools(new PersonalRecordQueries(_db), CreateCurrentUser(userId), new UnavailableEmbeddingGenerator());
         tools.ConfigureCalendarContext(calendar, "统计一下这个月消费金额");
 
         var result = await tools.AggregateMyRecordsAsync(RecordAggregateMetric.ExpenseTotal,
@@ -219,7 +220,7 @@ public sealed class PersonalRecordToolsTests : IClassFixture<StorylinePostgresFi
         AddExpenseEvent(userId, 40m).HappenedAt = DateTimeOffset.Parse("2026-09-05T02:00:00Z");
         await _db.SaveChangesAsync();
         var calendar = AssistantCalendarContext.Create(DateTimeOffset.Parse("2026-09-14T02:00:00Z"));
-        var tools = new PersonalRecordTools(_db, CreateCurrentUser(userId), new UnavailableEmbeddingGenerator());
+        var tools = new PersonalRecordTools(new PersonalRecordQueries(_db), CreateCurrentUser(userId), new UnavailableEmbeddingGenerator());
         tools.ConfigureCalendarContext(calendar, "2025年1月，把这个月的消费统计一下");
         var historical = await tools.AggregateMyRecordsAsync(RecordAggregateMetric.ExpenseTotal,
             "2025-01-01T00:00:00+08:00", "2025-01-31T23:59:59+08:00");
@@ -240,7 +241,7 @@ public sealed class PersonalRecordToolsTests : IClassFixture<StorylinePostgresFi
         var evt = AddExpenseEvent(userId, 20m);
         evt.SemanticRuns.Clear();
         await _db.SaveChangesAsync();
-        var tools = new PersonalRecordTools(_db, CreateCurrentUser(userId), new UnavailableEmbeddingGenerator());
+        var tools = new PersonalRecordTools(new PersonalRecordQueries(_db), CreateCurrentUser(userId), new UnavailableEmbeddingGenerator());
 
         var result = await tools.AggregateMyRecordsAsync(RecordAggregateMetric.ExpenseTotal);
 
@@ -257,7 +258,7 @@ public sealed class PersonalRecordToolsTests : IClassFixture<StorylinePostgresFi
         const long userId = 91_204;
         AddExpenseEvent(userId, 0m);
         await _db.SaveChangesAsync();
-        var tools = new PersonalRecordTools(_db, CreateCurrentUser(userId), new UnavailableEmbeddingGenerator());
+        var tools = new PersonalRecordTools(new PersonalRecordQueries(_db), CreateCurrentUser(userId), new UnavailableEmbeddingGenerator());
 
         var result = await tools.AggregateMyRecordsAsync(RecordAggregateMetric.ExpenseTotal);
 
@@ -279,7 +280,7 @@ public sealed class PersonalRecordToolsTests : IClassFixture<StorylinePostgresFi
         AddExpenseEvent(userId, 999m, currency: "USD");
         AddExpenseEvent(userId + 1, 999m);
         await _db.SaveChangesAsync();
-        var tools = new PersonalRecordTools(_db, CreateCurrentUser(userId), new UnavailableEmbeddingGenerator());
+        var tools = new PersonalRecordTools(new PersonalRecordQueries(_db), CreateCurrentUser(userId), new UnavailableEmbeddingGenerator());
         var result = await tools.AggregateMyRecordsAsync(RecordAggregateMetric.ExpenseTotal, tag: "amount");
         using var aggregate = JsonDocument.Parse(result.Aggregate!);
         Assert.Equal(80m, aggregate.RootElement.GetProperty("value").GetDecimal());

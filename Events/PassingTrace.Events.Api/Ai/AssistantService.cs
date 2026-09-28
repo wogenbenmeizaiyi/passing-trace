@@ -4,21 +4,19 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
 using Microsoft.Agents.AI;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Options;
 using PassingTrace.Core.Ai;
 using PassingTrace.Events.Api.Ai.Amap;
 using PassingTrace.Events.Api.Ai.Capabilities;
 using PassingTrace.Events.Api.Ai.Skills;
-using PassingTrace.Infrastructure;
 using StackExchange.Redis;
 using PassingTrace.Events.Api.Social;
 
 namespace PassingTrace.Events.Api.Ai;
 
 public sealed class AssistantService(
-    TraceDbContext db,
+    IAiConversationRepository repository,
     CurrentUserContext currentUser,
     PersonalRecordTools tools,
     AmapAiTools amapTools,
@@ -36,20 +34,17 @@ public sealed class AssistantService(
         TypeInfoResolver = new DefaultJsonTypeInfoResolver(),
     };
     public async Task<IReadOnlyList<AiConversationResponse>> ListAsync(CancellationToken cancellationToken) =>
-        await db.AiConversations.AsNoTracking()
-            .Where(x => x.UserId == currentUser.UserId && x.DeletedAt == null)
-            .OrderByDescending(x => x.UpdatedAt)
-            .Select(x => new AiConversationResponse(x.Id, x.Title, x.CreatedAt, x.UpdatedAt))
-            .ToListAsync(cancellationToken);
+        (await repository.ListAsync(currentUser.UserId, null, null, cancellationToken))
+            .Select(x => new AiConversationResponse(x.Id, x.Title, x.CreatedAt, x.UpdatedAt)).ToArray();
 
     public Task<AiConversationPageResponse> ListPageAsync(int limit, string? cursor, CancellationToken cancellationToken) =>
-        AssistantConversationHistory.ListPageAsync(db, currentUser.UserId, limit, cursor, cancellationToken);
+        AssistantConversationHistory.ListPageAsync(repository, currentUser.UserId, limit, cursor, cancellationToken);
 
     public Task<AiConversationResponse?> GetSummaryAsync(Guid id, CancellationToken cancellationToken) =>
-        AssistantConversationHistory.GetSummaryAsync(db, currentUser.UserId, id, cancellationToken);
+        AssistantConversationHistory.GetSummaryAsync(repository, currentUser.UserId, id, cancellationToken);
 
     public Task<AiMessagePageResponse?> GetMessagesPageAsync(Guid id, int limit, long? beforeId, CancellationToken cancellationToken) =>
-        AssistantConversationHistory.GetMessagesPageAsync(db, currentUser.UserId, id, limit, beforeId, cancellationToken);
+        AssistantConversationHistory.GetMessagesPageAsync(repository, currentUser.UserId, id, limit, beforeId, cancellationToken);
 
     public async Task<AiConversationResponse> CreateAsync(string? title, CancellationToken cancellationToken)
     {
@@ -62,21 +57,19 @@ public sealed class AssistantService(
             CreatedAt = now,
             UpdatedAt = now,
         };
-        db.AiConversations.Add(conversation);
-        await db.SaveChangesAsync(cancellationToken);
+        repository.Add(conversation);
+        await repository.SaveChangesAsync(cancellationToken);
         return new AiConversationResponse(conversation.Id, conversation.Title, conversation.CreatedAt, conversation.UpdatedAt);
     }
 
     public async Task<AiConversationDetailResponse?> GetAsync(Guid id, CancellationToken cancellationToken)
     {
-        var conversation = await db.AiConversations.AsNoTracking()
-            .Include(x => x.Messages.OrderBy(m => m.Id))
-            .FirstOrDefaultAsync(x => x.Id == id && x.UserId == currentUser.UserId && x.DeletedAt == null, cancellationToken);
+        var conversation = await repository.ReadHeaderAsync(currentUser.UserId, id, cancellationToken);
         if (conversation is null) return null;
         var messages = new List<AiMessageResponse>();
-        foreach (var x in conversation.Messages)
+        foreach (var x in await repository.ReadMessagesAsync(currentUser.UserId, id, new(), cancellationToken))
             messages.Add(new AiMessageResponse(x.Id, x.Role.ToString(), x.Content, x.CreatedAt,
-                await SocialEvidenceGuard.ReadAsync(db, currentUser.UserId, x.EvidenceSnapshotJson, cancellationToken)));
+                await SocialEvidenceGuard.ReadAsync(repository, currentUser.UserId, x.EvidenceSnapshotJson, cancellationToken)));
         return new AiConversationDetailResponse(conversation.Id, conversation.Title, conversation.CreatedAt,
             conversation.UpdatedAt, messages);
     }
@@ -86,7 +79,7 @@ public sealed class AssistantService(
         var conversation = await FindOwnedAsync(id, cancellationToken);
         conversation.DeletedAt = clock.GetUtcNow();
         conversation.UpdatedAt = clock.GetUtcNow();
-        await db.SaveChangesAsync(cancellationToken);
+        await repository.SaveChangesAsync(cancellationToken);
     }
 
     public async IAsyncEnumerable<AssistantStreamEvent> SendAsync(
@@ -104,18 +97,15 @@ public sealed class AssistantService(
         var now = clock.GetUtcNow();
         var calendar = AssistantCalendarContext.Create(now, timezone);
         tools.ConfigureCalendarContext(calendar, content);
-        var watermark = await db.UserDataWatermarks.AsNoTracking()
-            .Where(x => x.UserId == currentUser.UserId)
-            .Select(x => (long?)x.Version).FirstOrDefaultAsync(cancellationToken) ?? 0;
+        var watermark = await repository.ReadWatermarkAsync(currentUser.UserId, cancellationToken);
         var conversationContext = await ConversationContextSnapshot.LoadAsync(
-            db, currentUser.UserId, conversationId, long.MaxValue, now, cancellationToken);
+            repository, currentUser.UserId, conversationId, long.MaxValue, now, cancellationToken);
         socialTools?.Configure(calendar, content, conversationContext.SharedFollowUp);
         amapTools.SeedCandidates(conversationContext.RecentAmapPlaces);
         var cacheKey = BuildCacheKey(
             currentUser.UserId, content, conversationContext.CacheValue, watermark, aiOptions.Value, calendar);
         var cache = redis.GetDatabase();
-        var bypassCache = LooksLikeLiveAmapQuestion(content) || await db.Friendships.AsNoTracking()
-            .AnyAsync(x => x.FirstUserId == currentUser.UserId || x.SecondUserId == currentUser.UserId, cancellationToken);
+        var bypassCache = LooksLikeLiveAmapQuestion(content) || await repository.HasSocialHistoryAsync(currentUser.UserId, cancellationToken);
         var cached = bypassCache ? RedisValue.Null : await cache.StringGetAsync(cacheKey);
 
         var userMessage = new AiMessage
@@ -127,9 +117,9 @@ public sealed class AssistantService(
             CreatedAt = now,
             ExpiresAt = now.AddDays(30),
         };
-        db.AiMessages.Add(userMessage);
+        repository.Add(userMessage);
         conversation.UpdatedAt = now;
-        await db.SaveChangesAsync(cancellationToken);
+        await repository.SaveChangesAsync(cancellationToken);
 
         var cachedAnswer = ReadUsableCachedAnswer(cached);
         if (cachedAnswer is not null)
@@ -264,7 +254,7 @@ public sealed class AssistantService(
     }
 
     private async Task<AiConversation> FindOwnedAsync(Guid id, CancellationToken cancellationToken) =>
-        await db.AiConversations.FirstOrDefaultAsync(x => x.Id == id && x.UserId == currentUser.UserId && x.DeletedAt == null, cancellationToken)
+        await repository.FindAsync(currentUser.UserId, id, cancellationToken)
         ?? throw new KeyNotFoundException("对话不存在。");
 
     private async Task SaveAssistantAsync(AiConversation conversation, string answer, EvidenceBundle evidence, long watermark, CancellationToken cancellationToken)
@@ -283,9 +273,9 @@ public sealed class AssistantService(
             CreatedAt = now,
             ExpiresAt = now.AddDays(30),
         };
-        db.AiMessages.Add(message);
+        repository.Add(message);
         conversation.UpdatedAt = now;
-        await db.SaveChangesAsync(cancellationToken);
+        await repository.SaveChangesAsync(cancellationToken);
         try
         {
             await TryCreateTitleAsync(conversation, message, cancellationToken);
@@ -301,46 +291,23 @@ public sealed class AssistantService(
     private async Task TryCreateTitleAsync(AiConversation conversation, AiMessage answer, CancellationToken cancellationToken)
     {
         if (conversation.Title != AssistantConversationTitle.DefaultTitle) return;
-        var previousAnswerExists = await db.AiMessages.AsNoTracking().AnyAsync(
-            x => x.ConversationId == conversation.Id && x.UserId == currentUser.UserId &&
-                x.Role == AiMessageRole.Assistant && x.Id < answer.Id, cancellationToken);
-        if (previousAnswerExists) return;
-        var question = await db.AiMessages.AsNoTracking()
-            .Where(x => x.ConversationId == conversation.Id && x.UserId == currentUser.UserId &&
-                x.Role == AiMessageRole.User && x.Id < answer.Id)
-            .OrderByDescending(x => x.Id).Select(x => x.Content).FirstOrDefaultAsync(cancellationToken);
+        if (await repository.HasEarlierAnswerAsync(currentUser.UserId, conversation.Id, answer.Id, cancellationToken)) return;
+        var question = await repository.ReadLatestQuestionAsync(currentUser.UserId, conversation.Id, answer.Id, cancellationToken);
         if (question is null) return;
         // 先持久化安全回退标题，网络重试或后续聊天不会重复触发付费标题生成。
         var fallback = AssistantConversationTitle.Fallback(question);
-        var claimed = await db.AiConversations.Where(x => x.Id == conversation.Id &&
-                x.UserId == currentUser.UserId && x.DeletedAt == null && x.Title == AssistantConversationTitle.DefaultTitle)
-            .ExecuteUpdateAsync(update => update.SetProperty(x => x.Title, fallback), cancellationToken);
-        if (claimed == 0) return;
-        conversation.Title = fallback;
-        db.Entry(conversation).Property(x => x.Title).OriginalValue = fallback;
+        if (!await repository.TryUpdateTitleAsync(conversation, AssistantConversationTitle.DefaultTitle, fallback, cancellationToken)) return;
         var title = await AssistantConversationTitle.GenerateAsync(chatClient, question, answer.Content, cancellationToken);
-        if (title == fallback) return;
-        await db.AiConversations.Where(x => x.Id == conversation.Id && x.UserId == currentUser.UserId &&
-                x.DeletedAt == null && x.Title == fallback)
-            .ExecuteUpdateAsync(update => update.SetProperty(x => x.Title, title), cancellationToken);
-        conversation.Title = title;
-        db.Entry(conversation).Property(x => x.Title).OriginalValue = title;
+        if (title != fallback) await repository.TryUpdateTitleAsync(conversation, fallback, title, cancellationToken);
     }
 
     private async Task TryRefreshSummaryAsync(Guid conversationId, CancellationToken cancellationToken)
     {
         try
         {
-            var summary = await db.ConversationSummaries
-                .FirstOrDefaultAsync(x => x.ConversationId == conversationId && x.UserId == currentUser.UserId,
-                    cancellationToken);
-            var through = summary?.ThroughMessageId ?? 0;
-            var pending = await db.AiMessages.AsNoTracking()
-                .Where(x => x.ConversationId == conversationId && x.UserId == currentUser.UserId && x.Id > through)
-                .OrderBy(x => x.Id)
-                .Take(20)
-                .Select(x => new { x.Id, x.Role, x.Content })
-                .ToListAsync(cancellationToken);
+            var summary = await repository.FindSummaryAsync(currentUser.UserId, conversationId, cancellationToken);
+            var pending = await repository.ReadMessagesAsync(currentUser.UserId, conversationId,
+                new(AfterId: summary?.ThroughMessageId ?? 0, Limit: 20), cancellationToken);
             if (pending.Count < 12) return;
 
             var transcript = string.Join('\n', pending.Select(x => $"{x.Role}: {Limit(x.Content, 2000)}"));
@@ -368,7 +335,7 @@ public sealed class AssistantService(
                     ThroughMessageId = pending[^1].Id,
                     UpdatedAt = now,
                 };
-                db.ConversationSummaries.Add(summary);
+                repository.Add(summary);
             }
             else
             {
@@ -376,7 +343,7 @@ public sealed class AssistantService(
                 summary.ThroughMessageId = pending[^1].Id;
                 summary.UpdatedAt = now;
             }
-            await db.SaveChangesAsync(cancellationToken);
+            await repository.SaveChangesAsync(cancellationToken);
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {

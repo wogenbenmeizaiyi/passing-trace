@@ -1,8 +1,7 @@
+using PassingTrace.Core.Ai;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
-using Microsoft.EntityFrameworkCore;
-using PassingTrace.Infrastructure;
 
 namespace PassingTrace.Events.Api.Ai;
 
@@ -10,54 +9,41 @@ namespace PassingTrace.Events.Api.Ai;
 public static class AssistantConversationHistory
 {
     public static async Task<AiConversationPageResponse> ListPageAsync(
-        TraceDbContext db, long userId, int limit, string? cursor, CancellationToken cancellationToken)
+        IAiConversationRepository repository, long userId, int limit, string? cursor, CancellationToken cancellationToken)
     {
         limit = Math.Clamp(limit, 1, 50);
-        var query = db.AiConversations.AsNoTracking()
-            .Where(x => x.UserId == userId && x.DeletedAt == null);
+        AiConversationCursor? position = null;
         if (cursor is not null)
         {
             var (updatedAt, id) = DecodeCursor(cursor);
-            query = query.Where(x => x.UpdatedAt < updatedAt ||
-                (x.UpdatedAt == updatedAt && x.Id.CompareTo(id) < 0));
+            position = new(updatedAt, id);
         }
-        var rows = await query.OrderByDescending(x => x.UpdatedAt).ThenByDescending(x => x.Id)
-            .Select(x => new AiConversationResponse(x.Id, x.Title, x.CreatedAt, x.UpdatedAt))
-            .Take(limit + 1).ToArrayAsync(cancellationToken);
+        var rows = (await repository.ListAsync(userId, limit + 1, position, cancellationToken))
+            .Select(x => new AiConversationResponse(x.Id, x.Title, x.CreatedAt, x.UpdatedAt)).ToArray();
         var hasMore = rows.Length > limit;
         var items = rows.Take(limit).Select(CleanSummary).ToArray();
         return new AiConversationPageResponse(items, hasMore ? EncodeCursor(items[^1]) : null);
     }
 
     public static async Task<AiConversationResponse?> GetSummaryAsync(
-        TraceDbContext db, long userId, Guid id, CancellationToken cancellationToken)
+        IAiConversationRepository repository, long userId, Guid id, CancellationToken cancellationToken)
     {
-        var result = await db.AiConversations.AsNoTracking()
-            .Where(x => x.UserId == userId && x.Id == id && x.DeletedAt == null)
-            .Select(x => new AiConversationResponse(x.Id, x.Title, x.CreatedAt, x.UpdatedAt))
-            .FirstOrDefaultAsync(cancellationToken);
-        return result is null ? null : CleanSummary(result);
+        var result = await repository.ReadHeaderAsync(userId, id, cancellationToken);
+        return result is null ? null : CleanSummary(new(result.Id, result.Title, result.CreatedAt, result.UpdatedAt));
     }
 
     public static async Task<AiMessagePageResponse?> GetMessagesPageAsync(
-        TraceDbContext db, long userId, Guid id, int limit, long? beforeId, CancellationToken cancellationToken)
+        IAiConversationRepository repository, long userId, Guid id, int limit, long? beforeId, CancellationToken cancellationToken)
     {
         if (beforeId is <= 0) throw new ArgumentOutOfRangeException(nameof(beforeId));
-        if (!await db.AiConversations.AsNoTracking().AnyAsync(
-                x => x.Id == id && x.UserId == userId && x.DeletedAt == null, cancellationToken))
-            return null;
+        if (await repository.ReadHeaderAsync(userId, id, cancellationToken) is null) return null;
         limit = Math.Clamp(limit, 1, 50);
-        var query = db.AiMessages.AsNoTracking()
-            .Where(x => x.ConversationId == id && x.UserId == userId);
-        if (beforeId is not null) query = query.Where(x => x.Id < beforeId.Value);
-        var rows = await query.OrderByDescending(x => x.Id)
-            .Select(x => new { x.Id, x.Role, x.Content, x.CreatedAt, x.EvidenceSnapshotJson })
-            .Take(limit + 1).ToArrayAsync(cancellationToken);
-        var hasMore = rows.Length > limit;
+        var rows = await repository.ReadMessagesAsync(userId, id, new(BeforeId: beforeId, Limit: limit + 1, NewestFirst: true), cancellationToken);
+        var hasMore = rows.Count > limit;
         var items = new List<AiMessageResponse>();
         foreach (var x in rows.Take(limit).Reverse())
             items.Add(new AiMessageResponse(x.Id, x.Role.ToString(), x.Content, x.CreatedAt,
-                await Social.SocialEvidenceGuard.ReadAsync(db, userId, x.EvidenceSnapshotJson, cancellationToken)));
+                await Social.SocialEvidenceGuard.ReadAsync(repository, userId, x.EvidenceSnapshotJson, cancellationToken)));
         return new AiMessagePageResponse(items, hasMore, hasMore ? items[0].Id : null);
     }
 
