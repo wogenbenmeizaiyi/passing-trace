@@ -1,3 +1,8 @@
+using PassingTrace.Events.Api.Ai.Assistant;
+using PassingTrace.Events.Api.Ai.Evidence;
+using PassingTrace.Events.Api.Ai.Models;
+using PassingTrace.Events.Api.Ai.Tools.Queries;
+using PassingTrace.Events.Api.Common;
 using PassingTrace.Infrastructure.Persistence.Ai;
 using System.Data.Common;
 using System.Reflection;
@@ -11,7 +16,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using PassingTrace.Core.Ai;
-using PassingTrace.Events.Api.Ai;
 using PassingTrace.Events.Api.Ai.Amap;
 using PassingTrace.Events.Api.Ai.Capabilities;
 using PassingTrace.Infrastructure;

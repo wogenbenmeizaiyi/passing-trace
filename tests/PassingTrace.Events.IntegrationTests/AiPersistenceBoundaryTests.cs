@@ -1,7 +1,13 @@
+using PassingTrace.Events.Api.Ai.Assistant;
+using PassingTrace.Events.Api.Ai.Assistant.Context;
+using PassingTrace.Events.Api.Ai.Memories;
+using PassingTrace.Events.Api.Ai.Mutations;
+using PassingTrace.Events.Api.Ai.Semantics;
+using PassingTrace.Events.Api.Ai.Tools.Mutations;
+using PassingTrace.Events.Api.Ai.Tools.Queries;
 using System.Reflection;
 using PassingTrace.Ai.Worker;
 using PassingTrace.Core.Ai;
-using PassingTrace.Events.Api.Ai;
 using PassingTrace.Events.Api.Social;
 using Xunit;
 
@@ -15,7 +21,8 @@ public sealed class AiPersistenceBoundaryTests
         Type[] applicationTypes = [typeof(PersonalRecordTools), typeof(AssistantService), typeof(UserMemoryService),
             typeof(EventSemanticService), typeof(EventSemanticController), typeof(AssistantConversationHistory),
             typeof(ConversationContextSnapshot), typeof(SocialAiTools), typeof(SocialEvidenceGuard),
-            typeof(SemanticPipeline), typeof(AnalysisWorker)];
+            typeof(SemanticPipeline), typeof(AnalysisWorker), typeof(PersonalMutationTools), typeof(AiMutationService),
+            typeof(AssistantAnswerCache)];
         foreach (var type in applicationTypes)
         {
             var signatures = type.GetConstructors().SelectMany(x => x.GetParameters()).Select(x => x.ParameterType)
@@ -32,7 +39,7 @@ public sealed class AiPersistenceBoundaryTests
     {
         Type[] ports = [typeof(IPersonalRecordQueries), typeof(IAiConversationRepository), typeof(IUserMemoryRepository),
             typeof(IEventSemanticRepository), typeof(ISocialAiQueries), typeof(IAiEvidenceQueries), typeof(IAnalysisOutbox),
-            typeof(ISemanticPipelineRepository), typeof(IAnalysisJobRepository)];
+            typeof(ISemanticPipelineRepository), typeof(IAnalysisJobRepository), typeof(IAiMutationRepository)];
         foreach (var port in ports)
             Assert.All(port.GetMethods().SelectMany(x => x.GetParameters().Select(p => p.ParameterType).Append(x.ReturnType)).SelectMany(Expand),
                 dependency => Assert.False(IsDatabaseType(dependency), $"{port.Name} exposes {dependency.FullName}."));

@@ -1,10 +1,10 @@
+using PassingTrace.Events.Api.Ai.Assistant.Context;
 using PassingTrace.Infrastructure.Persistence.Ai;
 using Microsoft.EntityFrameworkCore;
 using PassingTrace.Core.Ai;
 using PassingTrace.Core.Events;
 using PassingTrace.Core.Media;
 using PassingTrace.Core.Storylines;
-using PassingTrace.Events.Api.Ai;
 using PassingTrace.Events.Api.Storylines;
 using PassingTrace.Infrastructure;
 using Pgvector.EntityFrameworkCore;

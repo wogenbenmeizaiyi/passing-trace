@@ -1,3 +1,5 @@
+using PassingTrace.Events.Api.Ai.Tools.Queries;
+using PassingTrace.Events.Api.Common;
 using PassingTrace.Infrastructure.Persistence.Ai;
 using System.Security.Claims;
 using System.Text.Json;
@@ -5,7 +7,6 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 using ModelContextProtocol.Server;
-using PassingTrace.Events.Api.Ai;
 using PassingTrace.Events.Api.Ai.Capabilities;
 using PassingTrace.Infrastructure;
 using Pgvector.EntityFrameworkCore;

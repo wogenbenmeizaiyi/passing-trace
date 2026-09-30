@@ -1,7 +1,7 @@
+using PassingTrace.Events.Api.Ai.Models;
 using Microsoft.EntityFrameworkCore;
 using PassingTrace.Ai.Worker;
 using PassingTrace.Core.Ai;
-using PassingTrace.Events.Api.Ai;
 using PassingTrace.Events.Api.Media;
 using PassingTrace.Infrastructure;
 using PassingTrace.Infrastructure.Persistence.Ai;

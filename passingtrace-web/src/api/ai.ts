@@ -134,6 +134,37 @@ export type StreamEvent =
   | { type: 'action'; data: AssistantAction }
   | { type: 'done'; data: { cached: boolean; watermark: number } }
   | { type: 'error'; data: { message: string } }
+  | { type: 'mutation-result'; data: MutationResult }
+  | { type: 'approval-request'; data: ApprovalRequest }
+
+export interface MutationResult {
+  operationId: string
+  operation: string
+  state: string
+  targets: Array<{
+    type: 'Record' | 'Plan' | 'Storyline'
+    id: string
+    title: string
+    revision: number
+  }>
+  message: ConversationDetail['messages'][number]
+}
+
+export interface ApprovalRequest {
+  id: string
+  conversationId: string
+  targetType: 'Record' | 'Plan' | 'Storyline'
+  targetId: string
+  title: string
+  description: string
+  expiresAt: string
+}
+
+export interface ApprovalDecision {
+  id: string
+  state: string
+  result: MutationResult
+}
 
 function apiUrl(path: string) {
   const base = (import.meta.env.VITE_EVENTS_API_BASE_URL ?? '').replace(/\/$/, '')
@@ -141,6 +172,13 @@ function apiUrl(path: string) {
 }
 
 export const aiApi = {
+  listApprovals: (id: string) =>
+    httpClient.get<ApprovalRequest[]>(`/api/v1/ai/conversations/${id}/approvals`),
+  decideApproval: (id: string, approvalId: string, decision: 'confirm' | 'cancel') =>
+    httpClient.post<ApprovalDecision>(
+      `/api/v1/ai/conversations/${id}/approvals/${approvalId}/decision`,
+      { body: { decision } },
+    ),
   listConversations: () => httpClient.get<ConversationSummary[]>('/api/v1/ai/conversations'),
   listConversationsPage: (cursor?: string | null) =>
     httpClient.get<ConversationPage>('/api/v1/ai/conversations/page', {

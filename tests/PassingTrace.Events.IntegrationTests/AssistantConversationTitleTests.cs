@@ -1,5 +1,5 @@
+using PassingTrace.Events.Api.Ai.Assistant;
 using Microsoft.Extensions.AI;
-using PassingTrace.Events.Api.Ai;
 using Xunit;
 
 namespace PassingTrace.Events.IntegrationTests;

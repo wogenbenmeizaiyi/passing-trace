@@ -1,3 +1,4 @@
+using PassingTrace.Events.Api.Ai.Evidence;
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
 using Microsoft.Extensions.AI;
@@ -21,7 +22,7 @@ public sealed class AssistantSkillSession
     public bool Allows(string toolName) => _loaded.Any(key => AssistantSkillCatalog.Find(key)!.Tools.Contains(toolName));
     public bool HasSuccessfulLookup => _successfulTools.Count > 0;
     public bool CanCacheAnswer => HasSuccessfulLookup && !_loaded.Overlaps(
-        ["amap", "friends", "shared-content", "conversation", "conversation-summary", "planning"]);
+        ["amap", "friends", "shared-content", "conversation", "conversation-summary", "planning", "mutations"]);
 
     public AIFunction CreateReader() => AiFunctionToolFactory.Create(this, nameof(ReadAssistantSkill), "ReadAssistantSkill",
         "按当前问题读取应用内场景流程。调用数据或地图工具前必须先读对应 Skill；普通问候无需调用。只接受目录中的 key，不接收路径或 URL。");
@@ -46,7 +47,7 @@ public sealed class AssistantSkillSession
         (evidence.Friends?.Count ?? 0) == 0 && evidence.FriendActivities is null &&
         (evidence.SharedContents?.Count ?? 0) == 0 && (evidence.AmapPlaces?.Count ?? 0) == 0 &&
         (evidence.AmapResults?.Count ?? 0) == 0 && (evidence.Actions?.Count ?? 0) == 0 &&
-        !_loaded.Overlaps(["conversation", "conversation-summary", "planning", "amap"]);
+        !_loaded.Overlaps(["conversation", "conversation-summary", "planning", "amap", "mutations"]);
 
     private sealed class SkillGuardedFunction(AIFunction inner, AssistantSkillSession session) : DelegatingAIFunction(inner)
     {

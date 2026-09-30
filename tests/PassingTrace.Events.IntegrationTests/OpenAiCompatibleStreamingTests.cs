@@ -1,3 +1,4 @@
+using PassingTrace.Events.Api.Ai.Models;
 using System.ClientModel;
 using System.ClientModel.Primitives;
 using System.Net;
@@ -5,7 +6,6 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.AI;
 using OpenAI;
-using PassingTrace.Events.Api.Ai;
 using Xunit;
 
 namespace PassingTrace.Events.IntegrationTests;

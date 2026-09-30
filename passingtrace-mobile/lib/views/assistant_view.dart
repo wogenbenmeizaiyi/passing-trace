@@ -11,6 +11,7 @@ import '../theme/quiet_trace_icons.dart';
 import '../user_facing_error.dart';
 import 'event_detail_view.dart';
 import 'storyline_detail_view.dart';
+import 'assistant_approval_panel.dart';
 import '../social/social_api.dart';
 import '../social/friends_view.dart';
 import '../social/shared_content_view.dart';
@@ -24,12 +25,14 @@ class AssistantView extends StatefulWidget {
     this.drawer,
     this.bottomNavigationBar,
     this.onSessionExpired,
+    this.apiClient,
   });
   final AuthService auth;
   final AuthSession session;
   final Widget? drawer;
   final Widget? bottomNavigationBar;
   final Future<void> Function()? onSessionExpired;
+  final AiApiClient? apiClient;
 
   @override
   State<AssistantView> createState() => _AssistantViewState();
@@ -113,6 +116,10 @@ class _AssistantViewState extends State<AssistantView> {
   String? _conversationId;
   bool _initialLoading = true;
   bool _busy = false;
+  bool _approvalBusy = false;
+  List<AiApprovalModel> _approvals = [];
+  String? _approvalError;
+  int _conversationRequest = 0;
   String? _error;
 
   @override
@@ -122,8 +129,12 @@ class _AssistantViewState extends State<AssistantView> {
   }
 
   Future<void> _initialize() async {
-    final baseUrl = await widget.auth.getEventsApiBaseUrl();
-    _api = AiApiClient(auth: widget.auth, baseUrl: baseUrl);
+    _api =
+        widget.apiClient ??
+        AiApiClient(
+          auth: widget.auth,
+          baseUrl: await widget.auth.getEventsApiBaseUrl(),
+        );
     try {
       var conversations = await _api.listConversations(widget.session);
       final conversation = conversations.isEmpty
@@ -144,6 +155,7 @@ class _AssistantViewState extends State<AssistantView> {
               detail.messages.map(
                 (message) => _ChatBubble(
                   role: message.role,
+                  id: message.id,
                   text: message.content,
                   evidenceRecords: message.evidenceRecords,
                   evidenceStorylines: message.evidenceStorylines,
@@ -155,6 +167,7 @@ class _AssistantViewState extends State<AssistantView> {
             );
           _initialLoading = false;
         });
+        await _loadApprovals(conversation.id);
       }
     } catch (error) {
       _handleError(error);
@@ -172,7 +185,13 @@ class _AssistantViewState extends State<AssistantView> {
   Future<void> _send() async {
     final question = _input.text.trim();
     final conversationId = _conversationId;
-    if (question.isEmpty || conversationId == null || _busy) return;
+    if (question.isEmpty ||
+        conversationId == null ||
+        _busy ||
+        _approvalBusy ||
+        _initialLoading) {
+      return;
+    }
     _input.clear();
     final answer = _ChatBubble(role: 'assistant', text: '');
     setState(() {
@@ -187,7 +206,7 @@ class _AssistantViewState extends State<AssistantView> {
         conversationId,
         question,
       )) {
-        if (!mounted) return;
+        if (!mounted || _conversationId != conversationId) return;
         if (chunk.type == 'delta') {
           final raw = chunk.data as Map<String, dynamic>;
           setState(() {
@@ -217,6 +236,19 @@ class _AssistantViewState extends State<AssistantView> {
             answer.amapPlaces = places;
             answer.actions = actions;
           });
+        } else if (chunk.type == 'mutation-result') {
+          final result = AiMutationResultModel.fromJson(
+            chunk.data as Map<String, dynamic>,
+          );
+          setState(() => _addMutation(result, before: answer));
+        } else if (chunk.type == 'approval-request') {
+          final approval = AiApprovalModel.fromJson(
+            chunk.data as Map<String, dynamic>,
+          );
+          if (approval.conversationId == conversationId &&
+              !_approvals.any((item) => item.id == approval.id)) {
+            setState(() => _approvals = [..._approvals, approval]);
+          }
         } else if (chunk.type == 'action') {
           final action = AssistantActionModel.fromJson(
             chunk.data as Map<String, dynamic>,
@@ -260,7 +292,8 @@ class _AssistantViewState extends State<AssistantView> {
   }
 
   Future<void> _newConversation() async {
-    if (_busy) return;
+    if (_busy || _approvalBusy || _initialLoading) return;
+    ++_conversationRequest;
     setState(() {
       _busy = true;
       _error = null;
@@ -271,6 +304,8 @@ class _AssistantViewState extends State<AssistantView> {
       setState(() {
         _conversationId = conversation.id;
         _messages.clear();
+        _approvals = [];
+        _approvalError = null;
         _conversations = [conversation, ..._conversations];
       });
     } catch (error) {
@@ -281,10 +316,14 @@ class _AssistantViewState extends State<AssistantView> {
   }
 
   Future<void> _openConversation(AiConversationModel conversation) async {
+    if (_busy || _approvalBusy || _initialLoading) return;
+    ++_conversationRequest;
     Navigator.of(context).pop();
     setState(() {
       _initialLoading = true;
       _error = null;
+      _approvals = [];
+      _approvalError = null;
     });
     try {
       final detail = await _api.getConversation(
@@ -300,6 +339,7 @@ class _AssistantViewState extends State<AssistantView> {
             detail.messages.map(
               (message) => _ChatBubble(
                 role: message.role,
+                id: message.id,
                 text: message.content,
                 evidenceRecords: message.evidenceRecords,
                 evidenceStorylines: message.evidenceStorylines,
@@ -310,6 +350,7 @@ class _AssistantViewState extends State<AssistantView> {
             ),
           );
       });
+      await _loadApprovals(conversation.id);
     } catch (error) {
       _handleError(error);
     } finally {
@@ -324,6 +365,7 @@ class _AssistantViewState extends State<AssistantView> {
         .where((item) => item.id != conversation.id)
         .toList(growable: false);
     if (conversation.id == _conversationId) {
+      ++_conversationRequest;
       final next = conversations.isEmpty
           ? await _api.createConversation(widget.session)
           : conversations.first;
@@ -332,12 +374,15 @@ class _AssistantViewState extends State<AssistantView> {
       if (!mounted) return;
       setState(() {
         _conversationId = next.id;
+        _approvals = [];
+        _approvalError = null;
         _messages
           ..clear()
           ..addAll(
             detail.messages.map(
               (message) => _ChatBubble(
                 role: message.role,
+                id: message.id,
                 text: message.content,
                 evidenceRecords: message.evidenceRecords,
                 evidenceStorylines: message.evidenceStorylines,
@@ -348,6 +393,7 @@ class _AssistantViewState extends State<AssistantView> {
             ),
           );
       });
+      await _loadApprovals(next.id);
     }
     if (mounted) setState(() => _conversations = conversations);
   }
@@ -473,31 +519,154 @@ class _AssistantViewState extends State<AssistantView> {
 
   Widget _buildChat() {
     final colors = context.traceColors;
-    return Stack(
+    return Column(
       children: [
-        Positioned.fill(
+        Expanded(
           child: _initialLoading
               ? Center(child: CircularProgressIndicator(color: colors.primary))
               : _messages.isEmpty
               ? _buildEmptyChat()
               : ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(16, 20, 16, 112),
+                  padding: const EdgeInsets.fromLTRB(16, 20, 16, 16),
                   itemCount: _messages.length,
                   itemBuilder: (_, index) => _buildMessage(_messages[index]),
                 ),
         ),
         if (_error != null)
-          Positioned(
-            left: 16,
-            right: 16,
-            bottom: 88,
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
             child: AssistantErrorNotice(
               message: _error!,
               onDismiss: () => setState(() => _error = null),
             ),
           ),
-        Positioned(left: 10, right: 10, bottom: 10, child: _buildComposer()),
+        if (_approvals.isNotEmpty) _buildApproval(),
+        if (_approvals.isEmpty && _approvalError != null)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Semantics(
+              liveRegion: true,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      _approvalError!,
+                      style: TextStyle(color: colors.danger),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: _busy || _approvalBusy || _conversationId == null
+                        ? null
+                        : () => _loadApprovals(_conversationId!),
+                    child: const Text('重试读取'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+          child: _buildComposer(),
+        ),
       ],
+    );
+  }
+
+  Future<void> _loadApprovals(String id) async {
+    final request = _conversationRequest;
+    try {
+      final loaded = await _api.listApprovals(widget.session, id);
+      if (mounted && _conversationId == id && request == _conversationRequest) {
+        setState(() {
+          _approvals = loaded;
+          _approvalError = null;
+        });
+      }
+    } catch (_) {
+      if (mounted && _conversationId == id && request == _conversationRequest) {
+        setState(() => _approvalError = '删除授权暂时无法读取，请重新打开对话。');
+      }
+    }
+  }
+
+  void _addMutation(AiMutationResultModel result, {_ChatBubble? before}) {
+    final message = result.message;
+    if (_messages.any((item) => item.id != null && item.id == message.id)) {
+      return;
+    }
+    final bubble = _ChatBubble(
+      id: message.id,
+      role: message.role,
+      text: message.content,
+      evidenceRecords: message.evidenceRecords,
+      evidenceStorylines: message.evidenceStorylines,
+      socialEvidence: message.socialEvidence,
+      amapPlaces: message.amapPlaces,
+      actions: message.actions,
+    );
+    final index = before == null ? -1 : _messages.indexOf(before);
+    if (index < 0) {
+      _messages.add(bubble);
+    } else {
+      _messages.insert(index, bubble);
+    }
+  }
+
+  Future<void> _decideApproval(String decision) async {
+    final id = _conversationId;
+    if (id == null ||
+        _approvals.isEmpty ||
+        _approvalBusy ||
+        _busy ||
+        _initialLoading) {
+      return;
+    }
+    final approval = _approvals.first;
+    setState(() {
+      _approvalBusy = true;
+      _approvalError = null;
+    });
+    try {
+      final result = await _api.decideApproval(
+        widget.session,
+        id,
+        approval.id,
+        decision,
+      );
+      if (!mounted || _conversationId != id) return;
+      setState(() {
+        _approvals = _approvals
+            .where((item) => item.id != approval.id)
+            .toList();
+        _addMutation(result);
+      });
+    } catch (error) {
+      if (mounted && _conversationId == id) {
+        setState(() => _approvalError = '未能处理授权，请重试；重复点击不会再次删除。');
+      }
+    } finally {
+      if (mounted) setState(() => _approvalBusy = false);
+    }
+  }
+
+  Widget _buildApproval() {
+    final approval = _approvals.first;
+    return AssistantApprovalPanel(
+      approval: approval,
+      remaining: _approvals.length,
+      busy: _busy || _approvalBusy || _initialLoading,
+      error: _approvalError,
+      onDecision: _decideApproval,
+      onOpen: () {
+        if (approval.targetType == 'Storyline') {
+          _openStoryline(approval.targetId);
+        } else {
+          _openEvidenceEvent(
+            _ChatBubble(role: 'assistant', text: ''),
+            int.parse(approval.targetId),
+          );
+        }
+      },
     );
   }
 
@@ -670,7 +839,8 @@ class _AssistantViewState extends State<AssistantView> {
 
   Widget _buildComposer() {
     final colors = context.traceColors;
-    final enabled = !_busy && _conversationId != null;
+    final enabled =
+        !_busy && !_approvalBusy && !_initialLoading && _conversationId != null;
     return SafeArea(
       top: false,
       child: Material(
@@ -1442,6 +1612,7 @@ class _MemoriesViewState extends State<MemoriesView> {
 class _ChatBubble {
   _ChatBubble({
     required this.role,
+    this.id,
     required this.text,
     List<AiEvidenceRecord>? evidenceRecords,
     List<AiEvidenceStoryline>? evidenceStorylines,
@@ -1464,6 +1635,7 @@ class _ChatBubble {
        amapPlaces = amapPlaces ?? [],
        actions = actions ?? [];
   final String role;
+  final int? id;
   String text;
   Map<String, dynamic> socialEvidence;
   Map<int, String> accessPaths;

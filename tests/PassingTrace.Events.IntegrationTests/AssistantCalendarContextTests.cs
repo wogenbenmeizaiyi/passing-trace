@@ -1,8 +1,9 @@
-using System.Reflection;
+using PassingTrace.Events.Api.Ai.Assistant;
+using PassingTrace.Events.Api.Ai.Assistant.Context;
+using PassingTrace.Events.Api.Ai.Models;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using PassingTrace.Core.Ai;
-using PassingTrace.Events.Api.Ai;
 using Xunit;
 
 namespace PassingTrace.Events.IntegrationTests;
@@ -116,9 +117,7 @@ public sealed class AssistantCalendarContextTests
         Assert.Contains("历史日期", client.Context);
     }
 
-    private static string CacheKey(AssistantCalendarContext calendar) => (string)typeof(AssistantService)
-        .GetMethod("BuildCacheKey", BindingFlags.NonPublic | BindingFlags.Static)!
-        .Invoke(null, [1L, "这个月消费", "", 1L, new AiModelOptions(), calendar])!;
+    private static string CacheKey(AssistantCalendarContext calendar) => AssistantAnswerCache.BuildKey(1L, "这个月消费", "", 1L, new AiModelOptions(), calendar);
 
     private sealed class FixedClock(DateTimeOffset now) : TimeProvider
     {

@@ -1,3 +1,4 @@
+using PassingTrace.Events.Api.Ai.Tools.Queries;
 using System.Text.Json;
 using Microsoft.Extensions.AI;
 

@@ -1,3 +1,5 @@
+using PassingTrace.Events.Api.Ai.Memories;
+using PassingTrace.Events.Api.Common;
 using PassingTrace.Infrastructure.Persistence.Ai;
 using System.Security.Claims;
 using System.Security.Cryptography;
@@ -11,7 +13,6 @@ using PassingTrace.Infrastructure.Persistence;
 using PassingTrace.Core.Events;
 using PassingTrace.Core.Ai;
 using PassingTrace.Core.Media;
-using PassingTrace.Events.Api.Ai;
 using PassingTrace.Events.Api.Media;
 using Xunit;
 

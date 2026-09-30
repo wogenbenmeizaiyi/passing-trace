@@ -6,7 +6,6 @@ using Microsoft.Extensions.Options;
 using PassingTrace.Core.Events;
 using PassingTrace.Core.Media;
 using PassingTrace.Core.Storylines;
-using PassingTrace.Events.Api.Ai;
 using PassingTrace.Events.Api.Development;
 using PassingTrace.Events.Api.Events;
 using PassingTrace.Events.Api.Media;

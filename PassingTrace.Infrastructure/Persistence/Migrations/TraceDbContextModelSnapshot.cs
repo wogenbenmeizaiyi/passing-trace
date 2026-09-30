@@ -124,6 +124,91 @@ namespace PassingTrace.Infrastructure.Persistence.Migrations
                     b.ToTable("ai_message", (string)null);
                 });
 
+            modelBuilder.Entity("PassingTrace.Core.Ai.AiMutationOperation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ConversationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("conversation_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<long?>("ExpectedVersion")
+                        .HasColumnType("bigint")
+                        .HasColumnName("expected_version");
+
+                    b.Property<DateTimeOffset?>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<string>("Operation")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("operation");
+
+                    b.Property<string>("OperationKey")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("operation_key");
+
+                    b.Property<DateTimeOffset?>("ResolvedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("resolved_at");
+
+                    b.Property<string>("ResultJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("result");
+
+                    b.Property<long>("SourceMessageId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("source_message_id");
+
+                    b.Property<int>("State")
+                        .HasColumnType("integer")
+                        .HasColumnName("state");
+
+                    b.Property<string>("TargetId")
+                        .HasMaxLength(36)
+                        .HasColumnType("character varying(36)")
+                        .HasColumnName("target_id");
+
+                    b.Property<string>("TargetType")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("target_type");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("title");
+
+                    b.Property<long>("UserId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConversationId");
+
+                    b.HasIndex("SourceMessageId");
+
+                    b.HasIndex("UserId", "OperationKey")
+                        .IsUnique();
+
+                    b.HasIndex("UserId", "ConversationId", "State", "CreatedAt");
+
+                    b.ToTable("ai_mutation_operation", (string)null);
+                });
+
             modelBuilder.Entity("PassingTrace.Core.Ai.ConversationSummary", b =>
                 {
                     b.Property<Guid>("ConversationId")
@@ -2240,6 +2325,21 @@ namespace PassingTrace.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Conversation");
+                });
+
+            modelBuilder.Entity("PassingTrace.Core.Ai.AiMutationOperation", b =>
+                {
+                    b.HasOne("PassingTrace.Core.Ai.AiConversation", null)
+                        .WithMany()
+                        .HasForeignKey("ConversationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("PassingTrace.Core.Ai.AiMessage", null)
+                        .WithMany()
+                        .HasForeignKey("SourceMessageId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("PassingTrace.Core.Ai.ConversationSummary", b =>

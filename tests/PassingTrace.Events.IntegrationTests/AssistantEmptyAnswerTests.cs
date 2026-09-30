@@ -1,5 +1,7 @@
-using System.Reflection;
-using PassingTrace.Events.Api.Ai;
+using PassingTrace.Events.Api.Ai.Assistant;
+using PassingTrace.Events.Api.Ai.Assistant.Presentation;
+using PassingTrace.Events.Api.Ai.Evidence;
+using PassingTrace.Events.Api.Ai.Models;
 using StackExchange.Redis;
 using Xunit;
 
@@ -34,6 +36,23 @@ public sealed class AssistantEmptyAnswerTests
         Assert.NotNull(ReadCached("{\"answer\":\"消费合计120元。\",\"evidence\":{\"records\":[],\"memories\":[]}}"));
 
     [Fact]
+    public void Serialized_cached_answer_preserves_evidence_and_navigation_action()
+    {
+        var action = new AssistantAction("amap-navigation", "amap", "导航到人民广场", "人民广场",
+            "人民大道", 31.23m, 121.47m, "GCJ02", null, "personal-record", 12, 34);
+        var evidence = new EvidenceBundle([
+            new RecordEvidence(12, 2, "散步", "到人民广场散步", null, null, DateTimeOffset.UnixEpoch, 1),
+        ], [], Actions: [action]);
+
+        var cached = AssistantAnswerCache.Read(AssistantAnswerCache.Serialize("已找到散步记录。", evidence));
+
+        Assert.NotNull(cached);
+        Assert.Equal("已找到散步记录。", cached.Answer);
+        Assert.Equal(evidence.Records[0], Assert.Single(cached.Evidence.Records));
+        Assert.Equal(action, Assert.Single(cached.Evidence.Actions!));
+    }
+
+    [Fact]
     public void Navigation_action_can_produce_valid_final_text_without_model_text()
     {
         var action = new AssistantAction("amap-navigation", "amap", "导航到人民广场", "人民广场",
@@ -44,7 +63,5 @@ public sealed class AssistantEmptyAnswerTests
         Assert.Contains("人民广场", answer);
     }
 
-    private static object? ReadCached(string cached) => typeof(AssistantService)
-        .GetMethod("ReadUsableCachedAnswer", BindingFlags.NonPublic | BindingFlags.Static)!
-        .Invoke(null, [(RedisValue)cached]);
+    private static object? ReadCached(string cached) => AssistantAnswerCache.Read((RedisValue)cached);
 }

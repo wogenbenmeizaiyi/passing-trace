@@ -1,6 +1,6 @@
+using PassingTrace.Events.Api.Ai.Assistant.Presentation;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
-using PassingTrace.Events.Api.Ai;
 using Xunit;
 
 namespace PassingTrace.Events.IntegrationTests;

@@ -1,3 +1,4 @@
+using PassingTrace.Events.Api.Ai.Models;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -7,7 +8,6 @@ using PassingTrace.Core.Ai;
 using PassingTrace.Core.Events;
 using PassingTrace.Core.Media;
 using PassingTrace.Core.Storylines;
-using PassingTrace.Events.Api.Ai;
 using PassingTrace.Events.Api.Media;
 
 namespace PassingTrace.Ai.Worker;

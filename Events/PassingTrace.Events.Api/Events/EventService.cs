@@ -1,7 +1,6 @@
 using PassingTrace.Core.Ai;
 using PassingTrace.Core.Events;
 using PassingTrace.Core.Media;
-using PassingTrace.Events.Api.Ai;
 using PassingTrace.Events.Api.Media;
 using PassingTrace.Events.Api.Social;
 

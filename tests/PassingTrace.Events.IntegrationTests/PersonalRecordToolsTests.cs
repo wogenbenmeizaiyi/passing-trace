@@ -1,3 +1,6 @@
+using PassingTrace.Events.Api.Ai.Assistant.Context;
+using PassingTrace.Events.Api.Ai.Tools.Queries;
+using PassingTrace.Events.Api.Common;
 using PassingTrace.Infrastructure.Persistence.Ai;
 using System.Security.Claims;
 using System.Text.Json;
@@ -6,7 +9,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 using PassingTrace.Core.Ai;
 using PassingTrace.Core.Events;
-using PassingTrace.Events.Api.Ai;
 using PassingTrace.Events.Api.Ai.Capabilities;
 using PassingTrace.Infrastructure;
 using Xunit;

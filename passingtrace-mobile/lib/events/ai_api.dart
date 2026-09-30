@@ -33,9 +33,11 @@ class AiMessageModel {
     required this.amapPlaces,
     required this.actions,
     this.socialEvidence = const {},
+    this.id,
   });
 
   final String role;
+  final int? id;
   final String content;
   final List<AiEvidenceRecord> evidenceRecords;
   final List<AiEvidenceStoryline> evidenceStorylines;
@@ -60,6 +62,7 @@ class AiMessageModel {
         ? evidence['actions'] as List<dynamic>? ?? const []
         : const <dynamic>[];
     return AiMessageModel(
+      id: json['id'] as int?,
       socialEvidence: evidence is Map<String, dynamic> ? evidence : const {},
       role: (json['role'] as String).toLowerCase(),
       content: json['content'] as String,
@@ -84,6 +87,54 @@ class AiMessageModel {
           .toList(growable: false),
     );
   }
+}
+
+class AiApprovalModel {
+  const AiApprovalModel({
+    required this.id,
+    required this.conversationId,
+    required this.targetType,
+    required this.targetId,
+    required this.title,
+    required this.description,
+    required this.expiresAt,
+  });
+  final String id;
+  final String conversationId;
+  final String targetType;
+  final String targetId;
+  final String title;
+  final String description;
+  final DateTime expiresAt;
+  factory AiApprovalModel.fromJson(Map<String, dynamic> json) =>
+      AiApprovalModel(
+        id: json['id'] as String,
+        conversationId: json['conversationId'] as String,
+        targetType: json['targetType'] as String,
+        targetId: json['targetId'] as String,
+        title: json['title'] as String,
+        description: json['description'] as String,
+        expiresAt: DateTime.parse(json['expiresAt'] as String),
+      );
+}
+
+class AiMutationResultModel {
+  const AiMutationResultModel({
+    required this.operationId,
+    required this.state,
+    required this.message,
+  });
+  final String operationId;
+  final String state;
+  final AiMessageModel message;
+  factory AiMutationResultModel.fromJson(Map<String, dynamic> json) =>
+      AiMutationResultModel(
+        operationId: json['operationId'] as String,
+        state: json['state'] as String,
+        message: AiMessageModel.fromJson(
+          json['message'] as Map<String, dynamic>,
+        ),
+      );
 }
 
 class AiEvidenceStoryline {
@@ -342,6 +393,39 @@ class AiApiClient {
   final AuthService auth;
   final String baseUrl;
   final http.Client _http;
+
+  Future<List<AiApprovalModel>> listApprovals(
+    AuthSession session,
+    String id,
+  ) async {
+    final response = await _http.get(
+      _uri('/api/v1/ai/conversations/$id/approvals'),
+      headers: await _headers(session),
+    );
+    return _decodeList(response, const {200})
+        .map((item) => AiApprovalModel.fromJson(item as Map<String, dynamic>))
+        .toList(growable: false);
+  }
+
+  Future<AiMutationResultModel> decideApproval(
+    AuthSession session,
+    String id,
+    String approvalId,
+    String decision,
+  ) async {
+    if (decision != 'confirm' && decision != 'cancel') {
+      throw ArgumentError.value(decision);
+    }
+    final response = await _http.post(
+      _uri('/api/v1/ai/conversations/$id/approvals/$approvalId/decision'),
+      headers: await _headers(session),
+      body: jsonEncode({'decision': decision}),
+    );
+    final decoded = _decode(response, const {200});
+    return AiMutationResultModel.fromJson(
+      decoded['result'] as Map<String, dynamic>,
+    );
+  }
 
   Uri _uri(String path) => Uri.parse(
     '${baseUrl.endsWith('/') ? baseUrl.substring(0, baseUrl.length - 1) : baseUrl}$path',

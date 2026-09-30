@@ -1,9 +1,11 @@
+using PassingTrace.Events.Api.Ai.Assistant.Context;
+using PassingTrace.Events.Api.Ai.Evidence;
+using PassingTrace.Events.Api.Common;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using PassingTrace.Core.Ai;
 using Microsoft.Extensions.AI;
 using PassingTrace.Core.Events;
-using PassingTrace.Events.Api.Ai;
 using PassingTrace.Events.Api.Ai.Capabilities;
 
 namespace PassingTrace.Events.Api.Social;

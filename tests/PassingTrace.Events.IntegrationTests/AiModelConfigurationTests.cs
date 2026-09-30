@@ -1,4 +1,4 @@
-using PassingTrace.Events.Api.Ai;
+using PassingTrace.Events.Api.Ai.Models;
 using Xunit;
 
 namespace PassingTrace.Events.IntegrationTests;

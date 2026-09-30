@@ -1,6 +1,5 @@
 using System.Text.Json;
 using Microsoft.Extensions.AI;
-using PassingTrace.Events.Api.Ai;
 using PassingTrace.Events.Api.Ai.Amap;
 using PassingTrace.Events.Api.Ai.Capabilities;
 using PassingTrace.Events.Api.Ai.Skills;
@@ -13,8 +12,8 @@ public sealed class AssistantSkillTests
     [Fact]
     public void Catalog_is_embedded_unique_and_versioned()
     {
-        Assert.Equal(10, AssistantSkillCatalog.All.Count);
-        Assert.Equal(10, AssistantSkillCatalog.All.Select(x => x.Key).Distinct().Count());
+        Assert.Equal(11, AssistantSkillCatalog.All.Count);
+        Assert.Equal(11, AssistantSkillCatalog.All.Select(x => x.Key).Distinct().Count());
         Assert.All(AssistantSkillCatalog.All, skill => Assert.False(string.IsNullOrWhiteSpace(skill.Instructions)));
         Assert.Equal(64, AssistantSkillCatalog.Version.Length);
     }

@@ -33,7 +33,7 @@ public sealed class InternalMcpToolSession : IAsyncDisposable
     public IReadOnlyList<AITool> Tools { get; private set; } = [];
 
     public static async Task<InternalMcpToolSession> CreateAsync(
-        IEnumerable<AIFunction> functions, CancellationToken cancellationToken = default)
+        IEnumerable<AIFunction> functions, CancellationToken cancellationToken = default, IReadOnlySet<string>? writeTools = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var registered = functions.Select(NullableMcpResultFunction.WrapIfNullable).ToArray();
@@ -48,7 +48,7 @@ public sealed class InternalMcpToolSession : IAsyncDisposable
         foreach (var function in registered)
             serverOptions.ToolCollection.Add(new ValidatedMcpServerTool(McpServerTool.Create(function, new()
             {
-                ReadOnly = true,
+                ReadOnly = writeTools?.Contains(function.Name) != true,
                 Destructive = false,
                 OpenWorld = false,
                 UseStructuredContent = true,

@@ -28,7 +28,9 @@ public static class AssistantSkillCatalog
         Define("conversation-summary", "只总结当前会话或用户提供的文字；不搜索数据库，不自动保存。", []),
         Define("record-summary", "依据已保存记录做日报、月度回顾或经历总结；不同于聊天摘要。",
             [.. RecordTools, .. StorylineTools, "AggregateMyRecords"]),
-        Define("planning", "从当前聊天整理计划草稿或完成记录草稿；当前不支持代为写入。", []),
+        Define("planning", "从当前聊天整理计划或经历草稿；明确要求保存时另读 mutations。", []),
+        Define("mutations", "用户明确要求创建、保存、编辑或删除本人记录、计划或故事线；删除需输入框上方按钮授权。",
+            [.. RecordTools, .. StorylineTools, "CreateMyRecord", "UpdateMyRecord", "CreateMyStoryline", "UpdateMyStoryline", "RequestDeleteMyRecord", "RequestDeleteMyStoryline"]),
     });
 
     public static string Instructions { get; } = Read("policy.md") + "\n\n可用场景 Skill：\n" +

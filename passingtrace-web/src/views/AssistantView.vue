@@ -18,7 +18,10 @@ import {
   type ConversationSummary,
   type EvidenceBundle,
   type UserMemory,
+  type ApprovalRequest,
+  type MutationResult,
 } from '@/api/ai'
+import AssistantApprovalPanel from '@/components/AssistantApprovalPanel.vue'
 import AmapActionCards from '@/components/AmapActionCards.vue'
 import BrandMark from '@/components/BrandMark.vue'
 import AssistantMessageContent from '@/components/AssistantMessageContent'
@@ -47,6 +50,9 @@ const messages = ref<ChatItem[]>([])
 const memories = ref<UserMemory[]>([])
 const question = ref('')
 const busy = ref(false)
+const approvals = ref<ApprovalRequest[]>([])
+const approvalBusy = ref(false)
+const approvalError = ref('')
 const loading = ref(false)
 const historyCursor = ref<string | null>(null)
 const loadingMoreHistory = ref(false)
@@ -71,6 +77,7 @@ const composerInput = ref<HTMLTextAreaElement | null>(null)
 const interactionLocked = computed(
   () =>
     busy.value ||
+    approvalBusy.value ||
     loading.value ||
     creating.value ||
     openingId.value !== null ||
@@ -183,6 +190,8 @@ async function startConversation() {
   conversations.value.unshift(value)
   currentId.value = value.id
   messages.value = []
+  approvals.value = []
+  approvalError.value = ''
   earlierMessageId.value = null
   earlierError.value = ''
   ++openRequest
@@ -220,6 +229,7 @@ async function create() {
 async function open(id: string, syncUrl = true) {
   if (
     busy.value ||
+    approvalBusy.value ||
     creating.value ||
     deleting.value ||
     loadingEarlier.value ||
@@ -228,6 +238,8 @@ async function open(id: string, syncUrl = true) {
     return
   const request = ++openRequest
   openingId.value = id
+  approvals.value = []
+  approvalError.value = ''
   error.value = null
   notice.value = ''
   try {
@@ -241,6 +253,7 @@ async function open(id: string, syncUrl = true) {
     showHistory.value = false
     if (syncUrl) await syncConversationUrl(id)
     await scrollMessages()
+    await loadApprovals(id, request)
   } catch {
     if (request === openRequest) error.value = '这段对话暂时打不开，请重试。'
   } finally {
@@ -278,6 +291,7 @@ async function confirmDelete() {
       ++openRequest
       currentId.value = null
       messages.value = []
+      approvals.value = []
       earlierMessageId.value = null
       earlierError.value = ''
       error.value = null
@@ -323,11 +337,14 @@ async function send(textOverride?: string) {
     answer = reactive<ChatItem>({ role: 'Assistant', content: '', pending: true })
     messages.value.push(answer)
     const currentAnswer = answer
+    const sentId = currentId.value!
+    const request = openRequest
     question.value = ''
     followLatest = true
     if (composerInput.value) composerInput.value.style.height = 'auto'
     await scrollMessages()
-    await aiApi.sendMessage(currentId.value!, text, (event) => {
+    await aiApi.sendMessage(sentId, text, (event) => {
+      if (request !== openRequest || currentId.value !== sentId || !auth.isAuthenticated) return
       if (event.type === 'delta') {
         currentAnswer.content = event.data.replacement
           ? event.data.text
@@ -343,6 +360,14 @@ async function send(textOverride?: string) {
           )
         )
           currentAnswer.actions.push(event.data)
+      } else if (event.type === 'mutation-result') {
+        addMutationMessage(event.data, currentAnswer)
+      } else if (event.type === 'approval-request') {
+        if (
+          event.data.conversationId === currentId.value &&
+          !approvals.value.some((item) => item.id === event.data.id)
+        )
+          approvals.value.push(event.data)
       } else if (event.type === 'error') {
         error.value = event.data.message
         currentAnswer.pending = false
@@ -350,7 +375,9 @@ async function send(textOverride?: string) {
       void scrollMessages()
     })
     try {
-      const summary = await aiApi.getConversationSummary(currentId.value!)
+      if (request !== openRequest || currentId.value !== sentId || !auth.isAuthenticated) return
+      const summary = await aiApi.getConversationSummary(sentId)
+      if (request !== openRequest || currentId.value !== sentId || !auth.isAuthenticated) return
       conversations.value = [
         summary,
         ...conversations.value.filter((item) => item.id !== summary.id),
@@ -363,6 +390,48 @@ async function send(textOverride?: string) {
   } finally {
     if (answer) answer.pending = false
     busy.value = false
+  }
+}
+
+function addMutationMessage(result: MutationResult, before?: ChatItem) {
+  if (messages.value.some((item) => item.id === result.message.id)) return
+  const index = before ? messages.value.indexOf(before) : -1
+  if (index >= 0) messages.value.splice(index, 0, mapMessage(result.message))
+  else messages.value.push(mapMessage(result.message))
+}
+
+async function loadApprovals(id: string, request: number) {
+  try {
+    const loaded = await aiApi.listApprovals(id)
+    if (request === openRequest && currentId.value === id) {
+      approvals.value = loaded
+      approvalError.value = ''
+    }
+  } catch {
+    if (request === openRequest && currentId.value === id)
+      approvalError.value = '删除授权暂时无法读取，请重新打开对话。'
+  }
+}
+
+async function decideApproval(decision: 'confirm' | 'cancel') {
+  const approval = approvals.value[0]
+  const id = currentId.value
+  if (!approval || !id || approvalBusy.value || busy.value) return
+  const request = openRequest
+  approvalBusy.value = true
+  approvalError.value = ''
+  try {
+    const result = await aiApi.decideApproval(id, approval.id, decision)
+    if (request !== openRequest || currentId.value !== id) return
+    approvals.value = approvals.value.filter((item) => item.id !== approval.id)
+    addMutationMessage(result.result)
+    await scrollMessages()
+    composerInput.value?.focus()
+  } catch {
+    if (request === openRequest && currentId.value === id)
+      approvalError.value = '未能处理授权，请重试；重复点击不会再次删除。'
+  } finally {
+    approvalBusy.value = false
   }
 }
 
@@ -416,7 +485,7 @@ onActivated(async () => {
 })
 onBeforeRouteUpdate((to) => {
   if (
-    (busy.value || creating.value || deleting.value) &&
+    (busy.value || approvalBusy.value || creating.value || deleting.value) &&
     conversationIdFromQuery(to.query.conversation) !== currentId.value
   )
     return false
@@ -426,8 +495,20 @@ onUnmounted(() => {
   ++historyRequest
 })
 watch(
-  () => auth.isAuthenticated,
-  (authenticated) => {
+  [() => auth.isAuthenticated, () => auth.user?.profile.sub],
+  ([authenticated, subject], previous) => {
+    if (!authenticated || (previous && subject !== previous[1])) {
+      ++openRequest
+      ++historyRequest
+      currentId.value = null
+      messages.value = []
+      conversations.value = []
+      approvals.value = []
+      approvalError.value = ''
+      question.value = ''
+      error.value = null
+      earlierMessageId.value = null
+    }
     if (authenticated && conversations.value.length === 0) void load()
   },
 )
@@ -645,6 +726,24 @@ watch(
 
         <p v-if="notice" class="chat-feedback" role="status">{{ notice }}</p>
         <p v-if="error" class="error-banner" role="alert">{{ error }}</p>
+        <div v-if="approvalError && !approvals.length" class="error-banner" role="alert">
+          {{ approvalError }}
+          <button
+            type="button"
+            :disabled="interactionLocked"
+            @click="currentId && loadApprovals(currentId, openRequest)"
+          >
+            重试读取
+          </button>
+        </div>
+        <AssistantApprovalPanel
+          v-if="approvals[0]"
+          :approval="approvals[0]"
+          :remaining="approvals.length"
+          :busy="approvalBusy || busy"
+          :error="approvalError"
+          @decide="decideApproval"
+        />
         <form class="composer" @submit.prevent="send()">
           <label class="sr-only" for="assistant-question">询问你的记录</label>
           <textarea

@@ -23,6 +23,8 @@ vi.mock('@/api/ai', () => ({
     updateMemory: vi.fn<typeof aiApi.updateMemory>(),
     deleteMemory: vi.fn<typeof aiApi.deleteMemory>(),
     sendMessage: vi.fn<typeof aiApi.sendMessage>(),
+    listApprovals: vi.fn<typeof aiApi.listApprovals>(),
+    decideApproval: vi.fn<typeof aiApi.decideApproval>(),
   },
 }))
 
@@ -165,11 +167,60 @@ describe('问答与记录之间的浏览器导航', () => {
     vi.mocked(aiApi.createConversation).mockResolvedValue({ ...created })
     vi.mocked(aiApi.listMemories).mockResolvedValue([])
     vi.mocked(aiApi.sendMessage).mockResolvedValue(undefined)
+    vi.mocked(aiApi.listApprovals).mockResolvedValue([])
   })
 
   afterEach(() => {
     for (const wrapper of wrappers.splice(0)) wrapper.unmount()
     vi.restoreAllMocks()
+  })
+
+  it('新建故事线与内联计划的回执链接可打开详情并返回原聊天', async () => {
+    vi.mocked(aiApi.sendMessage).mockImplementation(async (_id, _text, onEvent) => {
+      onEvent({
+        type: 'mutation-result',
+        data: {
+          operationId: '44444444-4444-4444-8444-444444444444',
+          operation: 'CreateMyStoryline',
+          state: 'Succeeded',
+          targets: [
+            { type: 'Storyline', id: storylineId, title: '新建周末安排', revision: 1 },
+            { type: 'Plan', id: '84', title: '新建晨跑计划', revision: 1 },
+          ],
+          message: {
+            id: 100,
+            role: 'Assistant',
+            content: `已创建：[Storyline #${storylineId}]、[Event #84]`,
+            createdAt: first.updatedAt,
+            evidence: {
+              records: [{ eventId: 84, title: '新建晨跑计划' }],
+              memories: [],
+              aggregate: null,
+              storylines: [
+                { ...page(first).items[1]!.evidence!.storylines![0]!, title: '新建周末安排' },
+              ],
+            },
+          },
+        },
+      })
+    })
+    const { wrapper, router } = await mountApp(`/assistant?conversation=${first.id}`)
+    await wrapper.get('.composer textarea').setValue('创建周末故事线')
+    await wrapper.get('.composer').trigger('submit')
+    await flushPromises()
+    for (const [title, path] of [
+      ['新建晨跑计划', '/events/84'],
+      ['新建周末安排', `/storylines/${storylineId}`],
+    ]) {
+      const link = wrapper.findAll('.messages a').find((item) => item.text() === title)!
+      await link.trigger('click')
+      await flushPromises()
+      expect(router.currentRoute.value.path).toBe(path)
+      await browserBack(router)
+      expect(router.currentRoute.value.fullPath).toBe(`/assistant?conversation=${first.id}`)
+      expect(wrapper.get('.messages').text()).toContain('已创建')
+    }
+    expect(aiApi.getConversationMessagesPage).toHaveBeenCalledTimes(1)
   })
 
   it.each(['.record-citation', '.evidence-list a'])(

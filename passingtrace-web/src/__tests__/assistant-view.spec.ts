@@ -26,6 +26,8 @@ vi.mock('@/api/ai', () => ({
     updateMemory: vi.fn<typeof aiApi.updateMemory>(),
     deleteMemory: vi.fn<typeof aiApi.deleteMemory>(),
     sendMessage: vi.fn<typeof aiApi.sendMessage>(),
+    listApprovals: vi.fn<typeof aiApi.listApprovals>(),
+    decideApproval: vi.fn<typeof aiApi.decideApproval>(),
   },
 }))
 
@@ -78,7 +80,7 @@ function messagePage(conversation: ConversationSummary): ConversationMessagePage
 
 const wrappers: VueWrapper[] = []
 
-async function mountAssistant(openFirst = true) {
+async function mountAssistant(openFirst = true, renderReferences = false) {
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [{ path: '/assistant', component: AssistantView }],
@@ -94,10 +96,12 @@ async function mountAssistant(openFirst = true) {
         BrandMark: true,
         AmapActionCards: true,
         EvidenceDisclosure: true,
-        AssistantMessageContent: {
-          props: ['content', 'records'],
-          template: '<div class="assistant-markdown">{{ content }}</div>',
-        },
+        AssistantMessageContent: renderReferences
+          ? false
+          : {
+              props: ['content', 'records'],
+              template: '<div class="assistant-markdown">{{ content }}</div>',
+            },
       },
     },
   })
@@ -179,6 +183,7 @@ describe('助手对话历史', () => {
     vi.mocked(aiApi.deleteConversation).mockResolvedValue(undefined)
     vi.mocked(aiApi.listMemories).mockResolvedValue([])
     vi.mocked(aiApi.sendMessage).mockResolvedValue(undefined)
+    vi.mocked(aiApi.listApprovals).mockResolvedValue([])
   })
 
   afterEach(() => {
@@ -200,6 +205,141 @@ describe('助手对话历史', () => {
     await flushPromises()
     expect(aiApi.getConversationMessagesPage).toHaveBeenCalledExactlyOnceWith(second.id)
     expect(wrapper.get('.messages').text()).toContain(`${second.title}的回答`)
+  })
+
+  const approval = {
+    id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    conversationId: first.id,
+    targetType: 'Plan' as const,
+    targetId: '42',
+    title: '周末跑步',
+    description: '删除这条计划。',
+    expiresAt: '2026-09-30T12:15:00Z',
+  }
+  const mutation = {
+    operationId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    operation: 'CreateMyRecord',
+    state: 'Succeeded',
+    targets: [{ type: 'Plan' as const, id: '42', title: '周末跑步', revision: 1 }],
+    message: {
+      id: 99,
+      role: 'Assistant',
+      content: '已创建：[Event #42]',
+      createdAt: '2026-09-30T12:00:00Z',
+      evidence: { records: [{ eventId: 42, title: '周末跑步' }], memories: [], aggregate: null },
+    },
+  }
+
+  it('恢复删除授权，点击确定才提交；执行中禁止重复点击', async () => {
+    vi.mocked(aiApi.listApprovals).mockResolvedValue([approval])
+    const pending = deferred<Awaited<ReturnType<typeof aiApi.decideApproval>>>()
+    vi.mocked(aiApi.decideApproval).mockReturnValue(pending.promise)
+    const wrapper = await mountAssistant(true, true)
+    const panel = wrapper.get('[aria-label="删除授权"]')
+    expect(panel.text()).toContain('周末跑步')
+    expect(aiApi.decideApproval).not.toHaveBeenCalled()
+    expect(
+      panel.element.compareDocumentPosition(wrapper.get('.composer').element) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+    await panel
+      .findAll('button')
+      .find((button) => button.text() === '确定')!
+      .trigger('click')
+    expect(aiApi.decideApproval).toHaveBeenCalledExactlyOnceWith(first.id, approval.id, 'confirm')
+    expect(
+      panel.findAll<HTMLButtonElement>('button').every((button) => button.element.disabled),
+    ).toBe(true)
+    pending.resolve({
+      id: approval.id,
+      state: 'Succeeded',
+      result: {
+        ...mutation,
+        operation: 'Delete',
+        message: { ...mutation.message, content: '已删除：周末跑步', evidence: null },
+      },
+    })
+    await flushPromises()
+    expect(wrapper.find('[aria-label="删除授权"]').exists()).toBe(false)
+    expect(wrapper.get('.messages').text()).toContain('已删除：周末跑步')
+  })
+
+  it('取消删除和授权失败可重试，不误报删除成功', async () => {
+    vi.mocked(aiApi.listApprovals).mockResolvedValue([approval])
+    vi.mocked(aiApi.decideApproval)
+      .mockRejectedValueOnce(new Error('network'))
+      .mockResolvedValueOnce({
+        id: approval.id,
+        state: 'Cancelled',
+        result: {
+          ...mutation,
+          operation: 'Delete',
+          state: 'Cancelled',
+          message: { ...mutation.message, content: '已取消删除：周末跑步', evidence: null },
+        },
+      })
+    const wrapper = await mountAssistant()
+    const cancel = () =>
+      wrapper
+        .get('[aria-label="删除授权"]')
+        .findAll('button')
+        .find((button) => button.text() === '取消')!
+    await cancel().trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[aria-label="删除授权"]').text()).toContain('请重试')
+    await cancel().trigger('click')
+    await flushPromises()
+    expect(aiApi.decideApproval).toHaveBeenLastCalledWith(first.id, approval.id, 'cancel')
+    expect(wrapper.get('.messages').text()).toContain('已取消删除')
+  })
+
+  it('写入回执独立显示链接并去重，后续回答失败仍保留', async () => {
+    vi.mocked(aiApi.sendMessage).mockImplementation(async (_id, _text, onEvent) => {
+      onEvent({ type: 'mutation-result', data: mutation })
+      onEvent({ type: 'mutation-result', data: mutation })
+      onEvent({ type: 'approval-request', data: approval })
+      onEvent({ type: 'error', data: { message: '回答中断' } })
+    })
+    const wrapper = await mountAssistant(true, true)
+    await wrapper.get('.composer textarea').setValue('创建一个跑步计划')
+    await wrapper.get('.composer').trigger('submit')
+    await flushPromises()
+    const links = wrapper.findAll('.messages a').filter((link) => link.text() === '周末跑步')
+    expect(links).toHaveLength(1)
+    expect(links[0]!.attributes('href')).toContain('/events/42')
+    expect(wrapper.get('.messages').text()).toContain('已创建')
+    expect(wrapper.get('[aria-label="删除授权"]').text()).toContain('周末跑步')
+    expect(wrapper.text()).toContain('回答中断')
+  })
+
+  it('切换会话不显示另一段聊天的授权', async () => {
+    vi.mocked(aiApi.listApprovals).mockImplementation(async (id) =>
+      id === first.id ? [approval] : [],
+    )
+    const wrapper = await mountAssistant()
+    expect(wrapper.find('[aria-label="删除授权"]').exists()).toBe(true)
+    await wrapper.findAll('.conversation-open')[1]!.trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[aria-label="删除授权"]').exists()).toBe(false)
+  })
+
+  it('授权读取失败显示重试，退出登录清除授权和草稿', async () => {
+    vi.mocked(aiApi.listApprovals)
+      .mockRejectedValueOnce(new Error('network'))
+      .mockResolvedValueOnce([approval])
+    const wrapper = await mountAssistant()
+    expect(wrapper.get('[role="alert"]').text()).toContain('删除授权暂时无法读取')
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === '重试读取')!
+      .trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[aria-label="删除授权"]').exists()).toBe(true)
+    await wrapper.get('textarea').setValue('私密草稿')
+    useAuthStore().user = null
+    await flushPromises()
+    expect(wrapper.find('[aria-label="删除授权"]').exists()).toBe(false)
+    expect(aiApi.decideApproval).not.toHaveBeenCalled()
   })
 
   it('更早的标题按需加载，阻止重复请求并去重，不获取正文', async () => {

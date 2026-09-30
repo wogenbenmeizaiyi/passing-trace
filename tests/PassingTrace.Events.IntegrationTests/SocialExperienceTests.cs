@@ -1,3 +1,6 @@
+using PassingTrace.Events.Api.Ai.Assistant.Context;
+using PassingTrace.Events.Api.Ai.Evidence;
+using PassingTrace.Events.Api.Common;
 using PassingTrace.Infrastructure.Persistence.Ai;
 using System.Security.Claims;
 using System.Text.Json;
@@ -18,7 +21,6 @@ using PassingTrace.Events.Api.Development;
 using PassingTrace.Core.Events;
 using PassingTrace.Core.Media;
 using PassingTrace.Core.Storylines;
-using PassingTrace.Events.Api.Ai;
 using PassingTrace.Events.Api.Events;
 using PassingTrace.Events.Api.Media;
 using PassingTrace.Events.Api.Social;

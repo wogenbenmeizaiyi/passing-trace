@@ -45,7 +45,7 @@ public sealed class AiConversationRepository(TraceDbContext db) : IAiConversatio
 
     public Task<bool> HasEarlierAnswerAsync(long userId, Guid conversationId, long beforeId, CancellationToken cancellationToken) =>
         db.AiMessages.AsNoTracking().AnyAsync(x => x.UserId == userId && x.ConversationId == conversationId && x.Id < beforeId &&
-            x.Role == AiMessageRole.Assistant && Owned(userId).Any(c => c.Id == x.ConversationId), cancellationToken);
+            x.Role == AiMessageRole.Assistant && (x.PromptVersion == null || x.PromptVersion != "mutation-receipt-v1") && Owned(userId).Any(c => c.Id == x.ConversationId), cancellationToken);
 
     public Task<string?> ReadLatestQuestionAsync(long userId, Guid conversationId, long beforeId, CancellationToken cancellationToken) =>
         db.AiMessages.AsNoTracking().Where(x => x.UserId == userId && x.ConversationId == conversationId && x.Id < beforeId &&

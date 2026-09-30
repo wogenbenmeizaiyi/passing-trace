@@ -6,7 +6,6 @@ using PassingTrace.Core.Ai;
 using PassingTrace.Core.Events;
 using PassingTrace.Core.Media;
 using PassingTrace.Core.Storylines;
-using PassingTrace.Events.Api.Ai;
 using PassingTrace.Infrastructure;
 
 namespace PassingTrace.Events.Api.Storylines;
@@ -276,10 +275,10 @@ public sealed class StorylineService(TraceDbContext db, IAnalysisOutbox outbox, 
             }
         }
 
-        var strategy = db.Database.CreateExecutionStrategy();
-        return await strategy.ExecuteAsync(async () =>
+        async Task<StorylineSaveResponse> SaveInTransactionAsync()
         {
-            await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+            await using var transaction = db.Database.CurrentTransaction is null
+                ? await db.Database.BeginTransactionAsync(cancellationToken) : null;
             var now = clock.GetUtcNow();
             var createdPlans = new Dictionary<Guid, Event>();
             var nodes = (request.Nodes ?? []).ToList();
@@ -374,10 +373,13 @@ public sealed class StorylineService(TraceDbContext db, IAnalysisOutbox outbox, 
             outbox.EnqueueStoryline(storyline.UserId, storyline.Id, nextRevision, now);
             await outbox.IncrementWatermarkAsync(storyline.UserId, now, cancellationToken);
             await SaveChangesAsync(cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
+            if (transaction is not null) await transaction.CommitAsync(cancellationToken);
             return new StorylineSaveResponse(ToResponse(storyline, revision),
                 createdPlans.ToDictionary(x => x.Key, x => x.Value.Id), undoRevision);
-        });
+        }
+        return db.Database.CurrentTransaction is not null
+            ? await SaveInTransactionAsync()
+            : await db.Database.CreateExecutionStrategy().ExecuteAsync(SaveInTransactionAsync);
     }
 
     private Event CreateInlinePlan(long userId, Guid storylineId, StorylineNodeInput input, string? operationKey, DateTimeOffset now)

@@ -4,7 +4,6 @@ using Amazon.S3;
 using Microsoft.EntityFrameworkCore;
 using PassingTrace.Core.Events;
 using PassingTrace.Core.Media;
-using PassingTrace.Events.Api.Ai;
 using PassingTrace.Infrastructure;
 
 namespace PassingTrace.Events.Api.Media;

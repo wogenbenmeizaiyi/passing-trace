@@ -1,4 +1,7 @@
-using PassingTrace.Events.Api.Ai;
+using PassingTrace.Events.Api.Ai.Assistant.Presentation;
+using PassingTrace.Events.Api.Ai.Capabilities;
+using PassingTrace.Events.Api.Ai.Models;
+using PassingTrace.Events.Api.Ai.Tools.Queries;
 using Xunit;
 
 namespace PassingTrace.Events.IntegrationTests;
@@ -128,6 +131,15 @@ public sealed class AssistantErrorPresenterTests
         Assert.Equal("record_tools_unavailable", result.Code);
         Assert.Equal("暂时没能完成这次记录查询，请稍后重试。", result.Message);
         Assert.DoesNotContain("MCP", result.Message);
+        Assert.DoesNotContain("secret", result.Message);
+    }
+
+    [Fact]
+    public void Failure_after_mutation_directs_user_to_durable_receipts_instead_of_repeating_creation()
+    {
+        var result = AssistantErrorPresenter.Present(new TimeoutException("secret upstream response"), hasMutationOperations: true);
+        Assert.Contains("已保存的内容无需重复创建", result.Message);
+        Assert.False(result.Retryable);
         Assert.DoesNotContain("secret", result.Message);
     }
 }
