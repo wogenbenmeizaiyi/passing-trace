@@ -18,7 +18,7 @@ export default defineConfig({
     },
   },
   plugins: [
-    vue(),
+    vue({ template: { compilerOptions: { isCustomElement: tag => tag === 'model-viewer' } } }),
     vueDevTools(),
   ],
   resolve: {

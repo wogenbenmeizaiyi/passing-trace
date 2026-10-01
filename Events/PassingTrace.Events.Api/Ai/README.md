@@ -9,7 +9,7 @@ Ai/
 │  └─ Presentation/        回答呈现、完成状态与错误提示
 ├─ Tools/
 │  ├─ Queries/             记录、统计、记忆、历史地点和故事线只读工具
-│  └─ Mutations/           记录／故事线写入、删除申请及明确意图校验
+│  └─ Mutations/           记录／故事线／人物写入、删除申请及明确意图校验
 ├─ Mutations/              幂等操作日志、持久化回执和删除授权应用服务
 ├─ Models/                 模型配置、客户端工厂和供应商 HTTP／流式适配
 ├─ Evidence/               工具与聊天共用的证据、引用和导航动作契约
@@ -29,3 +29,5 @@ Ai/
 通用认证上下文 `CurrentUserContext` 位于 `Common/`，普通业务服务无需依赖 AI 命名空间。数据访问接口位于 `PassingTrace.Core/Ai`，EF 实现位于 `PassingTrace.Infrastructure/Persistence/Ai`，分析流水线位于 `Ai/PassingTrace.Ai.Worker`；应用服务与工具不依赖 EF。只有注册入口负责绑定这些实现。
 
 执行和持久化约定见 [AI 工具协议](../../../docs/ai-tools-protocol.md) 与 [AI 数据访问](../../../docs/ai-data-access.md)。目录调整不改变 HTTP 路由、SSE 事件、模型工具名或 Skills 资源路径。
+
+人物工具集中在 `PersonalMutationTools.Subjects.cs`，查询证据与写入回执仍属于同一请求实例。人物业务放在 API 的 `Subjects`，领域端口和持久化实现分别放在 Core/Infrastructure 的 `Subjects`，避免把新模块业务堆进 AI 编排服务。

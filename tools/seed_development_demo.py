@@ -151,7 +151,7 @@ class DevelopmentDemoClient:
                 if response.getcode() not in expected:
                     raise HttpStatusError(operation, response.getcode())
                 # Neither the callback nor the readiness probe needs a body.
-                payload = response.read(1_048_577) if response.getcode() == 200 else b""
+                payload = response.read(1_048_577) if response.getcode() in (200, 201) else b""
                 if len(payload) > 1_048_576:
                     raise SeedError(f"{operation} returned an oversized response.")
                 return payload, response.headers
@@ -252,6 +252,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def seed_subject_demo(client: DevelopmentDemoClient) -> dict[str, int]:
+    from seed_development_subjects import seed_subjects
+    return seed_subjects(client)
+
+
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     try:
@@ -265,6 +270,8 @@ def main(argv: list[str] | None = None) -> int:
             f"storylines created={result['createdStorylines']}, existing={result['existingStorylines']}, "
             f"skipped={result['skippedStorylines']}.", flush=True,
         )
+        subjects = seed_subject_demo(client)
+        print("Subject demo ready: " + json.dumps(subjects), flush=True)
         return 0
     except SeedError as error:
         print(f"ERROR: {error}", file=sys.stderr, flush=True)

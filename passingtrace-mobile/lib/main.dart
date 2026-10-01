@@ -24,6 +24,7 @@ import 'views/storylines_list_view.dart';
 import 'social/social_api.dart';
 import 'social/messages_view.dart';
 import 'social/social_widgets.dart';
+import 'subjects/subjects_view.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -665,6 +666,15 @@ class _AccountHomeState extends State<AccountHome> with WidgetsBindingObserver {
           drawer: _buildDrawer(),
           bottomNavigationBar: _buildPrimaryNavigation(),
         )
+      else if (_section == 5)
+        SubjectsView(
+          auth: widget.auth,
+          session: widget.session,
+          nickname: _profile.nickname,
+          avatar: _profile.avatar,
+          drawer: _buildDrawer(),
+          bottomNavigationBar: _buildPrimaryNavigation(),
+        )
       else
         MemoriesView(
           auth: widget.auth,
@@ -690,6 +700,8 @@ class _AccountHomeState extends State<AccountHome> with WidgetsBindingObserver {
         ? 1
         : _section == 4
         ? 3
+        : _section == 5
+        ? 4
         : 2,
     onSelected: (index) {
       final section = index == 0
@@ -698,6 +710,8 @@ class _AccountHomeState extends State<AccountHome> with WidgetsBindingObserver {
           ? 3
           : index == 3
           ? 4
+          : index == 4
+          ? 5
           : 0;
       if (_section != section) setState(() => _section = section);
     },
@@ -792,6 +806,12 @@ class _AccountHomeState extends State<AccountHome> with WidgetsBindingObserver {
               label: '我的记忆',
               selected: _section == 2,
               onTap: () => _selectSection(2),
+            ),
+            TraceDrawerItem(
+              glyph: TraceGlyph.people,
+              label: '人物',
+              selected: _section == 5,
+              onTap: () => _selectSection(5),
             ),
             const Spacer(),
             Divider(height: 1, color: context.traceColors.line),

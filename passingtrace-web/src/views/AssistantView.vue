@@ -22,6 +22,8 @@ import {
   type MutationResult,
 } from '@/api/ai'
 import AssistantApprovalPanel from '@/components/AssistantApprovalPanel.vue'
+import AssistantLocationPicker from '@/components/AssistantLocationPicker.vue'
+import { isFreshLocation, type AssistantLocation } from '@/utils/assistant-location'
 import AmapActionCards from '@/components/AmapActionCards.vue'
 import BrandMark from '@/components/BrandMark.vue'
 import AssistantMessageContent from '@/components/AssistantMessageContent'
@@ -50,6 +52,8 @@ const messages = ref<ChatItem[]>([])
 const memories = ref<UserMemory[]>([])
 const question = ref('')
 const busy = ref(false)
+const location = ref<AssistantLocation | null>(null)
+const locationBusy = ref(false)
 const approvals = ref<ApprovalRequest[]>([])
 const approvalBusy = ref(false)
 const approvalError = ref('')
@@ -321,7 +325,12 @@ async function scrollMessages() {
 
 async function send(textOverride?: string) {
   const text = (textOverride ?? question.value).trim()
-  if (!text || interactionLocked.value) return
+  if (!text || interactionLocked.value || locationBusy.value) return
+  if (location.value && !isFreshLocation(location.value)) {
+    location.value = null
+    error.value = '位置已过期，请重新定位后发送。'
+    return
+  }
   const requestedId = conversationIdFromQuery(route.query.conversation)
   if (route.query.conversation !== undefined && (!requestedId || requestedId !== currentId.value)) {
     error.value = '请先从历史记录中重新打开对话，或点击“新对话”再发送。'
@@ -331,6 +340,8 @@ async function send(textOverride?: string) {
   error.value = null
   notice.value = ''
   let answer: ChatItem | undefined
+  const sentLocation = location.value ?? undefined
+  location.value = null
   try {
     if (!currentId.value) await startConversation()
     messages.value.push({ role: 'User', content: text })
@@ -343,37 +354,42 @@ async function send(textOverride?: string) {
     followLatest = true
     if (composerInput.value) composerInput.value.style.height = 'auto'
     await scrollMessages()
-    await aiApi.sendMessage(sentId, text, (event) => {
-      if (request !== openRequest || currentId.value !== sentId || !auth.isAuthenticated) return
-      if (event.type === 'delta') {
-        currentAnswer.content = event.data.replacement
-          ? event.data.text
-          : currentAnswer.content + event.data.text
-      } else if (event.type === 'evidence') {
-        currentAnswer.evidence = event.data
-        currentAnswer.actions = event.data.actions ?? currentAnswer.actions
-      } else if (event.type === 'action') {
-        currentAnswer.actions ??= []
-        if (
-          !currentAnswer.actions.some(
-            (action) => action.type === event.data.type && action.label === event.data.label,
+    await aiApi.sendMessage(
+      sentId,
+      text,
+      (event) => {
+        if (request !== openRequest || currentId.value !== sentId || !auth.isAuthenticated) return
+        if (event.type === 'delta') {
+          currentAnswer.content = event.data.replacement
+            ? event.data.text
+            : currentAnswer.content + event.data.text
+        } else if (event.type === 'evidence') {
+          currentAnswer.evidence = event.data
+          currentAnswer.actions = event.data.actions ?? currentAnswer.actions
+        } else if (event.type === 'action') {
+          currentAnswer.actions ??= []
+          if (
+            !currentAnswer.actions.some(
+              (action) => action.type === event.data.type && action.label === event.data.label,
+            )
           )
-        )
-          currentAnswer.actions.push(event.data)
-      } else if (event.type === 'mutation-result') {
-        addMutationMessage(event.data, currentAnswer)
-      } else if (event.type === 'approval-request') {
-        if (
-          event.data.conversationId === currentId.value &&
-          !approvals.value.some((item) => item.id === event.data.id)
-        )
-          approvals.value.push(event.data)
-      } else if (event.type === 'error') {
-        error.value = event.data.message
-        currentAnswer.pending = false
-      }
-      void scrollMessages()
-    })
+            currentAnswer.actions.push(event.data)
+        } else if (event.type === 'mutation-result') {
+          addMutationMessage(event.data, currentAnswer)
+        } else if (event.type === 'approval-request') {
+          if (
+            event.data.conversationId === currentId.value &&
+            !approvals.value.some((item) => item.id === event.data.id)
+          )
+            approvals.value.push(event.data)
+        } else if (event.type === 'error') {
+          error.value = event.data.message
+          currentAnswer.pending = false
+        }
+        void scrollMessages()
+      },
+      sentLocation,
+    )
     try {
       if (request !== openRequest || currentId.value !== sentId || !auth.isAuthenticated) return
       const summary = await aiApi.getConversationSummary(sentId)
@@ -709,6 +725,8 @@ watch(
                 :friends="message.evidence?.friends ?? []"
                 :shared-contents="message.evidence?.sharedContents ?? []"
                 :storylines="message.evidence?.storylines ?? []"
+                :subjects="message.evidence?.subjects ?? []"
+                :subject-entries="message.evidence?.subjectEntries ?? []"
                 :conversation-id="currentId"
               />
               <EvidenceDisclosure
@@ -744,6 +762,12 @@ watch(
           :error="approvalError"
           @decide="decideApproval"
         />
+        <AssistantLocationPicker
+          v-model="location"
+          :scope-key="currentId"
+          :disabled="interactionLocked"
+          @busy="locationBusy = $event"
+        />
         <form class="composer" @submit.prevent="send()">
           <label class="sr-only" for="assistant-question">询问你的记录</label>
           <textarea
@@ -758,7 +782,7 @@ watch(
           />
           <button
             class="composer-send"
-            :disabled="interactionLocked || !question.trim()"
+            :disabled="interactionLocked || locationBusy || !question.trim()"
             aria-label="发送问题"
           >
             <svg v-if="!busy" class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">

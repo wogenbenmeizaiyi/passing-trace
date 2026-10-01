@@ -67,6 +67,10 @@ public static class ApplicationExtensions
         services.AddScoped<IEventMediaService>(provider => provider.GetRequiredService<MediaService>());
         services.AddScoped<EventService>();
         services.AddScoped<StorylineService>();
+        services.AddScoped<Core.Subjects.ISubjectRepository, Infrastructure.Persistence.Subjects.SubjectRepository>();
+        services.AddScoped<Core.Subjects.ISubjectMediaQueries, Infrastructure.Persistence.Subjects.SubjectRepository>();
+        services.AddScoped<Subjects.SubjectService>();
+        services.AddScoped<Core.Subjects.IEventSubjectService>(p => p.GetRequiredService<Subjects.SubjectService>());
         // 保留 action 名中的 Async 后缀，使 CreatedAtAction(nameof(...)) 生成的路由能匹配。
         services.AddControllers(options =>
             options.SuppressAsyncSuffixInActionNames = false);

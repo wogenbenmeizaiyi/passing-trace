@@ -7,6 +7,7 @@ import { mediaApi } from '@/api/media'
 import { HttpError } from '@/api/http-client'
 import WebAppHeader from '@/components/WebAppHeader.vue'
 import ParticipantPicker from '@/components/ParticipantPicker.vue'
+import SubjectPicker from '@/features/subjects/SubjectPicker.vue'
 import {
   EventKind,
   EventKindActionLabel,
@@ -26,6 +27,7 @@ const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const participantIds = ref<string[]>([])
+const subjectIds = ref<string[]>([])
 const mentionTrigger = ref(0)
 
 type Mode = 'create' | 'edit'
@@ -111,6 +113,7 @@ async function load() {
     if (controller.signal.aborted) return
     loaded.value = item
     participantIds.value = item.participantIds ?? []
+    subjectIds.value = item.subjectIds ?? []
     form.value = {
       kind: item.kind,
       title: item.title ?? '',
@@ -154,6 +157,7 @@ async function submit() {
         ? toIsoWithOffset(form.value.when, form.value.timezone.trim())
         : null
       const payload = {
+        subjectIds: subjectIds.value,
         participantIds: participantIds.value,
         kind: form.value.kind,
         title: form.value.title.trim() || null,
@@ -175,6 +179,7 @@ async function submit() {
         ? toIsoWithOffset(form.value.when, form.value.timezone.trim())
         : null
       const payload: UpdateEventRequest = {
+        subjectIds: subjectIds.value,
         participantIds: participantIds.value,
         title: form.value.title.trim() || null,
         rawContent: form.value.rawContent.trim() || null,
@@ -426,6 +431,7 @@ onUnmounted(() => {
               </label>
               <p v-if="fieldErrors.content" class="field-error">{{ fieldErrors.content }}</p>
               <ParticipantPicker v-model="participantIds" :mention-trigger="mentionTrigger" />
+              <SubjectPicker v-model="subjectIds" />
 
               <fieldset class="form-field media-field">
                 <legend>图片、视频或文件</legend>

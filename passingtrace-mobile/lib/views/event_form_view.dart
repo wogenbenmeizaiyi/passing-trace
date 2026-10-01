@@ -22,6 +22,7 @@ import '../user_facing_error.dart';
 import 'nearby_place_sheet.dart';
 import '../social/social_api.dart';
 import '../social/social_widgets.dart';
+import '../subjects/subject_picker.dart';
 
 class EventFormView extends StatefulWidget {
   const EventFormView({
@@ -68,6 +69,7 @@ class _EventFormViewState extends State<EventFormView> {
 
   bool get _isEdit => widget.eventId != null;
   List<String> _participants = [];
+  List<String> _subjectIds = [];
   String _lastContent = '';
   bool _pickingPeople = false;
   Future<void> _pickPeople() async {
@@ -131,6 +133,7 @@ class _EventFormViewState extends State<EventFormView> {
       setState(() {
         _loaded = event;
         _participants = event.participantIds;
+        _subjectIds = event.subjectIds;
         _lastContent = event.rawContent ?? '';
         _loadedVersion = event.version;
         _kind = event.kind;
@@ -338,6 +341,7 @@ class _EventFormViewState extends State<EventFormView> {
           widget.session,
           loaded.id,
           participantIds: _participants,
+          subjectIds: _subjectIds,
           title: _title.text.trim().isEmpty ? null : _title.text.trim(),
           rawContent: _content.text.trim().isEmpty
               ? null
@@ -359,6 +363,7 @@ class _EventFormViewState extends State<EventFormView> {
         final created = await _api.create(
           widget.session,
           participantIds: _participants,
+          subjectIds: _subjectIds,
           kind: _kind,
           title: _title.text.trim().isEmpty ? null : _title.text.trim(),
           rawContent: _content.text.trim().isEmpty
@@ -633,6 +638,13 @@ class _EventFormViewState extends State<EventFormView> {
             ),
           ),
           const Text('选择后好友可查看记录及后续更新。仅在正文写名字不会关联。'),
+          const SizedBox(height: 16),
+          SubjectPicker(
+            auth: widget.auth,
+            session: widget.session,
+            ids: _subjectIds,
+            onChanged: (ids) => setState(() => _subjectIds = ids),
+          ),
           const SizedBox(height: 20),
           TraceFieldLabel(_kind == EventKind.plan ? '预定时间（可选）' : '发生时间（可选）'),
           TraceRowButton(

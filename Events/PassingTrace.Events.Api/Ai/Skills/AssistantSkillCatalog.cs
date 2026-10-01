@@ -12,6 +12,8 @@ public static class AssistantSkillCatalog
         ["SearchMyRecords", "GetMyRecordEvidence", "SearchMyMemories", "SearchMyPlaces", "GetMyPlaceEvidence"];
     private static readonly string[] StorylineTools = ["SearchMyStorylines", "GetMyStorylineEvidence"];
     private static readonly string[] FriendTools = ["SearchMyFriends", "GetMyFriendRelationship", "AggregateMyFriendActivities"];
+    private static readonly string[] SubjectReadTools = ["QueryMySubjects", "QueryMySubjectTimeline", "QuerySubjectFieldPresets", "PreviewMySubjectLifecycle"];
+    private static readonly string[] SubjectWriteTools = ["CreateMySubject", "UpdateMySubject", "RelateMySubjects", "UpdateMySubjectRelation", "CreateMySubjectEntry", "UpdateMySubjectEntry", "DecideMySubjectPlan", "UpdateMySubjectLifecycle", "RequestDeleteMySubjectContent"];
 
     public static IReadOnlyList<AssistantSkillDefinition> All { get; } = Array.AsReadOnly(new[]
     {
@@ -29,8 +31,9 @@ public static class AssistantSkillCatalog
         Define("record-summary", "依据已保存记录做日报、月度回顾或经历总结；不同于聊天摘要。",
             [.. RecordTools, .. StorylineTools, "AggregateMyRecords"]),
         Define("planning", "从当前聊天整理计划或经历草稿；明确要求保存时另读 mutations。", []),
+        Define("subjects", "查询私人人物、宠物、物品档案、人物关系和双来源时间轴；不同于平台好友与总记录统计。", SubjectReadTools),
         Define("mutations", "用户明确要求创建、保存、编辑或删除本人记录、计划或故事线；删除需输入框上方按钮授权。",
-            [.. RecordTools, .. StorylineTools, "CreateMyRecord", "UpdateMyRecord", "CreateMyStoryline", "UpdateMyStoryline", "RequestDeleteMyRecord", "RequestDeleteMyStoryline"]),
+            [.. RecordTools, .. StorylineTools, .. SubjectReadTools, .. SubjectWriteTools, "CreateMyRecord", "UpdateMyRecord", "CreateMyStoryline", "UpdateMyStoryline", "RequestDeleteMyRecord", "RequestDeleteMyStoryline"]),
     });
 
     public static string Instructions { get; } = Read("policy.md") + "\n\n可用场景 Skill：\n" +

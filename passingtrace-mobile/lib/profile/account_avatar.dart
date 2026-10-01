@@ -25,6 +25,8 @@ class AccountAvatar extends StatelessWidget {
               bytes!,
               fit: BoxFit.cover,
               gaplessPlayback: true,
+              frameBuilder: (context, child, frame, sync) =>
+                  sync || frame != null ? child : _fallback(context),
               errorBuilder: (_, _, _) => _fallback(context),
             ),
     ),

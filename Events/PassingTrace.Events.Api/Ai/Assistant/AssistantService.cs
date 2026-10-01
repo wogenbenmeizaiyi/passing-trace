@@ -31,7 +31,8 @@ public sealed partial class AssistantService(
     IServiceProvider services,
     TimeProvider clock,
     SocialAiTools? socialTools = null,
-    PersonalMutationTools? mutationTools = null)
+    PersonalMutationTools? mutationTools = null,
+    AmapCoordinateConverter? locationConverter = null)
 {
     public bool HasMutationOperations => mutationTools?.HasOperations == true;
 
@@ -39,7 +40,8 @@ public sealed partial class AssistantService(
         Guid conversationId,
         string content,
         [EnumeratorCancellation] CancellationToken cancellationToken,
-        string? timezone = null)
+        string? timezone = null,
+        AssistantLocationRequest? location = null)
     {
         content = content?.Trim() ?? string.Empty;
         if (content.Length == 0 || content.Length > 8000)
@@ -48,6 +50,7 @@ public sealed partial class AssistantService(
         }
         var conversation = await FindOwnedAsync(conversationId, cancellationToken);
         var now = clock.GetUtcNow();
+        var locationContext = await AssistantLocationContext.CreateAsync(location, now, locationConverter, cancellationToken);
         var calendar = AssistantCalendarContext.Create(now, timezone);
         tools.ConfigureCalendarContext(calendar, content);
         var watermark = await repository.ReadWatermarkAsync(currentUser.UserId, cancellationToken);
@@ -58,7 +61,7 @@ public sealed partial class AssistantService(
         var cacheKey = AssistantAnswerCache.BuildKey(
             currentUser.UserId, content, conversationContext.CacheValue, watermark, aiOptions.Value, calendar);
         var cache = redis.GetDatabase();
-        var bypassCache = PersonalMutationTools.MayWrite(content) || AssistantNavigationPolicy.LooksLikeLiveAmapQuestion(content) || await repository.HasSocialHistoryAsync(currentUser.UserId, cancellationToken);
+        var bypassCache = location is not null || PersonalMutationTools.MayWrite(content, conversationContext.RecentMessages) || AssistantNavigationPolicy.LooksLikeLiveAmapQuestion(content) || await repository.HasSocialHistoryAsync(currentUser.UserId, cancellationToken);
         var cached = bypassCache ? RedisValue.Null : await cache.StringGetAsync(cacheKey);
 
         var userMessage = new AiMessage
@@ -73,7 +76,7 @@ public sealed partial class AssistantService(
         repository.Add(userMessage);
         conversation.UpdatedAt = now;
         await repository.SaveChangesAsync(cancellationToken);
-        mutationTools?.Configure(conversationId, userMessage.Id, calendar, content);
+        mutationTools?.Configure(conversationId, userMessage.Id, calendar, content, conversationContext.RecentMessages);
 
         var cachedAnswer = AssistantAnswerCache.Read(cached);
         if (cachedAnswer is not null)
@@ -114,6 +117,7 @@ public sealed partial class AssistantService(
             AIContextProviders =
             [
                 new AssistantCalendarContextProvider(calendar),
+                locationContext,
             ],
             AllowConcurrentInvocation = false,
         }, loggerFactory, services);

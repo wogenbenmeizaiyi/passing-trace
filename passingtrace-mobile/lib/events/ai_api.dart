@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'location_service.dart';
+
 import 'package:http/http.dart' as http;
 
 import '../auth_service.dart';
@@ -421,6 +423,21 @@ class AiApiClient {
       headers: await _headers(session),
       body: jsonEncode({'decision': decision}),
     );
+    if (response.statusCode >= 400 && response.statusCode < 500) {
+      String? detail;
+      try {
+        final problem = jsonDecode(response.body);
+        if (problem is Map<String, dynamic>) {
+          detail = problem['detail'] as String? ?? problem['title'] as String?;
+        }
+      } on FormatException {
+        // Gateways may return non-JSON errors; keep a user-facing fallback.
+      }
+      throw EventApiException(
+        status: response.statusCode,
+        message: detail ?? '授权已不可用，请重新申请。',
+      );
+    }
     final decoded = _decode(response, const {200});
     return AiMutationResultModel.fromJson(
       decoded['result'] as Map<String, dynamic>,
@@ -493,15 +510,19 @@ class AiApiClient {
   Stream<AssistantChunk> send(
     AuthSession session,
     String conversationId,
-    String content,
-  ) async* {
+    String content, {
+    DeviceLocation? location,
+  }) async* {
     final request =
         http.Request(
             'POST',
             _uri('/api/v1/ai/conversations/$conversationId/messages'),
           )
           ..headers.addAll(await _headers(session))
-          ..body = jsonEncode({'content': content});
+          ..body = jsonEncode({
+            'content': content,
+            if (location != null) 'location': location.toAssistantJson(),
+          });
     final response = await _http.send(request);
     if (response.statusCode != 200) {
       final body = await response.stream.bytesToString();

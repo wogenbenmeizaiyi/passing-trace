@@ -25,12 +25,19 @@ afterEach(() => wrapper?.unmount())
 async function open(props = {}) {
   const router = createRouter({
     history: createMemoryHistory(),
-    routes: ['/', '/events', '/storylines', '/assistant', '/messages', '/account', '/product'].map(
-      (path) => ({
-        path,
-        component: { template: '<div />' },
-      }),
-    ),
+    routes: [
+      '/',
+      '/subjects',
+      '/events',
+      '/storylines',
+      '/assistant',
+      '/messages',
+      '/account',
+      '/product',
+    ].map((path) => ({
+      path,
+      component: { template: '<div />' },
+    })),
   })
   await router.push('/assistant?conversation=abc')
   wrapper = mount(WebAppHeader, {
@@ -59,13 +66,14 @@ describe('应用与产品导航层级', () => {
     expect(wrapper.text()).not.toContain('退出')
     const nav = wrapper.get('nav[aria-label="应用导航"]')
     expect(nav.findAll('a').map((link) => [link.text(), link.attributes('href')])).toEqual([
+      ['人物', '/subjects'],
       ['我的记录', '/events'],
       ['故事线', '/storylines'],
       ['问问 AI', '/assistant'],
       ['消息', '/messages'],
     ])
     expect(nav.get('[href="/assistant"]').attributes('aria-current')).toBe('page')
-    expect(nav.findAll('svg')).toHaveLength(4)
+    expect(nav.findAll('svg')).toHaveLength(5)
     expect(nav.findAll('a').every((link) => !!link.attributes('aria-label'))).toBe(true)
     expect(wrapper.get('.site-brand').attributes('href')).toBe('/product')
     await wrapper.get('[aria-label="进入用户中心"]').trigger('click')
@@ -77,7 +85,7 @@ describe('应用与产品导航层级', () => {
     auth.isAuthenticated = false
     const router = await open()
     const nav = wrapper.get('nav')
-    expect(nav.findAll('a')).toHaveLength(4)
+    expect(nav.findAll('a')).toHaveLength(5)
     expect(nav.text()).not.toContain('下载')
     expect(wrapper.text()).toContain('登录')
     expect(wrapper.text()).not.toContain('扫码登录')

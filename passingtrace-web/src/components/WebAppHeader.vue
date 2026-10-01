@@ -24,6 +24,11 @@ const social = useSocialStore()
 const route = useRoute()
 const navigation = [
   {
+    to: '/subjects',
+    label: '人物',
+    path: 'M9 3a4 4 0 1 1 0 8 4 4 0 0 1 0-8ZM2 21v-2a7 7 0 0 1 14 0v2M16 3a4 4 0 0 1 0 8M22 21v-2a7 7 0 0 0-4-6',
+  },
+  {
     to: '/events',
     label: '我的记录',
     path: 'M6 3h13v18H6a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3Zm0 0v18M9 8h7M9 12h7M9 16h4',

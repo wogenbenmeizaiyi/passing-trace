@@ -202,6 +202,15 @@ class TraceBottomNavigation extends StatelessWidget {
                       ),
                     ),
                   ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _TraceNavigationItem(
+                      glyph: TraceGlyph.people,
+                      label: '人物',
+                      selected: selectedIndex == 4,
+                      onTap: () => onSelected(4),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -256,6 +265,8 @@ class _TraceNavigationItem extends StatelessWidget {
               const SizedBox(height: 1),
               Text(
                 label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   color: color,
                   fontSize: 11,

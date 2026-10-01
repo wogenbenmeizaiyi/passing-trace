@@ -98,7 +98,12 @@ public sealed record EvidenceBundle(
     IReadOnlyList<AmapResultEvidence>? AmapResults = null,
     IReadOnlyList<Social.FriendView>? Friends = null,
     Social.FriendActivityResult? FriendActivities = null,
-    IReadOnlyList<Social.SharedEvidence>? SharedContents = null);
+    IReadOnlyList<Social.SharedEvidence>? SharedContents = null,
+    IReadOnlyList<SubjectEvidence>? Subjects = null,
+    IReadOnlyList<SubjectEntryEvidence>? SubjectEntries = null);
+
+public sealed record SubjectEvidence(Guid SubjectId, int Revision, string Title);
+public sealed record SubjectEntryEvidence(Guid EntryId, Guid SubjectId, int Revision, string Title, string Kind);
 
 public sealed record RecordEvidenceDetail(
     long EventId,

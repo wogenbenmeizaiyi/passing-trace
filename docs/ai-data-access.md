@@ -26,6 +26,9 @@ API 内的 AI 代码按功能组织，目录与命名空间对应；完整目录
 | `IAnalysisOutbox` | 向当前工作单元追加分析任务及数据版本变更 |
 | `ISemanticPipelineRepository` | 后台分析的记录与附件读取、标签和索引写入、旧版本失效 |
 | `IAnalysisJobRepository` | 任务领取、租约持久化、历史补算、过期数据与孤立附件查询 |
+| `ISubjectRepository` | 本人档案、关系、独立内容、修订、引用、生命周期和用户级图事务锁 |
+| `IEventSubjectService` | 原 Event 与来源修订的人物标记，在原写入事务内维护引用 |
+| `ISubjectMediaQueries` | 认证媒体的档案及专属内容当前／历史引用检查 |
 
 应用服务负责参数归一化、业务校验、模型调用、RRF 排名合并、证据快照与响应组装。工具从认证上下文取得用户身份；模型工具参数中不提供 `userId`。
 
@@ -39,6 +42,8 @@ API 内的 AI 代码按功能组织，目录与命名空间对应；完整目录
 
 MCP 工具保持串行执行，避免并发使用同一持久化工作单元和证据集合。
 
+聊天单次定位是请求上下文，不是持久化查询：`AssistantLocationContext` 校验坐标、精度、时效，`AmapCoordinateConverter` 在需要时调用官方 Web 服务转换 WGS84，使用现有 LBS 配额保护。转换层不记录带 Key 或坐标的 HTTP 日志，失败只返回固定中文错误。设备定位不写入会话 metadata、个人记录或长期记忆，带定位回答不读写缓存。未附加位置的下一轮显式说明无法读取实时位置，不从历史地点推断当前位置。
+
 `PersonalMutationTools` 通过 `AiMutationService`、Core 仓储与现有 `EventService`／`StorylineService` 执行写入，不引用 EF 或查询数据库。记录局部修改先读取本人当前版本，再合并指定字段；原始附件、地点、分类、参与者及未指定信息保留。故事线使用现有修订、图关系校验、搜索索引和分析入队逻辑；已有事务时故事线服务加入外层工作单元。
 
 `IAiMutationRepository.ExecuteAsync` 在持久化层开启事务并取得操作键的 PostgreSQL advisory lock。同轮幂等键由用户、会话、已保存来源消息、操作及归一化参数的 SHA-256 生成；数据库对用户与操作键增加唯一约束。业务变更、搜索索引、分析任务、数据版本、操作日志及独立聊天回执全部成功才提交；异常回滚并清除已回滚的跟踪实体。
@@ -50,5 +55,9 @@ MCP 工具保持串行执行，避免并发使用同一持久化工作单元和�
 后台 Worker 保留任务分派、重试与模型编排，任务领取的 `FOR UPDATE SKIP LOCKED` 和事务放在持久化层。历史补算在数据库中筛选缺失的当前修订任务。`Program.cs` 和依赖注册入口负责组装 EF 实现。
 
 ## 验证
+
+人物持久化接口位于 `Core/Subjects`，实现位于 `Infrastructure/Persistence/Subjects`。`SubjectService` 的 partial 文件按字段、专属内容、时间轴、生命周期和 Event 标记拆分，AI 参数适配放在 `PersonalMutationTools.Subjects.cs`，共用本轮操作日志与证据状态。专属内容不调用原 Event 写入和统计；跨来源时间轴按真实来源去重，并在应用层按指定时区合并分组。人物修改与 `IAnalysisOutbox` 数据版本更新处于同一事务，原记录标记继续使用原 Event 分析流程。
+
+删除人物和误关联使用同一个用户级图锁，确认授权时重新获取并刷新旧跟踪实体后检查连通。普通关系结束仍计入连通；软删除和误关联移除只保留历史，不自动重连、级联删除来源或产生平台协作权限。新增人物迁移、字段回算与接口详见 [人物模块](subjects.md)。
 
 `AiPersistenceBoundaryTests` 检查应用服务、Worker 和 Core 接口边界；`AiRepositoryTests` 使用真实 PostgreSQL 验证用户隔离、共同记录权限撤销、向量查询、会话删除、重新分析入队及记忆数据版本。`AnalysisJobRepositoryTests` 验证并发领取、历史补算与维护；`SemanticPipelinePersistenceTests` 使用假模型验证分析落库、幂等、人工标签、记忆拒绝和过期分析结果。现有工具、统计、MCP 和社交测试继续覆盖对外行为。

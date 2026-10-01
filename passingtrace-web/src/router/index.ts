@@ -5,6 +5,21 @@ import { defaultWebEntry } from '@/utils/device'
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
+    { path: '/subjects', component: () => import('@/features/subjects/SubjectsGraphView.vue') },
+    { path: '/subjects/new', component: () => import('@/features/subjects/SubjectFormView.vue') },
+    {
+      path: '/subjects/entries/:entryId',
+      component: () => import('@/features/subjects/SubjectEntryView.vue'),
+    },
+    {
+      path: '/subjects/:id/entries/new',
+      component: () => import('@/features/subjects/SubjectEntryView.vue'),
+    },
+    {
+      path: '/subjects/:id/edit',
+      component: () => import('@/features/subjects/SubjectFormView.vue'),
+    },
+    { path: '/subjects/:id', component: () => import('@/features/subjects/SubjectDetailView.vue') },
     {
       path: '/messages/:id?',
       name: 'messages',

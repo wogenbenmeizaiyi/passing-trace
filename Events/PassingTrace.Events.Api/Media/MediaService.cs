@@ -4,6 +4,7 @@ using Amazon.S3;
 using Microsoft.EntityFrameworkCore;
 using PassingTrace.Core.Events;
 using PassingTrace.Core.Media;
+using PassingTrace.Core.Subjects;
 using PassingTrace.Infrastructure;
 
 namespace PassingTrace.Events.Api.Media;
@@ -18,7 +19,8 @@ public sealed class MediaService(
     TraceDbContext dbContext,
     IObjectStorage storage,
     IAnalysisOutbox outbox,
-    TimeProvider clock) : IEventMediaService
+    TimeProvider clock,
+    ISubjectMediaQueries? subjectMedia = null) : IEventMediaService
 {
     public const long MultipartThreshold = 100L * 1024 * 1024;
     public const long MultipartPartSize = 16L * 1024 * 1024;
@@ -238,6 +240,11 @@ public sealed class MediaService(
             }
 
             EnsureMimeMatches(asset.Kind, asset.DeclaredMimeType, inspection.MimeType);
+            if (asset.Kind == MediaKind.Model)
+            {
+                await using var model = await storage.OpenReadAsync(asset.ObjectKey, cancellationToken);
+                await GlbValidator.ValidateAsync(model, info.Size, cancellationToken);
+            }
             var now = clock.GetUtcNow();
             asset.ActualSize = info.Size;
             asset.ActualSha256 = inspection.Sha256;
@@ -281,7 +288,7 @@ public sealed class MediaService(
             throw new MediaAssetNotFoundException(mediaId);
         }
 
-        var inline = asset.Kind is MediaKind.Image or MediaKind.Video;
+        var inline = asset.Kind is MediaKind.Image or MediaKind.Video or MediaKind.Model;
         var expires = clock.GetUtcNow().Add(UrlLifetime);
         var url = await storage.CreateDownloadUrlAsync(
             asset.ObjectKey,
@@ -301,7 +308,15 @@ public sealed class MediaService(
             stream,
             asset.OriginalFileName,
             asset.VerifiedMimeType ?? asset.DeclaredMimeType,
-            asset.Kind is MediaKind.Image or MediaKind.Video);
+            asset.Kind is MediaKind.Image or MediaKind.Video or MediaKind.Model);
+    }
+
+    public async Task<MediaResponse> MetadataAsync(long userId, Guid mediaId, CancellationToken cancellationToken)
+    {
+        var asset = await FindReadableAsync(userId, mediaId, cancellationToken);
+        return new MediaResponse(asset.Id, asset.OriginalFileName, asset.Kind,
+            asset.VerifiedMimeType ?? asset.DeclaredMimeType, asset.ActualSize ?? asset.ExpectedSize,
+            asset.Status, 0);
     }
 
     public async Task DeleteAsync(long userId, Guid mediaId, CancellationToken cancellationToken)
@@ -315,6 +330,8 @@ public sealed class MediaService(
         {
             throw new DomainValidationException("附件仍被当前记录引用，请先从记录中移除。");
         }
+        if (subjectMedia is not null && await subjectMedia.HasReferenceAsync(userId, mediaId, cancellationToken))
+            throw new DomainValidationException("附件仍被人物档案或专属内容的当前／历史修订引用，请保留历史资料。");
 
         var now = clock.GetUtcNow();
         asset.DeletedAt = now;
@@ -414,6 +431,7 @@ public sealed class MediaService(
     {
         if (ImageMimeTypes.TryGetValue(mimeType, out var imageKind)) return imageKind;
         if (VideoMimeTypes.TryGetValue(mimeType, out var videoKind)) return videoKind;
+        if (mimeType == "model/gltf-binary") return MediaKind.Model;
         return MediaKind.File;
     }
 
@@ -483,6 +501,7 @@ public sealed class MediaService(
 
     private static string DetectMime(ReadOnlySpan<byte> bytes)
     {
+        if (bytes.Length >= 12 && bytes[..4].SequenceEqual("glTF"u8)) return "model/gltf-binary";
         if (bytes.Length >= 4 && bytes[..4].SequenceEqual(new byte[] { 0x89, 0x50, 0x4E, 0x47 })) return "image/png";
         if (bytes.Length >= 3 && bytes[..3].SequenceEqual(new byte[] { 0xFF, 0xD8, 0xFF })) return "image/jpeg";
         if (bytes.Length >= 12 && bytes[..4].SequenceEqual("RIFF"u8) && bytes.Slice(8, 4).SequenceEqual("WEBP"u8)) return "image/webp";

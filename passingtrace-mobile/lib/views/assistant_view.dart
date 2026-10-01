@@ -4,6 +4,8 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../auth_service.dart';
 import '../events/ai_api.dart';
+import '../events/location_service.dart';
+import 'assistant_location_picker.dart';
 import '../events/events_api.dart';
 import '../theme/passingtrace_theme.dart';
 import '../theme/quiet_trace_components.dart';
@@ -16,6 +18,9 @@ import '../social/social_api.dart';
 import '../social/friends_view.dart';
 import '../social/shared_content_view.dart';
 import '../social/messages_view.dart';
+import '../subjects/subject_detail_view.dart';
+import '../subjects/subject_entry_view.dart';
+import '../subjects/subjects_view.dart';
 
 class AssistantView extends StatefulWidget {
   const AssistantView({
@@ -26,6 +31,7 @@ class AssistantView extends StatefulWidget {
     this.bottomNavigationBar,
     this.onSessionExpired,
     this.apiClient,
+    this.initialConversationId,
   });
   final AuthService auth;
   final AuthSession session;
@@ -33,6 +39,7 @@ class AssistantView extends StatefulWidget {
   final Widget? bottomNavigationBar;
   final Future<void> Function()? onSessionExpired;
   final AiApiClient? apiClient;
+  final String? initialConversationId;
 
   @override
   State<AssistantView> createState() => _AssistantViewState();
@@ -116,6 +123,8 @@ class _AssistantViewState extends State<AssistantView> {
   String? _conversationId;
   bool _initialLoading = true;
   bool _busy = false;
+  DeviceLocation? _location;
+  bool _locationBusy = false;
   bool _approvalBusy = false;
   List<AiApprovalModel> _approvals = [];
   String? _approvalError;
@@ -137,7 +146,13 @@ class _AssistantViewState extends State<AssistantView> {
         );
     try {
       var conversations = await _api.listConversations(widget.session);
-      final conversation = conversations.isEmpty
+      final conversation = widget.initialConversationId != null
+          ? AiConversationModel(
+              id: widget.initialConversationId!,
+              title: '删除授权',
+              updatedAt: DateTime.now(),
+            )
+          : conversations.isEmpty
           ? await _api.createConversation(widget.session)
           : conversations.first;
       if (conversations.isEmpty) conversations = [conversation];
@@ -148,7 +163,10 @@ class _AssistantViewState extends State<AssistantView> {
       if (mounted) {
         setState(() {
           _conversationId = conversation.id;
-          _conversations = conversations;
+          _conversations = [
+            detail.conversation,
+            ...conversations.where((x) => x.id != detail.conversation.id),
+          ];
           _messages
             ..clear()
             ..addAll(
@@ -188,14 +206,24 @@ class _AssistantViewState extends State<AssistantView> {
     if (question.isEmpty ||
         conversationId == null ||
         _busy ||
+        _locationBusy ||
         _approvalBusy ||
         _initialLoading) {
       return;
     }
+    if (_location != null && !_location!.isFresh) {
+      setState(() {
+        _location = null;
+        _error = '位置已过期，请重新定位后发送。';
+      });
+      return;
+    }
+    final location = _location;
     _input.clear();
     final answer = _ChatBubble(role: 'assistant', text: '');
     setState(() {
       _busy = true;
+      _location = null;
       _error = null;
       _messages.add(_ChatBubble(role: 'user', text: question));
       _messages.add(answer);
@@ -205,6 +233,7 @@ class _AssistantViewState extends State<AssistantView> {
         widget.session,
         conversationId,
         question,
+        location: location,
       )) {
         if (!mounted || _conversationId != conversationId) return;
         if (chunk.type == 'delta') {
@@ -295,6 +324,8 @@ class _AssistantViewState extends State<AssistantView> {
     if (_busy || _approvalBusy || _initialLoading) return;
     ++_conversationRequest;
     setState(() {
+      _location = null;
+      _locationBusy = false;
       _busy = true;
       _error = null;
     });
@@ -320,6 +351,8 @@ class _AssistantViewState extends State<AssistantView> {
     ++_conversationRequest;
     Navigator.of(context).pop();
     setState(() {
+      _location = null;
+      _locationBusy = false;
       _initialLoading = true;
       _error = null;
       _approvals = [];
@@ -366,6 +399,8 @@ class _AssistantViewState extends State<AssistantView> {
         .toList(growable: false);
     if (conversation.id == _conversationId) {
       ++_conversationRequest;
+      _location = null;
+      _locationBusy = false;
       final next = conversations.isEmpty
           ? await _api.createConversation(widget.session)
           : conversations.first;
@@ -519,56 +554,80 @@ class _AssistantViewState extends State<AssistantView> {
 
   Widget _buildChat() {
     final colors = context.traceColors;
-    return Column(
-      children: [
-        Expanded(
-          child: _initialLoading
-              ? Center(child: CircularProgressIndicator(color: colors.primary))
-              : _messages.isEmpty
-              ? _buildEmptyChat()
-              : ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(16, 20, 16, 16),
-                  itemCount: _messages.length,
-                  itemBuilder: (_, index) => _buildMessage(_messages[index]),
-                ),
-        ),
-        if (_error != null)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-            child: AssistantErrorNotice(
-              message: _error!,
-              onDismiss: () => setState(() => _error = null),
-            ),
-          ),
-        if (_approvals.isNotEmpty) _buildApproval(),
-        if (_approvals.isEmpty && _approvalError != null)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Semantics(
-              liveRegion: true,
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      _approvalError!,
-                      style: TextStyle(color: colors.danger),
-                    ),
+    return LayoutBuilder(
+      builder: (context, constraints) => Column(
+        children: [
+          Expanded(
+            child: _initialLoading
+                ? Center(
+                    child: CircularProgressIndicator(color: colors.primary),
+                  )
+                : _messages.isEmpty
+                ? _buildEmptyChat()
+                : ListView.builder(
+                    padding: const EdgeInsets.fromLTRB(16, 20, 16, 16),
+                    itemCount: _messages.length,
+                    itemBuilder: (_, index) => _buildMessage(_messages[index]),
                   ),
-                  TextButton(
-                    onPressed: _busy || _approvalBusy || _conversationId == null
-                        ? null
-                        : () => _loadApprovals(_conversationId!),
-                    child: const Text('重试读取'),
+          ),
+          ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: constraints.maxHeight * .6),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (_error != null)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                      child: AssistantErrorNotice(
+                        message: _error!,
+                        onDismiss: () => setState(() => _error = null),
+                      ),
+                    ),
+                  if (_approvals.isNotEmpty) _buildApproval(),
+                  if (_approvals.isEmpty && _approvalError != null)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Semantics(
+                        liveRegion: true,
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                _approvalError!,
+                                style: TextStyle(color: colors.danger),
+                              ),
+                            ),
+                            TextButton(
+                              onPressed:
+                                  _busy ||
+                                      _approvalBusy ||
+                                      _conversationId == null
+                                  ? null
+                                  : () => _loadApprovals(_conversationId!),
+                              child: const Text('重试读取'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  AssistantLocationPicker(
+                    scopeKey: '${_conversationId ?? ''}:$_conversationRequest',
+                    disabled: _busy || _approvalBusy || _initialLoading,
+                    value: _location,
+                    onChanged: (value) => setState(() => _location = value),
+                    onBusy: (value) => setState(() => _locationBusy = value),
                   ),
                 ],
               ),
             ),
           ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
-          child: _buildComposer(),
-        ),
-      ],
+          Padding(
+            padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+            child: _buildComposer(),
+          ),
+        ],
+      ),
     );
   }
 
@@ -642,7 +701,12 @@ class _AssistantViewState extends State<AssistantView> {
       });
     } catch (error) {
       if (mounted && _conversationId == id) {
-        setState(() => _approvalError = '未能处理授权，请重试；重复点击不会再次删除。');
+        setState(
+          () =>
+              _approvalError = error is EventApiException && error.status < 500
+              ? error.message
+              : '未能处理授权，请重试；重复点击不会再次删除。',
+        );
       }
     } finally {
       if (mounted) setState(() => _approvalBusy = false);
@@ -660,6 +724,18 @@ class _AssistantViewState extends State<AssistantView> {
       onOpen: () {
         if (approval.targetType == 'Storyline') {
           _openStoryline(approval.targetId);
+        } else if (approval.targetType == 'Subject') {
+          _openSocial('subject/${approval.targetId}');
+        } else if (approval.targetType == 'SubjectEntry') {
+          _openSocial('subjectentry/${approval.targetId}');
+        } else if (approval.targetType == 'SubjectRelation') {
+          Navigator.push<void>(
+            context,
+            MaterialPageRoute(
+              builder: (_) =>
+                  SubjectsView(auth: widget.auth, session: widget.session),
+            ),
+          );
         } else {
           _openEvidenceEvent(
             _ChatBubble(role: 'assistant', text: ''),
@@ -737,6 +813,10 @@ class _AssistantViewState extends State<AssistantView> {
       'friend/${f['id']}': socialName(f),
     for (final s in socialRows(message.socialEvidence['sharedContents']))
       'share/${s['shareId']}': s['title'] as String,
+    for (final s in socialRows(message.socialEvidence['subjects']))
+      'subject/${s['subjectId']}': s['title'] as String,
+    for (final s in socialRows(message.socialEvidence['subjectEntries']))
+      'subjectentry/${s['entryId']}': s['title'] as String,
   };
   void _openEvidenceEvent(_ChatBubble message, int id) {
     if (message.accessPaths[id] == '/joint-records/$id') {
@@ -756,6 +836,32 @@ class _AssistantViewState extends State<AssistantView> {
   }
 
   Future<void> _openSocial(String key) async {
+    if (key.startsWith('subject/')) {
+      await Navigator.push<void>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => SubjectDetailView(
+            auth: widget.auth,
+            session: widget.session,
+            subjectId: key.substring(8),
+          ),
+        ),
+      );
+      return;
+    }
+    if (key.startsWith('subjectentry/')) {
+      await Navigator.push<void>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => SubjectEntryView(
+            auth: widget.auth,
+            session: widget.session,
+            entryId: key.substring(13),
+          ),
+        ),
+      );
+      return;
+    }
     if (key.startsWith('share/')) {
       await Navigator.push<void>(
         context,
@@ -840,7 +946,11 @@ class _AssistantViewState extends State<AssistantView> {
   Widget _buildComposer() {
     final colors = context.traceColors;
     final enabled =
-        !_busy && !_approvalBusy && !_initialLoading && _conversationId != null;
+        !_busy &&
+        !_locationBusy &&
+        !_approvalBusy &&
+        !_initialLoading &&
+        _conversationId != null;
     return SafeArea(
       top: false,
       child: Material(
@@ -1921,7 +2031,10 @@ class AssistantMessageContent extends StatelessWidget {
 
     return MarkdownBody(
       data: _replaceCitations(text, eventTitles, storylineTitles).replaceAllMapped(
-        RegExp(r'\[(Friend|Share)\s*#([0-9a-f-]{36})\]', caseSensitive: false),
+        RegExp(
+          r'\[(Friend|Share|Subject|SubjectEntry)\s*#([0-9a-f-]{36})\]',
+          caseSensitive: false,
+        ),
         (match) {
           final key = '${match[1]!.toLowerCase()}/${match[2]!.toLowerCase()}';
           return socialTitles.containsKey(key)

@@ -47,6 +47,7 @@ public sealed class AssistantSkillSession
         (evidence.Friends?.Count ?? 0) == 0 && evidence.FriendActivities is null &&
         (evidence.SharedContents?.Count ?? 0) == 0 && (evidence.AmapPlaces?.Count ?? 0) == 0 &&
         (evidence.AmapResults?.Count ?? 0) == 0 && (evidence.Actions?.Count ?? 0) == 0 &&
+        (evidence.Subjects?.Count ?? 0) == 0 && (evidence.SubjectEntries?.Count ?? 0) == 0 &&
         !_loaded.Overlaps(["conversation", "conversation-summary", "planning", "amap", "mutations"]);
 
     private sealed class SkillGuardedFunction(AIFunction inner, AssistantSkillSession session) : DelegatingAIFunction(inner)

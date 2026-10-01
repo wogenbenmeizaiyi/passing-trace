@@ -10,6 +10,7 @@ type InlineToken =
   | { type: 'event'; eventId: number; value: string }
   | { type: 'storyline'; storylineId: string; value: string }
   | { type: 'social'; kind: string; id: string; value: string }
+  | { type: 'subject'; kind: string; id: string; value: string }
 
 type Block =
   | { type: 'heading'; level: number; content: string }
@@ -24,7 +25,7 @@ function inlineTokens(
 ): InlineToken[] {
   const tokens: InlineToken[] = []
   const pattern =
-    /\[Event\s*#(\d+)\]|\[Storyline\s*#([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\]|\*\*(.+?)\*\*|`([^`]+)`|\[(Friend|Share)\s*#([0-9a-f-]{36})\]/gi
+    /\[Event\s*#(\d+)\]|\[Storyline\s*#([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\]|\*\*(.+?)\*\*|`([^`]+)`|\[(Friend|Share)\s*#([0-9a-f-]{36})\]|\[(Subject|SubjectEntry)\s*#([0-9a-f-]{36})\]/gi
   let cursor = 0
   for (const match of source.matchAll(pattern)) {
     const index = match.index ?? 0
@@ -42,6 +43,13 @@ function inlineTokens(
         type: 'storyline',
         storylineId,
         value: storylineTitles.get(storylineId) || '查看故事线',
+      })
+    } else if (match[7]) {
+      tokens.push({
+        type: 'subject',
+        kind: match[7].toLowerCase(),
+        id: match[8]!.toLowerCase(),
+        value: '',
       })
     } else if (match[3] !== undefined) {
       tokens.push({ type: 'strong', value: match[3] })
@@ -125,6 +133,14 @@ export default defineComponent({
       default: () => [],
     },
     friends: { type: Array as PropType<Friend[]>, default: () => [] },
+    subjects: {
+      type: Array as PropType<Array<{ subjectId: string; title: string }>>,
+      default: () => [],
+    },
+    subjectEntries: {
+      type: Array as PropType<Array<{ entryId: string; title: string }>>,
+      default: () => [],
+    },
     sharedContents: {
       type: Array as PropType<Array<{ shareId: string; title: string; accessPath: string }>>,
       default: () => [],
@@ -142,6 +158,24 @@ export default defineComponent({
         ]),
       )
       return inlineTokens(source, recordTitles, storylineTitles).map((token) => {
+        if (token.type === 'subject') {
+          const item =
+            token.kind === 'subject'
+              ? props.subjects.find((x) => x.subjectId.toLowerCase() === token.id)
+              : props.subjectEntries.find((x) => x.entryId.toLowerCase() === token.id)
+          if (!item) return '人物内容不可查看'
+          return h(
+            RouterLink,
+            {
+              class: 'record-citation',
+              to: {
+                path: `/subjects/${token.kind === 'subjectentry' ? 'entries/' : ''}${token.id}`,
+                query: props.conversationId ? { conversation: props.conversationId } : {},
+              },
+            },
+            { default: () => item.title },
+          )
+        }
         const from = `/assistant${props.conversationId ? `?conversation=${props.conversationId}` : ''}`
         if (token.type === 'social') {
           const friend = props.friends.find((f) => f.id.toLowerCase() === token.id)

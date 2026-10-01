@@ -34,6 +34,11 @@ public static class AiServiceCollectionExtensions
             client.BaseAddress = new Uri("https://restapi.amap.com");
             client.Timeout = TimeSpan.FromSeconds(8);
         }).RemoveAllLoggers();
+        services.AddHttpClient<AmapCoordinateConverter>(client =>
+        {
+            client.BaseAddress = new Uri("https://restapi.amap.com");
+            client.Timeout = TimeSpan.FromSeconds(8);
+        }).RemoveAllLoggers();
         services.AddHttpClient<AmapMcpGateway>(client =>
         {
             client.Timeout = TimeSpan.FromSeconds(12);

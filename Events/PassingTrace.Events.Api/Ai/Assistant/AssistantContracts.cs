@@ -1,7 +1,9 @@
+using PassingTrace.Events.Api.Ai.Assistant.Context;
+
 namespace PassingTrace.Events.Api.Ai.Assistant;
 
 public sealed record CreateConversationRequest(string? Title);
-public sealed record SendAssistantMessageRequest(string Content, string? Timezone = null);
+public sealed record SendAssistantMessageRequest(string Content, string? Timezone = null, AssistantLocationRequest? Location = null);
 public sealed record AiConversationResponse(Guid Id, string Title, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt);
 public sealed record AiConversationPageResponse(IReadOnlyList<AiConversationResponse> Items, string? NextCursor);
 public sealed record AiMessagePageResponse(IReadOnlyList<AiMessageResponse> Items, bool HasMore, long? NextBeforeId);

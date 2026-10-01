@@ -17,7 +17,8 @@ public sealed record CreateEventCommand(
     IReadOnlyList<Guid>? MediaIds = null,
     ClassificationInput? Classification = null,
     IReadOnlyList<EventLocationInput>? Locations = null,
-    IReadOnlyList<string>? ParticipantIds = null);
+    IReadOnlyList<string>? ParticipantIds = null,
+    IReadOnlyList<Guid>? SubjectIds = null);
 
 /// <summary>修改 Event Source 的应用命令。</summary>
 public sealed record UpdateEventCommand(
@@ -32,7 +33,8 @@ public sealed record UpdateEventCommand(
     IReadOnlyList<Guid>? MediaIds = null,
     ClassificationInput? Classification = null,
     IReadOnlyList<EventLocationInput>? Locations = null,
-    IReadOnlyList<string>? ParticipantIds = null);
+    IReadOnlyList<string>? ParticipantIds = null,
+    IReadOnlyList<Guid>? SubjectIds = null);
 
 /// <summary>创建 Event 的 HTTP 请求体。</summary>
 public sealed record CreateEventRequest(
@@ -45,7 +47,8 @@ public sealed record CreateEventRequest(
     IReadOnlyList<Guid>? MediaIds = null,
     ClassificationInput? Classification = null,
     IReadOnlyList<EventLocationInput>? Locations = null,
-    IReadOnlyList<string>? ParticipantIds = null);
+    IReadOnlyList<string>? ParticipantIds = null,
+    IReadOnlyList<Guid>? SubjectIds = null);
 
 /// <summary>修改 Event Source 的 HTTP 请求体。</summary>
 public sealed record UpdateEventRequest(
@@ -57,7 +60,8 @@ public sealed record UpdateEventRequest(
     IReadOnlyList<Guid>? MediaIds = null,
     ClassificationInput? Classification = null,
     IReadOnlyList<EventLocationInput>? Locations = null,
-    IReadOnlyList<string>? ParticipantIds = null);
+    IReadOnlyList<string>? ParticipantIds = null,
+    IReadOnlyList<Guid>? SubjectIds = null);
 
 public sealed record ClassificationInput(
     string? PrimaryCategoryKey,
@@ -137,7 +141,8 @@ public sealed record EventResponse(
     ManualClassificationResponse ManualClassification,
     EffectiveClassificationResponse EffectiveClassification,
     IReadOnlyList<EventLocationResponse> Locations,
-    IReadOnlyList<string>? ParticipantIds = null);
+    IReadOnlyList<string>? ParticipantIds = null,
+    IReadOnlyList<Guid>? SubjectIds = null);
 
 /// <summary>Event 列表响应体。</summary>
 public sealed record EventListResponse(

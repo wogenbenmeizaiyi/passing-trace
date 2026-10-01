@@ -18,6 +18,7 @@ export interface UploadProgress {
 }
 
 export interface MediaAccessResponse {
+  contentType?: string
   url: string
   expiresAt: string
   inline: boolean
@@ -86,6 +87,7 @@ export const mediaApi = {
     const blob = await httpClient.blob(`/api/v1/media/${id}/content`, opts)
     return {
       url: URL.createObjectURL(blob),
+      contentType: blob.type,
       expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
       inline: blob.type.startsWith('image/') || blob.type.startsWith('video/'),
     }

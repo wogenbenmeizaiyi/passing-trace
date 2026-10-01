@@ -1,6 +1,7 @@
 using PassingTrace.Events.Api.Ai.Capabilities;
 using PassingTrace.Events.Api.Ai.Models;
 using PassingTrace.Events.Api.Ai.Tools.Queries;
+using PassingTrace.Events.Api.Ai.Assistant.Context;
 using System.ClientModel;
 
 namespace PassingTrace.Events.Api.Ai.Assistant.Presentation;
@@ -12,6 +13,9 @@ public static class AssistantErrorPresenter
     public static AssistantErrorResponse Present(Exception exception, bool hasMutationOperations = false)
     {
         ArgumentNullException.ThrowIfNull(exception);
+
+        if (exception is AssistantLocationException locationError)
+            return new AssistantErrorResponse(locationError.Code, locationError.Message, false);
 
         if (hasMutationOperations)
             return new AssistantErrorResponse("mutation_response_incomplete",
@@ -43,6 +47,16 @@ public static class AssistantErrorPresenter
 
         for (Exception? current = exception; current is not null; current = current.InnerException)
         {
+            if (current is AssistantToolInvocationException { ErrorCode: "mutation_intent_required" })
+                return new AssistantErrorResponse(
+                    "mutation_intent_required",
+                    "尚未确认这次记录操作。请明确要执行的操作，例如“按刚才的方案创建故事线”。删除仍需点击输入框上方的确定按钮。",
+                    false);
+            if (current is AssistantToolInvocationException { IsWriteTool: true })
+                return new AssistantErrorResponse(
+                    "mutation_tools_unavailable",
+                    "暂时没能完成这次记录操作，请稍后重试。",
+                    true);
             if (current is AssistantToolInvocationException)
                 return new AssistantErrorResponse(
                     "record_tools_unavailable",

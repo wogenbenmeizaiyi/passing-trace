@@ -9,6 +9,8 @@ using System.Reflection;
 using PassingTrace.Ai.Worker;
 using PassingTrace.Core.Ai;
 using PassingTrace.Events.Api.Social;
+using PassingTrace.Events.Api.Subjects;
+using PassingTrace.Core.Subjects;
 using Xunit;
 
 namespace PassingTrace.Events.IntegrationTests;
@@ -22,7 +24,7 @@ public sealed class AiPersistenceBoundaryTests
             typeof(EventSemanticService), typeof(EventSemanticController), typeof(AssistantConversationHistory),
             typeof(ConversationContextSnapshot), typeof(SocialAiTools), typeof(SocialEvidenceGuard),
             typeof(SemanticPipeline), typeof(AnalysisWorker), typeof(PersonalMutationTools), typeof(AiMutationService),
-            typeof(AssistantAnswerCache)];
+            typeof(AssistantAnswerCache), typeof(SubjectService)];
         foreach (var type in applicationTypes)
         {
             var signatures = type.GetConstructors().SelectMany(x => x.GetParameters()).Select(x => x.ParameterType)
@@ -39,7 +41,8 @@ public sealed class AiPersistenceBoundaryTests
     {
         Type[] ports = [typeof(IPersonalRecordQueries), typeof(IAiConversationRepository), typeof(IUserMemoryRepository),
             typeof(IEventSemanticRepository), typeof(ISocialAiQueries), typeof(IAiEvidenceQueries), typeof(IAnalysisOutbox),
-            typeof(ISemanticPipelineRepository), typeof(IAnalysisJobRepository), typeof(IAiMutationRepository)];
+            typeof(ISemanticPipelineRepository), typeof(IAnalysisJobRepository), typeof(IAiMutationRepository),
+            typeof(ISubjectRepository), typeof(IEventSubjectService), typeof(ISubjectMediaQueries)];
         foreach (var port in ports)
             Assert.All(port.GetMethods().SelectMany(x => x.GetParameters().Select(p => p.ParameterType).Append(x.ReturnType)).SelectMany(Expand),
                 dependency => Assert.False(IsDatabaseType(dependency), $"{port.Name} exposes {dependency.FullName}."));

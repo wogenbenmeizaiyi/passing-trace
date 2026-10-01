@@ -343,6 +343,7 @@ class MainActivity : FlutterActivity() {
                         "latitude" to location.latitude,
                         "longitude" to location.longitude,
                         "accuracyMeters" to location.accuracy.toDouble(),
+                        "coordinateSystem" to location.coordType,
                         "capturedAt" to location.time
                     ))
                 } else result.error("AMAP_${location.errorCode}", location.errorInfo ?: "定位失败", null)
@@ -365,6 +366,7 @@ class MainActivity : FlutterActivity() {
                 "latitude" to location.latitude,
                 "longitude" to location.longitude,
                 "accuracyMeters" to location.accuracy.toDouble(),
+                "coordinateSystem" to "WGS84",
                 "capturedAt" to location.time
             ))
             destroySystemLocation()

@@ -14,10 +14,18 @@ defineEmits<{ decide: [decision: 'confirm' | 'cancel'] }>()
           ? '故事线'
           : approval.targetType === 'Plan'
             ? '计划'
-            : '记录'
+            : approval.targetType === 'Subject'
+              ? '人物档案'
+              : approval.targetType === 'SubjectEntry'
+                ? '人物专属内容'
+                : approval.targetType === 'SubjectRelation'
+                  ? '误关联'
+                  : '记录'
       }}？
     </p>
+    <p v-if="approval.targetType.startsWith('Subject')">{{ approval.title }}</p>
     <AssistantMessageContent
+      v-else
       :content="
         approval.targetType === 'Storyline'
           ? `[Storyline #${approval.targetId}]`

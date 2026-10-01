@@ -94,7 +94,7 @@ public sealed class AssistantController(
         Response.Headers.Append("X-Accel-Buffering", "no");
         try
         {
-            await foreach (var item in service.SendAsync(id, request.Content, cancellationToken, request.Timezone))
+            await foreach (var item in service.SendAsync(id, request.Content, cancellationToken, request.Timezone, request.Location))
             {
                 await WriteEventAsync(item.Type, item.Data, cancellationToken);
             }

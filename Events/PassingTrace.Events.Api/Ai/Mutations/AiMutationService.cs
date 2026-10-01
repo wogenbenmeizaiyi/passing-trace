@@ -16,7 +16,7 @@ namespace PassingTrace.Events.Api.Ai.Mutations;
 public sealed class AiMutationService(
     IAiMutationRepository repository, IEventRepository events, EventService eventService,
     StorylineService storylineService, IAiConversationRepository conversations,
-    CurrentUserContext currentUser, TimeProvider clock)
+    CurrentUserContext currentUser, TimeProvider clock, Subjects.SubjectService? subjects = null)
 {
     public const string ReceiptPromptVersion = "mutation-receipt-v1";
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
@@ -67,6 +67,42 @@ public sealed class AiMutationService(
         return (await repository.ListPendingAsync(currentUser.UserId, conversationId, clock.GetUtcNow(), ct)).Select(Approval).ToArray();
     }
 
+    public Task<AiApprovalRequest> RequestManualDeleteAsync(string type, Guid id, Guid requestId, CancellationToken ct)
+    {
+        var key = OperationKey(Guid.Empty, 0, "ManualDelete", new { type, id, requestId });
+        return repository.ExecuteAsync(key, async token =>
+        {
+            var prior = await repository.FindByKeyAsync(currentUser.UserId, key, token);
+            if (prior is not null) return Approval(prior);
+            var (target, version) = await ReadTargetAsync(type, id.ToString(), token);
+            var now = clock.GetUtcNow();
+            var conversation = new AiConversation
+            {
+                Id = Guid.NewGuid(),
+                UserId = currentUser.UserId,
+                Title = "人物删除授权",
+                CreatedAt = now,
+                UpdatedAt = now
+            };
+            conversations.Add(conversation);
+            var source = new AiMessage
+            {
+                ConversationId = conversation.Id,
+                UserId = currentUser.UserId,
+                Role = AiMessageRole.User,
+                Content = "申请删除：" + target.Title,
+                CreatedAt = now,
+                ExpiresAt = now.AddDays(30)
+            };
+            conversations.Add(source);
+            await conversations.SaveChangesAsync(token);
+            var operation = NewOperation(conversation.Id, source.Id, key, "Delete", target);
+            operation.State = AiMutationState.Pending; operation.ExpectedVersion = version;
+            operation.ExpiresAt = now.AddMinutes(15); repository.Add(operation);
+            return Approval(operation);
+        }, ct);
+    }
+
     public Task<AiApprovalDecisionResponse> DecideAsync(Guid conversationId, Guid approvalId, string decision, CancellationToken ct)
     {
         if (decision is not ("confirm" or "cancel")) throw new DomainValidationException("请选择确定或取消。");
@@ -101,17 +137,23 @@ public sealed class AiMutationService(
                         if (version != entry.ExpectedVersion) throw new ConcurrencyException("内容已更新，请重新申请删除。");
                         if (entry.TargetType == "Storyline")
                             await storylineService.DeleteAsync(currentUser.UserId, Guid.Parse(entry.TargetId!), version, token);
+                        else if (entry.TargetType == "Subject")
+                            await subjects!.DeleteAsync(currentUser.UserId, Guid.Parse(entry.TargetId!), checked((int)version), token);
+                        else if (entry.TargetType == "SubjectEntry")
+                            await subjects!.DeleteEntryAsync(currentUser.UserId, Guid.Parse(entry.TargetId!), checked((int)version), token);
+                        else if (entry.TargetType == "SubjectRelation")
+                            await subjects!.DeleteRelationAsync(currentUser.UserId, Guid.Parse(entry.TargetId!), checked((int)version), token);
                         else
                             await eventService.SoftDeleteAsync(currentUser.UserId, long.Parse(entry.TargetId!, CultureInfo.InvariantCulture), version, token);
                         entry.State = AiMutationState.Succeeded;
                         description = "已删除";
                     }
                 }
-                catch (Exception exception) when (exception is ConcurrencyException or EventNotFoundException or KeyNotFoundException)
+                catch (Exception exception) when (exception is ConcurrencyException or EventNotFoundException or KeyNotFoundException or DomainValidationException)
                 {
                     // Version checks happen before staging deletion changes. A changed target requires a new grant.
                     entry.State = AiMutationState.Conflict;
-                    description = "内容已变更或已删除，请重新核实后申请";
+                    description = exception is DomainValidationException ? exception.Message : "内容已变更或已删除，请重新核实后申请";
                 }
             }
             entry.ResolvedAt = clock.GetUtcNow();
@@ -130,6 +172,22 @@ public sealed class AiMutationService(
 
     private async Task<(AiMutationTarget Target, uint Version)> ReadTargetAsync(string type, string id, CancellationToken ct)
     {
+        if (type == "Subject")
+        {
+            var subject = await subjects!.GetAsync(currentUser.UserId, Guid.Parse(id), ct);
+            if (subject.IsSelf) throw new DomainValidationException("自己的档案不能申请删除。");
+            return (new(type, id, subject.Name, subject.Version), checked((uint)subject.Version));
+        }
+        if (type == "SubjectEntry")
+        {
+            var entry = await subjects!.GetEntryAsync(currentUser.UserId, Guid.Parse(id), ct);
+            return (new(type, id, entry.Title, entry.Version, entry.SubjectId), checked((uint)entry.Version));
+        }
+        if (type == "SubjectRelation")
+        {
+            var relation = await subjects!.GetRelationAsync(currentUser.UserId, Guid.Parse(id), ct);
+            return (new(type, id, relation.Label, relation.Revision, relation.FromSubjectId), checked((uint)relation.Revision));
+        }
         if (type == "Storyline")
         {
             var story = await storylineService.GetAsync(currentUser.UserId, Guid.Parse(id), null, ct);
@@ -165,16 +223,27 @@ public sealed class AiMutationService(
     private async Task<AiMutationResult> SaveReceiptAsync(AiMutationOperation entry, IReadOnlyList<AiMutationTarget> targets,
         string description, CancellationToken ct, bool linkTargets = true)
     {
-        var records = targets.Where(x => x.Type != "Storyline" && linkTargets)
+        var records = targets.Where(x => (x.Type is "Record" or "Plan") && linkTargets)
             .Select(x => new RecordEvidence(long.Parse(x.Id, CultureInfo.InvariantCulture), x.Revision, x.Title, "", null, null, clock.GetUtcNow(), 0)).ToArray();
         var stories = targets.Where(x => x.Type == "Storyline" && linkTargets)
             .Select(x => new StorylineEvidence(Guid.Parse(x.Id), x.Revision, x.Title, "", "", "", null, null, [], [], 0)).ToArray();
-        var evidence = new EvidenceBundle(records, [], Storylines: stories);
+        var subjectEvidence = targets.Where(x => (x.Type is "Subject" or "SubjectRelation") && linkTargets)
+            .Select(x => new SubjectEvidence(x.SubjectId ?? Guid.Parse(x.Id), x.Revision, x.Title)).ToArray();
+        var entryEvidence = targets.Where(x => x.Type == "SubjectEntry" && linkTargets)
+            .Select(x => new SubjectEntryEvidence(Guid.Parse(x.Id), x.SubjectId!.Value, x.Revision, x.Title, "SubjectEntry")).ToArray();
+        var evidence = new EvidenceBundle(records, [], Storylines: stories, Subjects: subjectEvidence, SubjectEntries: entryEvidence);
         var conversation = await conversations.FindAsync(currentUser.UserId, entry.ConversationId, ct)
             ?? throw new KeyNotFoundException("对话不存在。");
         conversation.UpdatedAt = clock.GetUtcNow();
         var text = description + "：" + string.Join("、", targets.Select(x => linkTargets
-            ? x.Type == "Storyline" ? $"[Storyline #{x.Id}]" : $"[Event #{x.Id}]" : x.Title));
+            ? x.Type switch
+            {
+                "Storyline" => $"[Storyline #{x.Id}]",
+                "Subject" => $"[Subject #{x.Id}]",
+                "SubjectRelation" => $"[Subject #{x.SubjectId}]",
+                "SubjectEntry" => $"[SubjectEntry #{x.Id}]",
+                _ => $"[Event #{x.Id}]"
+            } : x.Title));
         var message = new AiMessage
         {
             ConversationId = entry.ConversationId,
@@ -203,6 +272,13 @@ public sealed class AiMutationService(
 
     private static AiApprovalRequest Approval(AiMutationOperation entry) => new(entry.Id, entry.ConversationId,
         entry.TargetType, entry.TargetId!, entry.Title,
-        entry.TargetType == "Storyline" ? "删除故事线；其中的记录和计划会保留。" : "删除这条记录或计划。",
+        entry.TargetType switch
+        {
+            "Storyline" => "删除故事线；其中的记录和计划会保留。",
+            "Subject" => "删除人物档案；原记录与专属内容保留。若造成其他档案断连，将拒绝删除。",
+            "SubjectEntry" => "删除这条人物专属内容；被标记的人物会看到引用已失效，相关字段会重新计算。",
+            "SubjectRelation" => "移除误关联并保留审计历史。若造成档案断连，将拒绝移除。",
+            _ => "删除这条记录或计划。"
+        },
         entry.ExpiresAt!.Value);
 }

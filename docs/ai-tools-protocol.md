@@ -1,5 +1,17 @@
 # AI 工具协议与执行边界
 
+## 人物与专属内容
+
+`subjects` 场景解锁 `QueryMySubjects`、`QueryMySubjectTimeline`、`QuerySubjectFieldPresets` 和 `PreviewMySubjectLifecycle`。所有查询限定本人档案；时间轴返回 `Event`、`SubjectEntry`、`Milestone` 三类来源，不能把专属内容当作我的原记录统计。与平台好友、协作参与者、原故事线图分别维护。
+
+明确写入指令在 `mutations` 场景解锁 `CreateMySubject`、`UpdateMySubject`、`RelateMySubjects`、`UpdateMySubjectRelation`、`CreateMySubjectEntry`、`UpdateMySubjectEntry`、`DecideMySubjectPlan`、`UpdateMySubjectLifecycle`。`RequestDeleteMySubjectContent` 仅申请 `Subject`／`SubjectEntry`／`SubjectRelation` 的按钮授权，实际删除不暴露给模型。来源、名称或对象不明确先澄清，不同时写入 Event 与 SubjectEntry；摘要、共同出现和关系线不自动写入。
+
+原 `CreateMyRecord`／`UpdateMyRecord` 支持明确的 `subjectIds`，只添加时间轴入口，不推导关系或授予协作权限。专属计划完成需明确实际时间与实际字段，预期值不自动采用；生命周期预览默认保留所属计划，自身不能结束或删除。
+
+写入沿用服务端幂等键、原子业务事务与持久化 `mutation-result` 回执。证据增加 `subjects`（subjectId、revision、title）和 `subjectEntries`（entryId、subjectId、revision、title、kind），引用为 `[Subject #真实GUID]`、`[SubjectEntry #真实GUID]`。Web 和手机仅根据真实证据生成详情链接，保留返回聊天；模型漏写引用、随后生成失败或刷新仍能展示已成功回执。写入轮不读写回答缓存，成功刷新数据版本。
+
+手动人物删除由 `POST /api/v1/subjects/delete-requests` 进入同一聊天授权链，`GET .../approvals` 和 `POST .../approvals/{id}/decision` 保持原协议。确认时重新取得用户级图事务锁，校验版本和连通；取消、到期、换用户或断连均不删除。模块接口、来源和媒体约定见 [人物模块](subjects.md)。
+
 ## 当前调用链
 
 ```text
@@ -36,7 +48,23 @@ MCP 服务端复用当前请求内已绑定的 `PersonalRecordTools` 和 `Person
 
 `IAiCapabilityPackage.UsesInternalMcp` 默认为 `true`。新增内部工具包注册后走相同 MCP 会话、校验、错误和释放边界。`WriteTools` 明确声明有副作用的工具，协议中不会标为只读。高德因已经有外部 MCP 适配与配额策略，显式设为 `false`，避免重复包裹。
 
-后端的确定性预检索、证据整理等应用逻辑仍可直接调用服务；模型自主选择的个人工具调用均经过 MCP。写入工具需要读取 `mutations` 场景规则，并且服务端检查当前用户消息中的明确操作意图。普通聊天、总结、建议和“如何操作”不授予写入权限。
+后端的确定性预检索、证据整理等应用逻辑仍可直接调用服务；模型自主选择的个人工具调用均经过 MCP。写入工具需要读取 `mutations` 场景规则，并且服务端检查用户的明确操作意图。普通聊天、总结、建议和“如何操作”不授予写入权限。
+
+“加上”“你先加”等追加表达可直接授予创建或编辑权限；同句中的“不删除”只限制对应删除操作。短确认（例如“对就这样”）仅能延续最近待确认方案中已有的用户创建／编辑请求，不能从助手建议、摘要、完成回执、取消请求或已切换话题的历史中取得权限，也不继承删除权限。此类确认轮使用相同上下文判定缓存和工具权限并跳过回答缓存。
+
+写入意图拒绝经 MCP 保留安全错误码 `mutation_intent_required`，客户端提示明确操作；其他写入工具错误提示为记录操作失败。错误分类不包含工具参数或私人正文，避免把写入失败显示成记录查询失败。
+
+## 单次设备定位
+
+Web 和 Flutter 的输入框上方提供“使用当前位置”，用户主动操作后获取一次前台定位，可移除或重新获取。点击发送时只附加到当前消息；会话切换、取消或离开界面会丢弃尚未返回的结果。权限拒绝、超时或定位失败不阻止用户输入文字出发地。
+
+`POST /api/v1/ai/conversations/{id}/messages` 可附加 `location`：`latitude`、`longitude`、`accuracyMeters`、`capturedAt`（ISO 8601）及 `coordinateSystem`（`WGS84` 或 `GCJ02`）。服务端先检查本人会话、坐标范围、有效精度及采集时间：最长 5 分钟，允许设备时钟最多超前 1 分钟。无效或过期位置返回 SSE 定位错误，不保存该条消息或调用模型。
+
+浏览器使用 `navigator.geolocation.getCurrentPosition`（需要 HTTPS/localhost 与定位权限），禁止使用缓存位置。WGS84 通过高德官方坐标转换 Web 服务统一为 GCJ02，使用服务端 `Amap:WebServiceKey` / `AMAP_WEB_SERVICE_KEY`，占用现有 LBS 月额度并禁用请求日志。Android 保留高德 SDK 的坐标系；模拟器原生 GPS 标注为 WGS84。坐标转换失败或缺少 Web 服务 Key 时明确报错，不能把未转换坐标当作高德坐标。
+
+定位经 `AssistantLocationContext` 仅注入本轮模型上下文，高德场景可直接使用位置反查地址、搜索周边或规划路线。下一条未附加位置的消息不会继承实时定位；历史地点和服务器 IP 不代替设备位置。带定位的回答跳过缓存读写，原始设备位置不进入数据库、长期记忆或记录。AI 回答与高德查询得到的地点信息仍按现有聊天规则保存。
+
+参考：[高德坐标转换](https://developer.amap.com/api/webservice/guide/api/convert)、[浏览器单次定位](https://developer.mozilla.org/en-US/docs/Web/API/Geolocation/getCurrentPosition)。
 
 ## 创建与局部编辑
 

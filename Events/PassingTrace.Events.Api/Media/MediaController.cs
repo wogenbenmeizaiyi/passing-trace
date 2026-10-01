@@ -61,6 +61,10 @@ public sealed class MediaController(MediaService service) : ControllerBase
     public async Task<ActionResult<MediaAccessResponse>> AccessAsync(Guid id, CancellationToken cancellationToken) =>
         Ok(await service.CreateAccessAsync(User.GetUserId(), id, cancellationToken));
 
+    [HttpGet("{id:guid}")]
+    public async Task<ActionResult<MediaResponse>> MetadataAsync(Guid id, CancellationToken cancellationToken) =>
+        Ok(await service.MetadataAsync(User.GetUserId(), id, cancellationToken));
+
     [HttpGet("{id:guid}/content")]
     public async Task<IActionResult> ContentAsync(Guid id, CancellationToken cancellationToken)
     {

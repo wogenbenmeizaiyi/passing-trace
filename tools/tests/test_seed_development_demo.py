@@ -136,6 +136,14 @@ class DevelopmentDemoSeedTests(unittest.TestCase):
         for opener in (client.identity_opener, client.api_opener):
             self.assertFalse(any(isinstance(handler, urllib.request.ProxyHandler) and handler.proxies for handler in opener.handlers))
 
+    def test_created_response_keeps_json_body_for_application_creation_receipt(self):
+        response = Response({"id": "real-created-target"}, status=201)
+        opener = mock.Mock()
+        opener.open.return_value = response
+        payload, _ = MODULE.DevelopmentDemoClient._request(opener, "POST", API + "/api/v1/events",
+            "Local creation", data=b"{}", expected=(200, 201))
+        self.assertEqual({"id": "real-created-target"}, json.loads(payload))
+
     def test_disabled_auto_login_reports_help_without_following_qr_redirect(self):
         client = MODULE.DevelopmentDemoClient(IDENTITY, API)
         client.identity_opener.open = mock.Mock(return_value=Response(
@@ -226,12 +234,15 @@ class DevelopmentDemoSeedTests(unittest.TestCase):
     def test_main_uses_environment_and_prints_only_summary(self):
         stdout = io.StringIO()
         with mock.patch.dict(MODULE.os.environ, {"DEVELOPMENT_IDENTITY_URL": IDENTITY, "DEVELOPMENT_API_URL": API}), \
-                mock.patch.object(MODULE, "DevelopmentDemoClient") as constructor, contextlib.redirect_stdout(stdout):
+                mock.patch.object(MODULE, "DevelopmentDemoClient") as constructor, \
+                mock.patch.object(MODULE, "seed_subject_demo", return_value={"createdSubjects": 7}) as subjects, \
+                contextlib.redirect_stdout(stdout):
             constructor.return_value.seed.return_value = TOTALS
             self.assertEqual(0, MODULE.main([]))
         constructor.assert_called_once_with(IDENTITY, API)
         constructor.return_value.wait_until_ready.assert_called_once_with()
         constructor.return_value.authenticate.assert_called_once_with()
+        subjects.assert_called_once_with(constructor.return_value)
         self.assertIn("records created=36, existing=0; storylines created=4, existing=0, skipped=0", stdout.getvalue())
         self.assertNotIn("token", stdout.getvalue())
 

@@ -1,6 +1,7 @@
 import { httpClient } from '@/api/http-client'
 import { useAuthStore } from '@/stores/auth'
 import type { Friend } from '@/api/social'
+import type { AssistantLocation } from '@/utils/assistant-location'
 
 export interface ConversationSummary {
   id: string
@@ -54,6 +55,14 @@ export interface SemanticResult {
 }
 
 export interface EvidenceBundle {
+  subjects?: Array<{ subjectId: string; revision: number; title: string }>
+  subjectEntries?: Array<{
+    entryId: string
+    subjectId: string
+    revision: number
+    title: string
+    kind: string
+  }>
   records: Array<{
     eventId: number
     title: string | null
@@ -142,7 +151,7 @@ export interface MutationResult {
   operation: string
   state: string
   targets: Array<{
-    type: 'Record' | 'Plan' | 'Storyline'
+    type: 'Record' | 'Plan' | 'Storyline' | 'Subject' | 'SubjectEntry' | 'SubjectRelation'
     id: string
     title: string
     revision: number
@@ -153,7 +162,7 @@ export interface MutationResult {
 export interface ApprovalRequest {
   id: string
   conversationId: string
-  targetType: 'Record' | 'Plan' | 'Storyline'
+  targetType: 'Record' | 'Plan' | 'Storyline' | 'Subject' | 'SubjectEntry' | 'SubjectRelation'
   targetId: string
   title: string
   description: string
@@ -205,7 +214,12 @@ export const aiApi = {
   reparse: (eventId: number) => httpClient.post<void>(`/api/v1/events/${eventId}/semantic/reparse`),
   getCapabilities: () => httpClient.get<AiCapabilities>('/api/v1/ai/capabilities'),
 
-  async sendMessage(id: string, content: string, onEvent: (event: StreamEvent) => void) {
+  async sendMessage(
+    id: string,
+    content: string,
+    onEvent: (event: StreamEvent) => void,
+    location?: AssistantLocation,
+  ) {
     const token = useAuthStore().user?.access_token
     if (!token) throw new Error('会话已失效，请重新登录。')
     const response = await fetch(apiUrl(`/api/v1/ai/conversations/${id}/messages`), {
@@ -215,7 +229,11 @@ export const aiApi = {
         Accept: 'text/event-stream',
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ content, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
+      body: JSON.stringify({
+        content,
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        location,
+      }),
     })
     if (!response.ok || !response.body) throw new Error('暂时无法连接 AI 服务，请稍后重试。')
     const reader = response.body.getReader()

@@ -18,7 +18,9 @@ describe('助手流式消息', () => {
   function stubStream(text: string) {
     const fetchMock = vi
       .fn<typeof fetch>()
-      .mockResolvedValue(new Response(text, { headers: { 'content-type': 'text/event-stream' } }))
+      .mockImplementation(
+        async () => new Response(text, { headers: { 'content-type': 'text/event-stream' } }),
+      )
     vi.stubGlobal('fetch', fetchMock)
     return fetchMock
   }
@@ -43,6 +45,21 @@ describe('助手流式消息', () => {
     await expect(aiApi.sendMessage('chat', '问题', vi.fn())).rejects.toThrow(
       '这次回答中途断开了，请重新发送一次。',
     )
+  })
+
+  it('发送显式附加的定位及坐标系，下一次调用不继承位置', async () => {
+    const fetchMock = stubStream('event: done\ndata: {"cached":false,"watermark":1}\n\n')
+    const location = {
+      latitude: 30,
+      longitude: 120,
+      accuracyMeters: 25,
+      capturedAt: new Date().toISOString(),
+      coordinateSystem: 'WGS84' as const,
+    }
+    await aiApi.sendMessage('chat', '从这里出发', vi.fn(), location)
+    await aiApi.sendMessage('chat', '继续', vi.fn())
+    expect(JSON.parse(fetchMock.mock.calls[0]![1]!.body as string).location).toEqual(location)
+    expect(JSON.parse(fetchMock.mock.calls[1]![1]!.body as string)).not.toHaveProperty('location')
   })
 
   it('服务端的文字错误保留，不覆盖成通用断连错误', async () => {

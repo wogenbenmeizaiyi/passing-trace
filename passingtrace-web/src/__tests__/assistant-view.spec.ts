@@ -12,6 +12,12 @@ import {
 } from '@/api/ai'
 import { useAuthStore } from '@/stores/auth'
 import AssistantView from '@/views/AssistantView.vue'
+import { getAssistantLocation, type AssistantLocation } from '@/utils/assistant-location'
+
+vi.mock('@/utils/assistant-location', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/utils/assistant-location')>()),
+  getAssistantLocation: vi.fn<typeof getAssistantLocation>(),
+}))
 
 vi.mock('@/api/ai', () => ({
   aiApi: {
@@ -188,6 +194,111 @@ describe('助手对话历史', () => {
 
   afterEach(() => {
     for (const wrapper of wrappers.splice(0)) wrapper.unmount()
+  })
+
+  const location = (): AssistantLocation => ({
+    latitude: 30.12,
+    longitude: 120.13,
+    accuracyMeters: 25,
+    capturedAt: new Date().toISOString(),
+    coordinateSystem: 'WGS84',
+  })
+
+  it('进入聊天和普通发送不定位，主动附加的位置只发送一次', async () => {
+    const wrapper = await mountAssistant()
+    expect(getAssistantLocation).not.toHaveBeenCalled()
+    await wrapper.get('textarea').setValue('你好')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(aiApi.sendMessage).toHaveBeenLastCalledWith(
+      first.id,
+      '你好',
+      expect.any(Function),
+      undefined,
+    )
+    const value = location()
+    vi.mocked(getAssistantLocation).mockResolvedValue(value)
+    await wrapper.get('.location-picker button').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('.location-picker').text()).toContain('精度约 25 米')
+    await wrapper.get('textarea').setValue('从这里出发')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(aiApi.sendMessage).toHaveBeenLastCalledWith(
+      first.id,
+      '从这里出发',
+      expect.any(Function),
+      value,
+    )
+    expect(wrapper.get('.location-picker').text()).not.toContain('已附加')
+    await wrapper.get('textarea').setValue('继续')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(aiApi.sendMessage).toHaveBeenLastCalledWith(
+      first.id,
+      '继续',
+      expect.any(Function),
+      undefined,
+    )
+    expect(getAssistantLocation).toHaveBeenCalledTimes(1)
+  })
+
+  it('拒绝定位显示可操作提示，不影响输入和普通发送', async () => {
+    vi.mocked(getAssistantLocation).mockRejectedValue(new Error('未获得定位权限，请提供出发地。'))
+    const wrapper = await mountAssistant()
+    await wrapper.get('textarea').setValue('从家里出发')
+    await wrapper.get('.location-picker button').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('.location-picker [role="alert"]').text()).toContain('未获得定位权限')
+    expect(wrapper.get<HTMLTextAreaElement>('textarea').element.value).toBe('从家里出发')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(aiApi.sendMessage).toHaveBeenLastCalledWith(
+      first.id,
+      '从家里出发',
+      expect.any(Function),
+      undefined,
+    )
+  })
+
+  it('定位中禁止发送，取消或切换会话后丢弃晚到结果', async () => {
+    const pending = deferred<AssistantLocation>()
+    vi.mocked(getAssistantLocation).mockReturnValue(pending.promise)
+    const wrapper = await mountAssistant()
+    await wrapper.get('textarea').setValue('附近有什么')
+    await wrapper.get('.location-picker button').trigger('click')
+    expect(wrapper.get<HTMLButtonElement>('.composer-send').element.disabled).toBe(true)
+    await wrapper.findAll('.conversation-open')[1]!.trigger('click')
+    await flushPromises()
+    pending.resolve(location())
+    await flushPromises()
+    expect(wrapper.get('.location-picker').text()).not.toContain('已附加')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(aiApi.sendMessage).toHaveBeenLastCalledWith(
+      second.id,
+      '附近有什么',
+      expect.any(Function),
+      undefined,
+    )
+  })
+
+  it('可移除位置；过期后保留草稿并要求重新获取', async () => {
+    const value = location()
+    vi.mocked(getAssistantLocation).mockResolvedValue(value)
+    const wrapper = await mountAssistant()
+    await wrapper.get('.location-picker button').trigger('click')
+    await flushPromises()
+    await wrapper.get('.location-picker').findAll('button')[1]!.trigger('click')
+    expect(wrapper.get('.location-picker').text()).not.toContain('已附加')
+    await wrapper.get('.location-picker button').trigger('click')
+    await flushPromises()
+    value.capturedAt = new Date(Date.now() - 6 * 60_000).toISOString()
+    await wrapper.get('textarea').setValue('路线规划')
+    await wrapper.get('form').trigger('submit')
+    expect(aiApi.sendMessage).not.toHaveBeenCalled()
+    expect(wrapper.get<HTMLTextAreaElement>('textarea').element.value).toBe('路线规划')
+    expect(wrapper.get('.error-banner').text()).toContain('位置已过期')
   })
 
   it('进入页面只取一页标题，点开对话才加载其消息', async () => {
@@ -574,7 +685,12 @@ describe('助手对话历史', () => {
     await wrapper.get('.composer').trigger('submit')
     await flushPromises()
 
-    expect(aiApi.sendMessage).toHaveBeenCalledWith(first.id, '继续总结', expect.any(Function))
+    expect(aiApi.sendMessage).toHaveBeenCalledWith(
+      first.id,
+      '继续总结',
+      expect.any(Function),
+      undefined,
+    )
     for (const button of wrapper.findAll<HTMLButtonElement>(
       '.new-chat, .conversation-open, .conversation-delete',
     )) {

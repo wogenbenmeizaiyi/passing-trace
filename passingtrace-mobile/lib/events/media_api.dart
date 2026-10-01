@@ -176,6 +176,15 @@ class MediaApiClient {
     );
   }
 
+  Future<Map<String, dynamic>> metadata(AuthSession session, String id) async =>
+      _json(
+        await _http.get(
+          _resolve('/api/v1/media/$id'),
+          headers: await _headers(session),
+        ),
+        const {200},
+      );
+
   Future<Uri> externalAccess(AuthSession session, String id) async {
     final raw = _json(
       await _http.get(
@@ -297,6 +306,7 @@ class MediaApiClient {
       'mp4' => 'video/mp4',
       'mov' => 'video/quicktime',
       'webm' => 'video/webm',
+      'glb' => 'model/gltf-binary',
       'pdf' => 'application/pdf',
       'doc' => 'application/msword',
       'docx' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',

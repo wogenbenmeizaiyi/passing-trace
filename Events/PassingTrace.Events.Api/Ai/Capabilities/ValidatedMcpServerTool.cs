@@ -4,6 +4,7 @@ using Json.Schema;
 using ModelContextProtocol;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
+using PassingTrace.Events.Api.Ai.Tools.Mutations;
 
 namespace PassingTrace.Events.Api.Ai.Capabilities;
 
@@ -42,11 +43,22 @@ public sealed class ValidatedMcpServerTool(McpServerTool inner) : McpServerTool
             var result = await inner.InvokeAsync(request, cancellationToken);
             return result.IsError == true ? Unavailable() : result;
         }
+        catch (Exception exception) when (ContainsIntentRefusal(exception))
+        {
+            return Error("mutation_intent_required", "An explicit user request is required before writing.");
+        }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
             // Never expose or log exception messages, which can contain search terms or evidence.
             return Unavailable();
         }
+    }
+
+    private static bool ContainsIntentRefusal(Exception exception)
+    {
+        for (Exception? current = exception; current is not null; current = current.InnerException)
+            if (current is MutationIntentRequiredException) return true;
+        return false;
     }
 
     private static (Tool Tool, JsonSchema Schema) CreateDefinition(McpServerTool inner)

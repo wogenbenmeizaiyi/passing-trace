@@ -48,6 +48,36 @@ void main() {
     expect(point, isNull);
   });
 
+  test('单次定位保留原始坐标系和采集时间，包括模拟器 GPS 坐标', () async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+          channel,
+          (_) async => {
+            'latitude': 30.0,
+            'longitude': 120.0,
+            'accuracyMeters': 20.0,
+            'capturedAt': now,
+            'coordinateSystem': 'WGS84',
+          },
+        );
+    final location = await AmapLocationService().locateOnce(
+      privacyAccepted: true,
+    );
+    expect(location.coordinateSystem, 'WGS84');
+    expect(location.capturedAt.millisecondsSinceEpoch, now);
+    expect(location.isFresh, isTrue);
+    expect(
+      DeviceLocation(
+        latitude: 30,
+        longitude: 120,
+        accuracyMeters: 20,
+        capturedAt: DateTime.now().subtract(const Duration(minutes: 6)),
+      ).isFresh,
+      isFalse,
+    );
+  });
+
   test('高德签名不匹配时隐藏底层 SHA1 错误细节', () {
     final error = PlatformException(
       code: 'AMAP_8',

@@ -23,11 +23,14 @@ class AssistantApprovalPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.traceColors;
-    final type = approval.targetType == 'Storyline'
-        ? '故事线'
-        : approval.targetType == 'Plan'
-        ? '计划'
-        : '记录';
+    final type = switch (approval.targetType) {
+      'Storyline' => '故事线',
+      'Plan' => '计划',
+      'Subject' => '人物档案',
+      'SubjectEntry' => '人物专属内容',
+      'SubjectRelation' => '误关联',
+      _ => '记录',
+    };
     return Padding(
       padding: const EdgeInsets.fromLTRB(10, 0, 10, 8),
       child: Semantics(

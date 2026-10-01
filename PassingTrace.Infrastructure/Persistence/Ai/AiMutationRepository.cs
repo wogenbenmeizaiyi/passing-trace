@@ -38,6 +38,14 @@ public sealed class AiMutationRepository(TraceDbContext db) : IAiMutationReposit
 
     public async Task LockTargetAsync(long userId, string targetType, string targetId, CancellationToken cancellationToken)
     {
+        if (targetType is "Subject" or "SubjectEntry" or "SubjectRelation")
+        {
+            await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({'s' + userId.ToString(CultureInfo.InvariantCulture)}, 0))", cancellationToken);
+            foreach (var tracked in db.ChangeTracker.Entries().Where(x => x.State == EntityState.Unchanged &&
+                x.Entity is Core.Subjects.Subject or Core.Subjects.SubjectEntry or Core.Subjects.SubjectRelation).ToArray())
+                await tracked.ReloadAsync(cancellationToken);
+            return;
+        }
         if (targetType == "Storyline")
         {
             var id = Guid.Parse(targetId);

@@ -42,6 +42,7 @@ enum TraceGlyph {
   play,
   pause,
   storyline,
+  people,
 }
 
 class TraceIcon extends StatelessWidget {
@@ -572,6 +573,23 @@ class _TraceIconPainter extends CustomPainter {
           path()
             ..moveTo(8, 18)
             ..cubicTo(13, 18, 12, 12, 16, 12),
+        );
+      case TraceGlyph.people:
+        circle(9, 7.5, 3.5);
+        draw(
+          path()
+            ..moveTo(2.5, 20)
+            ..lineTo(2.5, 18.5)
+            ..cubicTo(2.5, 12.5, 15.5, 12.5, 15.5, 18.5)
+            ..lineTo(15.5, 20),
+        );
+        draw(
+          path()
+            ..moveTo(16, 4.5)
+            ..cubicTo(20.5, 4.5, 20.5, 10.5, 16, 10.5)
+            ..moveTo(18, 14)
+            ..cubicTo(21, 14.5, 22, 16, 22, 18.5)
+            ..lineTo(22, 20),
         );
     }
     canvas.restore();

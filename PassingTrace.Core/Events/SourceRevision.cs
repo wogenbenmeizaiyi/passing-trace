@@ -23,6 +23,7 @@ public sealed class SourceRevision
     /// <summary>该版本的用户原始内容。</summary>
     public string? RawContent { get; set; }
     public string ParticipantIdsJson { get; set; } = "[]";
+    public string SubjectIdsJson { get; set; } = "[]";
 
     /// <summary>该版本的实际发生时间。</summary>
     public DateTimeOffset? HappenedAt { get; set; }

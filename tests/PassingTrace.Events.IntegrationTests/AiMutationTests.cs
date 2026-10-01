@@ -76,10 +76,109 @@ public sealed class AiMutationTests(StorylinePostgresFixture fixture) : IClassFi
     public async Task Ordinary_messages_and_text_confirmation_cannot_write(string question)
     {
         await using var h = await CreateHarnessAsync(question);
-        await Assert.ThrowsAsync<DomainValidationException>(() => h.Tools.CreateMyRecordAsync("Trace", "不能创建"));
-        await Assert.ThrowsAsync<DomainValidationException>(() => h.Tools.RequestDeleteMyRecordAsync(1));
+        await Assert.ThrowsAsync<MutationIntentRequiredException>(() => h.Tools.CreateMyRecordAsync("Trace", "不能创建"));
+        await Assert.ThrowsAsync<MutationIntentRequiredException>(() => h.Tools.RequestDeleteMyRecordAsync(1));
         Assert.False(h.Tools.HasOperations);
         Assert.False(await h.Db.Set<AiMutationOperation>().AnyAsync(x => x.UserId == h.UserId));
+    }
+
+    [Theory]
+    [InlineData("加上")]
+    [InlineData("先不用删，你先加")]
+    public async Task Colloquial_add_request_can_create_storyline_without_requesting_deletion(string question)
+    {
+        await using var h = await CreateHarnessAsync(question);
+        Assert.True(PersonalMutationTools.MayWrite(question));
+
+        var result = await h.Tools.CreateMyStorylineAsync("西溪湿地一日游", [new(NewPlan: new("福堤漫步"))]);
+
+        Assert.Equal("Storyline", result.Targets[0].Type);
+        await Assert.ThrowsAsync<MutationIntentRequiredException>(() => h.Tools.RequestDeleteMyStorylineAsync(Guid.Parse(result.Targets[0].Id)));
+        Assert.Empty(await h.Mutations.ListApprovalsAsync(h.ConversationId, default));
+    }
+
+    [Theory]
+    [InlineData("对就这样")]
+    [InlineData("确定")]
+    public async Task Short_confirmation_creates_seven_plan_storyline_through_agent_and_bypasses_cache(string question)
+    {
+        await using var h = await CreateHarnessAsync(question);
+        h.Db.AiMessages.AddRange(
+            new AiMessage
+            {
+                ConversationId = h.ConversationId,
+                UserId = h.UserId,
+                Role = AiMessageRole.User,
+                Content = "帮我创建西溪湿地故事线，拆成7个计划",
+                CreatedAt = h.Clock.GetUtcNow()
+            },
+            new AiMessage
+            {
+                ConversationId = h.ConversationId,
+                UserId = h.UserId,
+                Role = AiMessageRole.Assistant,
+                Content = "确认这7个环节可以吗？你回一句我就建故事线。",
+                CreatedAt = h.Clock.GetUtcNow()
+            });
+        await h.Db.SaveChangesAsync();
+        using var model = new StorylineMutationModel();
+        var service = CreateAssistant(h, model);
+        var stream = new List<AssistantStreamEvent>();
+
+        await foreach (var item in service.SendAsync(h.ConversationId, question, default)) stream.Add(item);
+
+        var result = Assert.IsType<AiMutationResult>(Assert.Single(stream, item => item.Type == "mutation-result").Data);
+        Assert.Equal(8, result.Targets.Count);
+        Assert.Contains("[Storyline #", result.Message.Content);
+        Assert.Equal(7, result.Targets.Count(target => target.Type == "Plan"));
+        var story = await h.Stories.GetAsync(h.UserId, Guid.Parse(result.Targets[0].Id), null, default);
+        Assert.Equal(7, story.Nodes.Count);
+        Assert.Equal(6, story.Edges.Count);
+        Assert.Equal("done", stream[^1].Type);
+        Assert.Empty(await h.Mutations.ListApprovalsAsync(h.ConversationId, default));
+        var context = await ConversationContextSnapshot.LoadAsync(new AiConversationRepository(h.Db), h.UserId,
+            h.ConversationId, long.MaxValue, h.Clock.GetUtcNow(), default);
+        Assert.Contains(context.RecentMessages, message => message.IsMutationReceipt);
+        Assert.False(PersonalMutationTools.MayWrite("确定", context.RecentMessages));
+    }
+
+    [Fact]
+    public async Task Short_confirmation_of_edit_cannot_grant_creation_or_deletion()
+    {
+        await using var h = await CreateHarnessAsync("创建计划");
+        var created = await h.Tools.CreateMyRecordAsync("Plan", "旧标题");
+        var history = new ConversationContextMessage[] {
+            new(1, AiMessageRole.User, "修改计划标题为新标题"),
+            new(2, AiMessageRole.Assistant, "确认要修改标题为新标题吗？"),
+        };
+        h.Tools.Configure(h.ConversationId, h.MessageId, AssistantCalendarContext.Create(h.Clock.GetUtcNow()), "对就这样", history);
+
+        var updated = await h.Tools.UpdateMyRecordAsync(long.Parse(created.Targets[0].Id), new(Title: "新标题"));
+
+        Assert.Equal("新标题", updated.Targets[0].Title);
+        await Assert.ThrowsAsync<MutationIntentRequiredException>(() => h.Tools.CreateMyRecordAsync("Plan", "不能额外创建"));
+        await Assert.ThrowsAsync<MutationIntentRequiredException>(() => h.Tools.RequestDeleteMyRecordAsync(long.Parse(created.Targets[0].Id)));
+    }
+
+    [Fact]
+    public async Task Mcp_intent_refusal_preserves_safe_reason_instead_of_reporting_query_failure()
+    {
+        await using var h = await CreateHarnessAsync("总结一下这个安排");
+        var package = new PersonalMutationsCapabilityPackage(h.Tools);
+        await using var mcp = await InternalMcpToolSession.CreateAsync(package.CreateTools().OfType<AIFunction>(),
+            writeTools: package.WriteTools.ToHashSet());
+        var create = mcp.Tools.OfType<AIFunction>().Single(tool => tool.Name == "CreateMyRecord");
+
+        var error = await Assert.ThrowsAsync<AssistantToolInvocationException>(() =>
+            create.InvokeAsync(new() { ["kind"] = "Plan", ["title"] = "不能自动保存" }).AsTask());
+
+        Assert.Equal("mutation_intent_required", error.ErrorCode);
+        Assert.True(error.IsWriteTool);
+        var presented = PassingTrace.Events.Api.Ai.Assistant.Presentation.AssistantErrorPresenter.Present(error);
+        Assert.Equal("mutation_intent_required", presented.Code);
+        Assert.DoesNotContain("查询", presented.Message);
+        Assert.False(presented.Retryable);
+        Assert.False(await h.Db.Events.AnyAsync(evt => evt.UserId == h.UserId));
     }
 
     [Fact]
@@ -429,7 +528,9 @@ public sealed class AiMutationTests(StorylinePostgresFixture fixture) : IClassFi
         await using var h = await CreateHarnessAsync("创建记录");
         var package = new PersonalMutationsCapabilityPackage(h.Tools);
         var tools = package.CreateTools().OfType<AIFunction>().ToArray();
-        Assert.Equal(6, tools.Length);
+        Assert.Equal(19, tools.Length);
+        Assert.Contains(tools, x => x.Name == "CreateMySubjectEntry");
+        Assert.Contains(tools, x => x.Name == "RequestDeleteMySubjectContent");
         Assert.DoesNotContain(tools, x => x.Name is "DeleteMyRecord" or "DeleteMyStoryline");
         await using var mcp = await InternalMcpToolSession.CreateAsync(tools, writeTools: package.WriteTools.ToHashSet());
         var create = (AIFunction)mcp.Tools.Single(x => x.Name == "CreateMyRecord");
@@ -479,6 +580,36 @@ public sealed class AiMutationTests(StorylinePostgresFixture fixture) : IClassFi
             }
             if (call is not null) yield return new ChatResponseUpdate { Role = ChatRole.Assistant, Contents = [call], FinishReason = ChatFinishReason.ToolCalls };
             else yield return new ChatResponseUpdate { Role = ChatRole.Assistant, Contents = [new TextContent(requestDelete ? "请在输入框上方确认删除。" : "安排好了。")], FinishReason = ChatFinishReason.Stop };
+            await Task.CompletedTask;
+        }
+        public object? GetService(Type serviceType, object? serviceKey = null) => null;
+        public void Dispose() { }
+    }
+
+    private sealed class StorylineMutationModel : IChatClient
+    {
+        private int _calls;
+        public Task<ChatResponse> GetResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions? options = null,
+            CancellationToken cancellationToken = default) => throw new InvalidOperationException("No extra model call expected");
+        public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(IEnumerable<ChatMessage> messages,
+            ChatOptions? options = null, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            FunctionCallContent? call = ++_calls switch
+            {
+                1 => new("skill", "ReadAssistantSkill", new Dictionary<string, object?> { ["key"] = "mutations" }),
+                2 => new("create-story", "CreateMyStoryline", new Dictionary<string, object?>
+                {
+                    ["title"] = "西溪湿地一日游",
+                    ["categoryKey"] = "trip",
+                    ["nodes"] = Enumerable.Range(1, 7).Select(i => new { newPlan = new { title = $"环节{i}" } }).ToArray(),
+                }),
+                _ => null,
+            };
+            Assert.True(_calls <= 3);
+            if (call is not null)
+                yield return new ChatResponseUpdate { Role = ChatRole.Assistant, Contents = [call], FinishReason = ChatFinishReason.ToolCalls };
+            else
+                yield return new ChatResponseUpdate { Role = ChatRole.Assistant, Contents = [new TextContent("已按7个环节创建故事线，请确认能打开链接。")], FinishReason = ChatFinishReason.Stop };
             await Task.CompletedTask;
         }
         public object? GetService(Type serviceType, object? serviceKey = null) => null;

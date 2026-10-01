@@ -32,7 +32,8 @@ public sealed class EventsController(EventService service) : ControllerBase
             request.MediaIds,
             request.Classification,
             request.Locations,
-            request.ParticipantIds);
+            request.ParticipantIds,
+            request.SubjectIds);
 
         var evt = await service.CreateAsync(command, cancellationToken);
 
@@ -114,7 +115,8 @@ public sealed class EventsController(EventService service) : ControllerBase
             request.MediaIds,
             request.Classification,
             request.Locations,
-            request.ParticipantIds);
+            request.ParticipantIds,
+            request.SubjectIds);
 
         var evt = await service.UpdateSourceAsync(command, cancellationToken);
 
@@ -208,6 +210,7 @@ public sealed class EventsController(EventService service) : ControllerBase
             manual,
             effective,
             locations,
-            evt.Participants.Where(x => x.Active).Select(x => x.UserId.ToString()).ToArray());
+            evt.Participants.Where(x => x.Active).Select(x => x.UserId.ToString()).ToArray(),
+            System.Text.Json.JsonSerializer.Deserialize<Guid[]>(evt.SubjectIdsJson));
     }
 }

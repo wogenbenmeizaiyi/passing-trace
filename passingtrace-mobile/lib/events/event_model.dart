@@ -61,6 +61,7 @@ class EventModel {
     this.effectiveClassification = const EffectiveClassification(),
     this.locations = const [],
     this.participantIds = const [],
+    this.subjectIds = const [],
   });
 
   final int id;
@@ -89,6 +90,7 @@ class EventModel {
   final EffectiveClassification effectiveClassification;
   final List<EventLocationModel> locations;
   final List<String> participantIds;
+  final List<String> subjectIds;
 
   EventModel copyWith({
     EventKind? kind,
@@ -110,6 +112,7 @@ class EventModel {
     EffectiveClassification? effectiveClassification,
     List<EventLocationModel>? locations,
     List<String>? participantIds,
+    List<String>? subjectIds,
   }) => EventModel(
     id: id,
     kind: kind ?? this.kind,
@@ -132,11 +135,13 @@ class EventModel {
         effectiveClassification ?? this.effectiveClassification,
     locations: locations ?? this.locations,
     participantIds: participantIds ?? this.participantIds,
+    subjectIds: subjectIds ?? this.subjectIds,
   );
 
   factory EventModel.fromJson(Map<String, dynamic> json) => EventModel(
     id: (json['id'] as num).toInt(),
     participantIds: (json['participantIds'] as List? ?? []).cast<String>(),
+    subjectIds: (json['subjectIds'] as List? ?? []).cast<String>(),
     kind: EventKind.fromValue((json['kind'] as num).toInt()),
     status: EventStatus.fromValue((json['status'] as num).toInt()),
     title: json['title'] as String?,
@@ -396,7 +401,8 @@ class PlaceCandidateModel extends EventLocationModel {
 enum MediaKind {
   image(1),
   video(2),
-  file(3);
+  file(3),
+  model(4);
 
   const MediaKind(this.value);
   final int value;

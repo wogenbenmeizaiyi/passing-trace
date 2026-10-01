@@ -9,7 +9,8 @@ public sealed record AiRecordPatch(
     [property: MaxLength(8000)] string? RawContent = null,
     DateTimeOffset? HappenedAt = null,
     DateTimeOffset? PlannedAt = null,
-    IReadOnlyList<string>? ClearFields = null);
+    IReadOnlyList<string>? ClearFields = null,
+    IReadOnlyList<Guid>? SubjectIds = null);
 
 public sealed record AiNewPlanInput(
     [property: Required, StringLength(512, MinimumLength = 1)] string Title,
@@ -27,11 +28,11 @@ public sealed record AiStorylineChange(
     string? CategoryKey = null,
     [property: RegularExpression("^(Ongoing|Completed)$")] string? Status = null);
 
-public sealed record AiMutationTarget(string Type, string Id, string Title, int Revision);
+public sealed record AiMutationTarget(string Type, string Id, string Title, int Revision, Guid? SubjectId = null);
 public sealed record AiMutationResult(Guid OperationId, string Operation, string State,
     IReadOnlyList<AiMutationTarget> Targets, AiMessageResponse Message);
 public sealed record AiApprovalRequest(Guid Id, Guid ConversationId, string TargetType, string TargetId,
     string Title, string Description, DateTimeOffset ExpiresAt);
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record AiApprovalDecisionRequest([property: Required, RegularExpression("^(confirm|cancel)$")] string Decision);
+public sealed record AiApprovalDecisionRequest([Required, RegularExpression("^(confirm|cancel)$")] string Decision);
 public sealed record AiApprovalDecisionResponse(Guid Id, string State, AiMutationResult Result);

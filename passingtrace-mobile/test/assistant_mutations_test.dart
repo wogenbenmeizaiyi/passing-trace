@@ -2,11 +2,14 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:passingtrace_mobile/auth_service.dart';
 import 'package:passingtrace_mobile/events/ai_api.dart';
+import 'package:passingtrace_mobile/events/events_api.dart';
+import 'package:passingtrace_mobile/events/location_service.dart';
 import 'package:passingtrace_mobile/theme/passingtrace_theme.dart';
 import 'package:passingtrace_mobile/views/assistant_approval_panel.dart';
 import 'package:passingtrace_mobile/views/assistant_view.dart';
@@ -65,6 +68,7 @@ class FakeAi extends AiApiClient {
   );
   List<AiApprovalModel> approvals = [approval];
   final List<String> decisions = [];
+  final List<DeviceLocation?> sentLocations = [];
   Completer<AiMutationResultModel>? pending;
   Completer<List<AiApprovalModel>>? delayedApprovals;
   Completer<AiConversationDetailModel>? delayedOther;
@@ -106,8 +110,10 @@ class FakeAi extends AiApiClient {
   Stream<AssistantChunk> send(
     AuthSession session,
     String conversationId,
-    String content,
-  ) async* {
+    String content, {
+    DeviceLocation? location,
+  }) async* {
+    sentLocations.add(location);
     yield AssistantChunk('mutation-result', receipt);
     yield AssistantChunk('mutation-result', receipt);
     yield AssistantChunk('error', {'message': '回答中断'});
@@ -115,6 +121,159 @@ class FakeAi extends AiApiClient {
 }
 
 void main() {
+  const locationChannel = MethodChannel('passingtrace/amap_location');
+  tearDown(() {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(locationChannel, null);
+  });
+
+  void stubLocation({bool permission = true}) {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(locationChannel, (call) async {
+          if (call.method == 'requestPermission') return permission;
+          if (call.method == 'locateOnce') {
+            return {
+              'latitude': 30.12,
+              'longitude': 120.13,
+              'accuracyMeters': 25.0,
+              'capturedAt': DateTime.now().millisecondsSinceEpoch,
+              'coordinateSystem': 'GCJ02',
+            };
+          }
+          return null;
+        });
+  }
+
+  testWidgets('普通聊天不定位，明确授权后只将位置附加到下一次发送', (tester) async {
+    stubLocation();
+    final api = FakeAi()..approvals = [];
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: PassingTraceTheme.light(PassingTracePalette.pine),
+        home: AssistantView(auth: FakeAuth(), session: session, apiClient: api),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), '你好');
+    await tester.tap(find.bySemanticsLabel('发送'));
+    await tester.pumpAndSettle();
+    expect(api.sentLocations, [null]);
+    await tester.tap(find.text('使用当前位置'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('仅随下一条消息发送给 AI'), findsOneWidget);
+    await tester.tap(find.text('同意并定位'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('精度约 25 米'), findsOneWidget);
+    await tester.enterText(find.byType(TextField), '从这里出发');
+    await tester.tap(find.bySemanticsLabel('发送'));
+    await tester.pumpAndSettle();
+    expect(api.sentLocations.last?.latitude, 30.12);
+    expect(api.sentLocations.last?.coordinateSystem, 'GCJ02');
+    expect(find.textContaining('已附加当前位置'), findsNothing);
+    await tester.enterText(find.byType(TextField), '继续');
+    await tester.tap(find.bySemanticsLabel('发送'));
+    await tester.pumpAndSettle();
+    expect(api.sentLocations.last, isNull);
+  });
+
+  testWidgets('取消隐私提示和拒绝系统权限都不附加位置，也保留输入', (tester) async {
+    final calls = <String>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(locationChannel, (call) async {
+          calls.add(call.method);
+          return false;
+        });
+    final api = FakeAi()..approvals = [];
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: PassingTraceTheme.light(PassingTracePalette.pine),
+        home: AssistantView(auth: FakeAuth(), session: session, apiClient: api),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), '从家里出发');
+    await tester.tap(find.text('使用当前位置'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+    expect(calls, isEmpty);
+    await tester.tap(find.text('使用当前位置'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('同意并定位'));
+    await tester.pumpAndSettle();
+    expect(calls, ['requestPermission']);
+    expect(find.textContaining('未授予前台定位权限'), findsOneWidget);
+    expect(
+      tester.widget<TextField>(find.byType(TextField)).controller!.text,
+      '从家里出发',
+    );
+    await tester.tap(find.bySemanticsLabel('发送'));
+    await tester.pumpAndSettle();
+    expect(api.sentLocations, [null]);
+  });
+
+  testWidgets('切换对话后丢弃迟到的定位结果', (tester) async {
+    final pending = Completer<Map<String, dynamic>>();
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(locationChannel, (call) async {
+          if (call.method == 'requestPermission') return true;
+          if (call.method == 'locateOnce') return pending.future;
+          return null;
+        });
+    final api = FakeAi()..approvals = [];
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: PassingTraceTheme.light(PassingTracePalette.pine),
+        home: AssistantView(auth: FakeAuth(), session: session, apiClient: api),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('使用当前位置'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('同意并定位'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('聊天记录'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('另一段对话'));
+    await tester.pumpAndSettle();
+    pending.complete({
+      'latitude': 30.12,
+      'longitude': 120.13,
+      'accuracyMeters': 25.0,
+      'capturedAt': DateTime.now().millisecondsSinceEpoch,
+    });
+    await tester.pumpAndSettle();
+    expect(find.textContaining('已附加当前位置'), findsNothing);
+    await tester.enterText(find.byType(TextField), '继续');
+    await tester.tap(find.bySemanticsLabel('发送'));
+    await tester.pumpAndSettle();
+    expect(api.sentLocations, [null]);
+  });
+
+  test('定位 API 传递明确坐标系，普通消息不包含定位字段', () async {
+    final bodies = <Map<String, dynamic>>[];
+    final api = AiApiClient(
+      auth: FakeAuth(),
+      baseUrl: 'https://events.test',
+      httpClient: MockClient((request) async {
+        bodies.add(jsonDecode(request.body) as Map<String, dynamic>);
+        return http.Response('event: done\ndata: {}\n\n', 200);
+      }),
+    );
+    final location = DeviceLocation(
+      latitude: 30,
+      longitude: 120,
+      accuracyMeters: 30,
+      capturedAt: DateTime.now(),
+      coordinateSystem: 'WGS84',
+    );
+    await api.send(session, 'chat', '从这里出发', location: location).toList();
+    await api.send(session, 'chat', '继续').toList();
+    expect(bodies.first['location'], location.toAssistantJson());
+    expect(bodies.last.containsKey('location'), isFalse);
+    api.close();
+  });
+
   test('授权 API 仅提交决定，解析实际回执与目标链接', () async {
     final api = AiApiClient(
       auth: FakeAuth(),
@@ -146,6 +305,29 @@ void main() {
     expect(result.message.id, 99);
     expect(result.message.evidenceRecords.single.eventId, 42);
     expect(result.message.content, contains('[Event #42]'));
+    api.close();
+  });
+
+  test('授权接口错误提取具体原因，不向用户展示整段响应', () async {
+    final api = AiApiClient(
+      auth: FakeAuth(),
+      baseUrl: 'https://events.test',
+      httpClient: MockClient(
+        (request) async => http.Response(
+          jsonEncode({'title': '资源不存在', 'detail': '授权已失效，请重新申请。'}),
+          404,
+          headers: {'content-type': 'application/json; charset=utf-8'},
+        ),
+      ),
+    );
+    await expectLater(
+      api.decideApproval(session, 'conversation-1', 'approval-1', 'cancel'),
+      throwsA(
+        isA<EventApiException>()
+            .having((e) => e.status, 'status', 404)
+            .having((e) => e.message, 'message', '授权已失效，请重新申请。'),
+      ),
+    );
     api.close();
   });
 

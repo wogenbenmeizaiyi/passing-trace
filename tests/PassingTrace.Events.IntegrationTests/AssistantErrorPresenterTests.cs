@@ -142,4 +142,15 @@ public sealed class AssistantErrorPresenterTests
         Assert.False(result.Retryable);
         Assert.DoesNotContain("secret", result.Message);
     }
+
+    [Theory]
+    [InlineData("mutation_intent_required", "mutation_intent_required", false)]
+    [InlineData("tool_unavailable", "mutation_tools_unavailable", true)]
+    public void Write_tool_failure_does_not_display_a_record_query_error(string toolCode, string expected, bool retryable)
+    {
+        var result = AssistantErrorPresenter.Present(new AssistantToolInvocationException(toolCode, isWriteTool: true));
+        Assert.Equal(expected, result.Code);
+        Assert.Equal(retryable, result.Retryable);
+        Assert.DoesNotContain("查询", result.Message);
+    }
 }

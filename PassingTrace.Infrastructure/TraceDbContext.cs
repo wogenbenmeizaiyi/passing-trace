@@ -15,6 +15,13 @@ public sealed class TraceDbContext(DbContextOptions<TraceDbContext> options)
     : DbContext(options)
 {
     public DbSet<Event> Events => Set<Event>();
+    public DbSet<Core.Subjects.Subject> Subjects => Set<Core.Subjects.Subject>();
+    public DbSet<Core.Subjects.SubjectRelation> SubjectRelations => Set<Core.Subjects.SubjectRelation>();
+    public DbSet<Core.Subjects.SubjectEntry> SubjectEntries => Set<Core.Subjects.SubjectEntry>();
+    public DbSet<Core.Subjects.SubjectTimelineReference> SubjectTimelineReferences => Set<Core.Subjects.SubjectTimelineReference>();
+    public DbSet<Core.Subjects.SubjectHistory> SubjectHistories => Set<Core.Subjects.SubjectHistory>();
+    public DbSet<Core.Subjects.SubjectMilestone> SubjectMilestones => Set<Core.Subjects.SubjectMilestone>();
+    public DbSet<Core.Subjects.SubjectMediaReference> SubjectMediaReferences => Set<Core.Subjects.SubjectMediaReference>();
     public DbSet<Friendship> Friendships => Set<Friendship>();
     public DbSet<FriendPreference> FriendPreferences => Set<FriendPreference>();
     public DbSet<FriendRequest> FriendRequests => Set<FriendRequest>();

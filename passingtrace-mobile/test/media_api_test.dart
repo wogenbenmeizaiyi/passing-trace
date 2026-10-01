@@ -30,6 +30,7 @@ base class _MemoryPlatformFile extends PlatformFile {
   // file_picker 12.3.0 added this member to PlatformFile. Keeping the
   // compatibility method unannotated also allows this test double to compile
   // against the 12.1.x interface pinned by the application lockfile.
+  @override
   int? lengthSync() => _bytes.length;
 
   @override

@@ -22,6 +22,7 @@ public sealed class InternalMcpToolSession : IAsyncDisposable
     private McpClient? _client;
     private int _invalidCalls;
     private int _disposed;
+    private IReadOnlySet<string> _writeTools = new HashSet<string>();
 
     private InternalMcpToolSession(McpServer server, CancellationTokenSource lifetime)
     {
@@ -61,6 +62,7 @@ public sealed class InternalMcpToolSession : IAsyncDisposable
         var server = McpServer.Create(new StreamServerTransport(
             requests.Reader.AsStream(), responses.Writer.AsStream()), serverOptions);
         var session = new InternalMcpToolSession(server, lifetime);
+        session._writeTools = writeTools?.ToHashSet(StringComparer.Ordinal) ?? [];
         try
         {
             using var setupTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -122,10 +124,11 @@ public sealed class InternalMcpToolSession : IAsyncDisposable
                 var result = await tool.CallAsync(arguments, cancellationToken: invocationToken);
                 if (result.IsError == true)
                 {
-                    var invalid = result.StructuredContent is JsonElement { ValueKind: JsonValueKind.Object } content &&
-                        content.TryGetProperty("code", out var code) && code.GetString() == "invalid_tool_arguments";
+                    var errorCode = result.StructuredContent is JsonElement { ValueKind: JsonValueKind.Object } content &&
+                        content.TryGetProperty("code", out var code) ? code.GetString() : null;
+                    var invalid = errorCode == "invalid_tool_arguments";
                     if (!invalid || Interlocked.Increment(ref session._invalidCalls) > 1)
-                        throw new AssistantToolInvocationException();
+                        throw new AssistantToolInvocationException(errorCode, session._writeTools.Contains(Name));
                 }
                 // Preserve the standard MCP result envelope (including isError); never reinterpret
                 // a tool failure as an empty result or a zero statistic.
@@ -140,7 +143,7 @@ public sealed class InternalMcpToolSession : IAsyncDisposable
             }
             catch (Exception exception) when (exception is not AssistantToolInvocationException)
             {
-                throw new AssistantToolInvocationException();
+                throw new AssistantToolInvocationException(isWriteTool: session._writeTools.Contains(Name));
             }
             finally { session._invocationGate.Release(); }
         }
