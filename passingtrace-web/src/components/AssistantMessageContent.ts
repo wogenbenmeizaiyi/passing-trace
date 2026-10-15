@@ -1,11 +1,16 @@
 import { defineComponent, h, type PropType, type VNodeChild } from 'vue'
 import { RouterLink } from 'vue-router'
+import { recordFromConversation, storylineFromConversation } from '@/utils/assistant-navigation'
+import { safeSocialPath, type Friend } from '@/api/social'
 
 type InlineToken =
   | { type: 'text'; value: string }
   | { type: 'strong'; value: string }
   | { type: 'code'; value: string }
   | { type: 'event'; eventId: number; value: string }
+  | { type: 'storyline'; storylineId: string; value: string }
+  | { type: 'social'; kind: string; id: string; value: string }
+  | { type: 'subject'; kind: string; id: string; value: string }
 
 type Block =
   | { type: 'heading'; level: number; content: string }
@@ -13,20 +18,50 @@ type Block =
   | { type: 'list'; ordered: boolean; items: string[] }
   | { type: 'rule' }
 
-function inlineTokens(source: string, titles: Map<number, string>): InlineToken[] {
+function inlineTokens(
+  source: string,
+  recordTitles: Map<number, string>,
+  storylineTitles: Map<string, string>,
+): InlineToken[] {
   const tokens: InlineToken[] = []
-  const pattern = /\[Event\s*#(\d+)\]|\*\*(.+?)\*\*|`([^`]+)`/gi
+  const pattern =
+    /\[Event\s*#(\d+)\]|\[Storyline\s*#([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\]|\*\*(.+?)\*\*|`([^`]+)`|\[(Friend|Share)\s*#([0-9a-f-]{36})\]|\[(Subject|SubjectEntry)\s*#([0-9a-f-]{36})\]/gi
   let cursor = 0
   for (const match of source.matchAll(pattern)) {
     const index = match.index ?? 0
     if (index > cursor) tokens.push({ type: 'text', value: source.slice(cursor, index) })
     if (match[1]) {
       const eventId = Number(match[1])
-      tokens.push({ type: 'event', eventId, value: titles.get(eventId) || '查看记录' })
+      tokens.push({
+        type: 'event',
+        eventId,
+        value: recordTitles.get(eventId) || '查看记录',
+      })
     } else if (match[2] !== undefined) {
-      tokens.push({ type: 'strong', value: match[2] })
+      const storylineId = match[2].toLowerCase()
+      tokens.push({
+        type: 'storyline',
+        storylineId,
+        value: storylineTitles.get(storylineId) || '查看故事线',
+      })
+    } else if (match[7]) {
+      tokens.push({
+        type: 'subject',
+        kind: match[7].toLowerCase(),
+        id: match[8]!.toLowerCase(),
+        value: '',
+      })
+    } else if (match[3] !== undefined) {
+      tokens.push({ type: 'strong', value: match[3] })
+    } else if (match[5]) {
+      tokens.push({
+        type: 'social',
+        kind: match[5].toLowerCase(),
+        id: match[6]!.toLowerCase(),
+        value: '',
+      })
     } else {
-      tokens.push({ type: 'code', value: match[3]! })
+      tokens.push({ type: 'code', value: match[4]! })
     }
     cursor = index + match[0].length
   }
@@ -86,23 +121,109 @@ export default defineComponent({
   name: 'AssistantMessageContent',
   props: {
     content: { type: String, required: true },
+    conversationId: { type: String as PropType<string | null>, default: null },
     records: {
-      type: Array as PropType<Array<{ eventId: number; title: string | null }>>,
+      type: Array as PropType<
+        Array<{ eventId: number; title: string | null; accessPath?: string | null }>
+      >,
+      default: () => [],
+    },
+    storylines: {
+      type: Array as PropType<Array<{ storylineId: string; title: string | null }>>,
+      default: () => [],
+    },
+    friends: { type: Array as PropType<Friend[]>, default: () => [] },
+    subjects: {
+      type: Array as PropType<Array<{ subjectId: string; title: string }>>,
+      default: () => [],
+    },
+    subjectEntries: {
+      type: Array as PropType<Array<{ entryId: string; title: string }>>,
+      default: () => [],
+    },
+    sharedContents: {
+      type: Array as PropType<Array<{ shareId: string; title: string; accessPath: string }>>,
       default: () => [],
     },
   },
   setup(props) {
     const renderInline = (source: string): VNodeChild[] => {
-      const titles = new Map(
+      const recordTitles = new Map(
         props.records.map((record) => [record.eventId, record.title?.trim() || '']),
       )
-      return inlineTokens(source, titles).map((token) => {
+      const storylineTitles = new Map(
+        props.storylines.map((storyline) => [
+          storyline.storylineId.toLowerCase(),
+          storyline.title?.trim() || '',
+        ]),
+      )
+      return inlineTokens(source, recordTitles, storylineTitles).map((token) => {
+        if (token.type === 'subject') {
+          const item =
+            token.kind === 'subject'
+              ? props.subjects.find((x) => x.subjectId.toLowerCase() === token.id)
+              : props.subjectEntries.find((x) => x.entryId.toLowerCase() === token.id)
+          if (!item) return '人物内容不可查看'
+          return h(
+            RouterLink,
+            {
+              class: 'record-citation',
+              to: {
+                path: `/subjects/${token.kind === 'subjectentry' ? 'entries/' : ''}${token.id}`,
+                query: props.conversationId ? { conversation: props.conversationId } : {},
+              },
+            },
+            { default: () => item.title },
+          )
+        }
+        const from = `/assistant${props.conversationId ? `?conversation=${props.conversationId}` : ''}`
+        if (token.type === 'social') {
+          const friend = props.friends.find((f) => f.id.toLowerCase() === token.id)
+          const share = props.sharedContents.find((s) => s.shareId.toLowerCase() === token.id)
+          const path = share ? safeSocialPath(share.accessPath) : null
+          if (token.kind === 'friend' && friend)
+            return h(
+              RouterLink,
+              {
+                class: 'record-citation',
+                to: { path: '/messages', query: { tab: 'friends', friend: friend.id, from } },
+              },
+              { default: () => friend.remark || friend.person.nickname },
+            )
+          if (token.kind === 'share' && path)
+            return h(
+              RouterLink,
+              { class: 'record-citation', to: { path, query: { from } } },
+              { default: () => share!.title },
+            )
+          return token.kind === 'friend' ? '好友信息已更新' : '分享已不可查看'
+        }
         if (token.type === 'strong') return h('strong', token.value)
         if (token.type === 'code') return h('code', token.value)
         if (token.type === 'event') {
           return h(
             RouterLink,
-            { class: 'record-citation', to: `/events/${token.eventId}` },
+            {
+              class: 'record-citation',
+              to: safeSocialPath(props.records.find((r) => r.eventId === token.eventId)?.accessPath)
+                ? {
+                    path: safeSocialPath(
+                      props.records.find((r) => r.eventId === token.eventId)?.accessPath,
+                    )!,
+                    query: { from },
+                  }
+                : recordFromConversation(token.eventId, props.conversationId),
+            },
+            { default: () => token.value },
+          )
+        }
+        if (token.type === 'storyline') {
+          return h(
+            RouterLink,
+            {
+              class: 'storyline-citation',
+              to: storylineFromConversation(token.storylineId, props.conversationId),
+            },
             { default: () => token.value },
           )
         }

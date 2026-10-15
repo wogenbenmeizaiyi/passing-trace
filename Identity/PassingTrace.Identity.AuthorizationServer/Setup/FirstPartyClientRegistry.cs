@@ -18,4 +18,22 @@ public sealed class FirstPartyClientRegistry(IConfiguration configuration)
 
     public bool IsRedirectUriAllowed(string clientId, string redirectUri) =>
         GetRequired(clientId).RedirectUris.Contains(redirectUri, StringComparer.Ordinal);
+
+    // Derive the public download page only from server-owned Web client registration,
+    // never from the request host, return URL, or QR transaction code.
+    public string? GetWebProductUrl()
+    {
+        if (!_clients.TryGetValue("passingtrace-web", out var webClient))
+            return null;
+
+        foreach (var redirectUri in webClient.RedirectUris)
+        {
+            if (Uri.TryCreate(redirectUri, UriKind.Absolute, out var uri) &&
+                (uri.Scheme == Uri.UriSchemeHttps || uri.Scheme == Uri.UriSchemeHttp) &&
+                string.IsNullOrEmpty(uri.UserInfo))
+                return new Uri(uri, "/product").AbsoluteUri;
+        }
+
+        return null;
+    }
 }

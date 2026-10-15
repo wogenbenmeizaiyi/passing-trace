@@ -42,8 +42,8 @@ flowchart LR
     API --> MinIO[(MinIO / S3)]
     Worker[AI Worker] --> TraceDb
     Worker --> MinIO
-    Worker --> MiniMax[MiniMax：图片与文本语义]
-    Events --> MiniMax[MiniMax：AI 问答]
+    Worker --> DeepSeek[DeepSeek V4.1 Flash：图片与文本语义]
+    Events --> DeepSeek[DeepSeek V4.1 Flash：AI 问答]
     Worker --> Qwen[百炼：向量]
     API --> AMap[高德 Web 服务]
 ```
@@ -55,7 +55,7 @@ flowchart LR
 - OpenIddict 7.6、JWT Bearer、PKCE
 - PostgreSQL 18、pgvector、Redis
 - MinIO / S3
-- Microsoft Agent Framework、Microsoft.Extensions.AI、MiniMax、百炼 Qwen
+- Microsoft Agent Framework、Microsoft.Extensions.AI、DeepSeek、百炼 Qwen
 - Flutter（Android）、Vue 3、TypeScript、Vite
 - 高德 Android 定位 SDK 与高德 Web 服务
 
@@ -90,6 +90,7 @@ deploy/                          部署相关文件
 - [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/)
 - Node.js `22.18+` 或 `24.12+`，并启用 Corepack
+- Python 3.10+（本地示例数据脚本，无需额外安装 Python 包）
 - Flutter SDK（包含 Dart `3.13+`）
 - Android Studio、Android SDK Platform-Tools；真机调试还需要开启 USB 调试
 
@@ -125,7 +126,7 @@ dotnet user-secrets set --project AppHost "Parameters:postgres-password" "change
 dotnet user-secrets set --project AppHost "Parameters:minio-access-key" "passingtrace-local"
 dotnet user-secrets set --project AppHost "Parameters:minio-secret-key" "change-this-minio-secret"
 dotnet user-secrets set --project AppHost "Parameters:qwen-api-key" "your-qwen-api-key"
-dotnet user-secrets set --project AppHost "Parameters:minimax-api-key" "your-minimax-api-key"
+dotnet user-secrets set --project AppHost "Parameters:deepseek-api-key" "your-deepseek-api-key"
 dotnet user-secrets set --project AppHost "Parameters:amap-web-service-key" "your-amap-web-service-key"
 # 可选：给 AI 高德工具单独轮换和统计；不设置时复用上面的 Web 服务 Key
 dotnet user-secrets set --project AppHost "AMAP_MCP_KEY" "your-amap-mcp-key"
@@ -143,7 +144,9 @@ Android 高德 Key 写入不会提交的 `passingtrace-mobile/android/local.prop
 AMAP_ANDROID_KEY=your-amap-android-key
 ```
 
-高德 Android Key 需要与 `com.passingtrace.passingtrace_mobile` 的包名和本机调试签名 SHA-1 匹配；后端使用的高德 Key 应选择“Web 服务”平台。AI 高德工具通过官方 Streamable HTTP MCP 接入，优先读取 `AMAP_MCP_KEY`，未配置时复用 Web 服务 Key；记录表单的地点选择仍走原有 REST 服务，两者故障相互隔离。AI 问答和图片/文本语义分析默认使用原生多模态的 MiniMax-M3，向量仍使用百炼；Provider、模型和 Endpoint 均在 `AiModels` 中按角色配置。没有有效的 MiniMax、Qwen 或高德 Key 时，对应能力将不可用，但不应把真实 Key 写进源码或 `appsettings.json`。
+高德 Android Key 需要与 `com.passingtrace.passingtrace_mobile` 的包名和本机调试签名 SHA-1 匹配；后端使用的高德 Key 应选择“Web 服务”平台。AI 高德工具通过官方 Streamable HTTP MCP 接入，优先读取 `AMAP_MCP_KEY`，未配置时复用 Web 服务 Key；记录表单的地点选择仍走原有 REST 服务，两者故障相互隔离。AI 问答和图片/文本语义分析默认使用 DeepSeek V4.1 Flash（官方 API 模型名 `deepseek-flash`），向量仍使用百炼；Provider、模型和 Endpoint 均在 `AiModels` 中按角色配置。没有有效的 DeepSeek、Qwen 或高德 Key 时，对应能力将不可用，但不应把真实 Key 写进源码或 `appsettings.json`。
+
+DeepSeek 目前使用非思考模式，避免当前 OpenAI 兼容工具链未回传 `reasoning_content` 导致多轮工具调用失败；Skill/MCP 和权限校验不变。不再自动回退到已到期的 MiniMax。生产部署前需配置 GitHub Actions 的 `DEEPSEEK_API_KEY` Secret（手动部署则放入生产环境变量）。参考[官方模型更新](https://api-docs.deepseek.com/updates/)和[工具调用思考模式要求](https://api-docs.deepseek.com/guides/thinking_mode/)。
 
 ### 3. 启动完整环境
 
@@ -154,6 +157,16 @@ dotnet run --project AppHost/AppHost.csproj
 ```
 
 终端会输出 Aspire Dashboard 的地址和一次性登录链接。Dashboard 是本地端口、服务状态、日志和 Trace 的可靠入口。
+
+Development 启动时，`development-demo-data` 会自动为默认登录账号 `dev` 补齐 **30 条记录/计划和 5 条故事线**。数据带有“开发示例”标签，覆盖跨年/月列表、分类、地点、未来安排，以及故事线阶段、分支和汇合。刷新、重新编译或重启不会重复创建，也不会覆盖你已经编辑、归档或软删除的示例。数据保存在现有 PostgreSQL 持久卷中。
+
+已启动服务时也可手动补齐：
+
+```powershell
+python tools/seed_development_demo.py
+```
+
+脚本只连接本机开发服务，使用已有的自动开发登录；不接收密码或生产 Token。需要禁用自动补齐、修改端口或了解数据保护规则时，参见[本地示例数据说明](docs/development-demo-data.md)。
 
 默认开发地址：
 

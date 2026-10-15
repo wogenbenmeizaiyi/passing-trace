@@ -119,7 +119,6 @@ class AuthService {
     required String identityBaseUrl,
     required String username,
     required String password,
-    required String bootstrapCode,
     required String deviceName,
   }) async {
     final baseUrl = _resolveIdentityUrl(identityBaseUrl);
@@ -142,34 +141,37 @@ class AuthService {
         'intentId': intent['intentId'],
         'username': username,
         'password': password,
-        'bootstrapCode': bootstrapCode,
         'deviceName': deviceName,
       },
       expectedStatuses: const {201},
     );
 
-    await _storage.write(key: _identityUrlKey, value: baseUrl);
-    await _storage.write(key: _buildChannelKey, value: environment.channel);
-    await _storage.write(
-      key: _deviceIdKey,
-      value: registration['deviceId'] as String,
-    );
-    await _storage.write(
-      key: _deviceSecretKey,
-      value: registration['deviceSecret'] as String,
-    );
+    try {
+      await _storage.write(key: _identityUrlKey, value: baseUrl);
+      await _storage.write(key: _buildChannelKey, value: environment.channel);
+      await _storage.write(
+        key: _deviceIdKey,
+        value: registration['deviceId'] as String,
+      );
+      await _storage.write(
+        key: _deviceSecretKey,
+        value: registration['deviceSecret'] as String,
+      );
 
-    final authorizeUrl = Uri.parse(registration['authorizeUrl'] as String);
-    final session = await _authorize(
-      baseUrl: baseUrl,
-      authorizeUrl: authorizeUrl,
-      verifier: pkce.verifier,
-      expectedState: state,
-      nonce: nonce,
-      deviceId: registration['deviceId'] as String,
-      deviceSecret: registration['deviceSecret'] as String,
-    );
-    return session;
+      final authorizeUrl = Uri.parse(registration['authorizeUrl'] as String);
+      final session = await _authorize(
+        baseUrl: baseUrl,
+        authorizeUrl: authorizeUrl,
+        verifier: pkce.verifier,
+        expectedState: state,
+        nonce: nonce,
+        deviceId: registration['deviceId'] as String,
+        deviceSecret: registration['deviceSecret'] as String,
+      );
+      return session;
+    } catch (_) {
+      throw const AuthException('账号已创建，但自动登录未完成。请使用刚设置的用户名和密码登录，无需重复注册。');
+    }
   }
 
   Future<AuthSession> loginWithPassword({
@@ -409,11 +411,11 @@ class AuthService {
       );
     }
     if (callback.queryParameters['state'] != expectedState) {
-      throw const AuthException('登录回调 state 不匹配，已拒绝。');
+      throw const AuthException('本次登录验证未通过，请重新登录。');
     }
     final code = callback.queryParameters['code'];
     if (code == null || code.isEmpty) {
-      throw const AuthException('登录回调缺少授权码。');
+      throw const AuthException('本次登录未完成，请重新登录。');
     }
 
     final token = await _appAuth.token(
@@ -428,7 +430,7 @@ class AuthService {
       ),
     );
     if (token.accessToken == null) {
-      throw const AuthException('授权码未能换取 Token。');
+      throw const AuthException('本次登录未完成，请重新登录。');
     }
     return _saveTokens(
       AuthSession(
@@ -446,11 +448,11 @@ class AuthService {
     final request = http.Request('GET', authorizeUrl)..followRedirects = false;
     final response = await _http.send(request);
     if (response.statusCode < 300 || response.statusCode >= 400) {
-      throw AuthException('登录授权失败：${response.statusCode}');
+      throw const AuthException('暂时无法完成登录，请稍后重试。');
     }
     final location = response.headers['location'];
     if (location == null || location.isEmpty) {
-      throw const AuthException('登录授权回调缺失。');
+      throw const AuthException('本次登录未完成，请重新登录。');
     }
     return authorizeUrl.resolve(location);
   }

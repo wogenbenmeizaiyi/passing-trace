@@ -1,5 +1,7 @@
 import { httpClient } from '@/api/http-client'
 import { useAuthStore } from '@/stores/auth'
+import type { Friend } from '@/api/social'
+import type { AssistantLocation } from '@/utils/assistant-location'
 
 export interface ConversationSummary {
   id: string
@@ -16,6 +18,17 @@ export interface ConversationDetail extends ConversationSummary {
     createdAt: string
     evidence: EvidenceBundle | null
   }>
+}
+
+export interface ConversationPage {
+  items: ConversationSummary[]
+  nextCursor: string | null
+}
+
+export interface ConversationMessagePage {
+  items: ConversationDetail['messages']
+  hasMore: boolean
+  nextBeforeId: number | null
 }
 
 export interface UserMemory {
@@ -42,11 +55,52 @@ export interface SemanticResult {
 }
 
 export interface EvidenceBundle {
-  records: Array<{ eventId: number; title: string | null }>
+  subjects?: Array<{ subjectId: string; revision: number; title: string }>
+  subjectEntries?: Array<{
+    entryId: string
+    subjectId: string
+    revision: number
+    title: string
+    kind: string
+  }>
+  records: Array<{
+    eventId: number
+    title: string | null
+    authorId?: string | null
+    accessPath?: string | null
+  }>
+  friends?: Friend[]
+  sharedContents?: Array<{ shareId: string; title: string; authorId: string; accessPath: string }>
+  friendActivities?: {
+    from: string
+    to: string
+    unit: string
+    items: Array<{
+      friend: Friend
+      recordCount: number
+      plannedCount: number
+      undatedCount: number
+    }>
+  } | null
   memories: Array<{ memoryId: number; content: string }>
   aggregate: string | null
+  storylines?: StorylineEvidence[]
   amapPlaces?: AmapPlaceEvidence[]
   actions?: AssistantAction[]
+}
+
+export interface StorylineEvidence {
+  storylineId: string
+  revision: number
+  title: string
+  category: string
+  status: string
+  snippet: string
+  rangeStart: string | null
+  rangeEnd: string | null
+  stages: Array<{ stageKey: string; title: string; nodeTitles: string[] }>
+  eventIds: number[]
+  score: number
 }
 
 export interface AmapPlaceEvidence {
@@ -89,6 +143,37 @@ export type StreamEvent =
   | { type: 'action'; data: AssistantAction }
   | { type: 'done'; data: { cached: boolean; watermark: number } }
   | { type: 'error'; data: { message: string } }
+  | { type: 'mutation-result'; data: MutationResult }
+  | { type: 'approval-request'; data: ApprovalRequest }
+
+export interface MutationResult {
+  operationId: string
+  operation: string
+  state: string
+  targets: Array<{
+    type: 'Record' | 'Plan' | 'Storyline' | 'Subject' | 'SubjectEntry' | 'SubjectRelation'
+    id: string
+    title: string
+    revision: number
+  }>
+  message: ConversationDetail['messages'][number]
+}
+
+export interface ApprovalRequest {
+  id: string
+  conversationId: string
+  targetType: 'Record' | 'Plan' | 'Storyline' | 'Subject' | 'SubjectEntry' | 'SubjectRelation'
+  targetId: string
+  title: string
+  description: string
+  expiresAt: string
+}
+
+export interface ApprovalDecision {
+  id: string
+  state: string
+  result: MutationResult
+}
 
 function apiUrl(path: string) {
   const base = (import.meta.env.VITE_EVENTS_API_BASE_URL ?? '').replace(/\/$/, '')
@@ -96,7 +181,24 @@ function apiUrl(path: string) {
 }
 
 export const aiApi = {
+  listApprovals: (id: string) =>
+    httpClient.get<ApprovalRequest[]>(`/api/v1/ai/conversations/${id}/approvals`),
+  decideApproval: (id: string, approvalId: string, decision: 'confirm' | 'cancel') =>
+    httpClient.post<ApprovalDecision>(
+      `/api/v1/ai/conversations/${id}/approvals/${approvalId}/decision`,
+      { body: { decision } },
+    ),
   listConversations: () => httpClient.get<ConversationSummary[]>('/api/v1/ai/conversations'),
+  listConversationsPage: (cursor?: string | null) =>
+    httpClient.get<ConversationPage>('/api/v1/ai/conversations/page', {
+      query: { limit: 20, cursor: cursor ?? undefined },
+    }),
+  getConversationSummary: (id: string) =>
+    httpClient.get<ConversationSummary>(`/api/v1/ai/conversations/${id}/summary`),
+  getConversationMessagesPage: (id: string, beforeId?: number | null) =>
+    httpClient.get<ConversationMessagePage>(`/api/v1/ai/conversations/${id}/messages-page`, {
+      query: { limit: 30, beforeId: beforeId ?? undefined },
+    }),
   createConversation: (title?: string) =>
     httpClient.post<ConversationSummary>('/api/v1/ai/conversations', { body: { title } }),
   getConversation: (id: string) =>
@@ -112,7 +214,12 @@ export const aiApi = {
   reparse: (eventId: number) => httpClient.post<void>(`/api/v1/events/${eventId}/semantic/reparse`),
   getCapabilities: () => httpClient.get<AiCapabilities>('/api/v1/ai/capabilities'),
 
-  async sendMessage(id: string, content: string, onEvent: (event: StreamEvent) => void) {
+  async sendMessage(
+    id: string,
+    content: string,
+    onEvent: (event: StreamEvent) => void,
+    location?: AssistantLocation,
+  ) {
     const token = useAuthStore().user?.access_token
     if (!token) throw new Error('会话已失效，请重新登录。')
     const response = await fetch(apiUrl(`/api/v1/ai/conversations/${id}/messages`), {
@@ -122,27 +229,43 @@ export const aiApi = {
         Accept: 'text/event-stream',
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ content }),
+      body: JSON.stringify({
+        content,
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        location,
+      }),
     })
-    if (!response.ok || !response.body) throw new Error(`AI 请求失败 (${response.status})`)
+    if (!response.ok || !response.body) throw new Error('暂时无法连接 AI 服务，请稍后重试。')
     const reader = response.body.getReader()
     const decoder = new TextDecoder()
     let buffer = ''
-    while (true) {
-      const { value, done } = await reader.read()
-      buffer += decoder.decode(value, { stream: !done })
-      const blocks = buffer.split('\n\n')
-      buffer = blocks.pop() ?? ''
-      for (const block of blocks) {
-        let type = ''
-        let data = ''
-        for (const line of block.split('\n')) {
-          if (line.startsWith('event:')) type = line.slice(6).trim()
-          if (line.startsWith('data:')) data += line.slice(5).trim()
+    let completed = false
+    try {
+      while (true) {
+        const { value, done } = await reader.read()
+        buffer = (buffer + decoder.decode(value, { stream: !done })).replace(/\r\n/g, '\n')
+        if (done && buffer.trim()) buffer += '\n\n'
+        const blocks = buffer.split('\n\n')
+        buffer = blocks.pop() ?? ''
+        for (const block of blocks) {
+          let type = ''
+          let data = ''
+          for (const line of block.split('\n')) {
+            if (line.startsWith('event:')) type = line.slice(6).trim()
+            if (line.startsWith('data:')) data += line.slice(5).trim()
+          }
+          if (type && data) {
+            onEvent({ type, data: JSON.parse(data) } as StreamEvent)
+            if (type === 'done' || type === 'error') completed = true
+          }
         }
-        if (type && data) onEvent({ type, data: JSON.parse(data) } as StreamEvent)
+        if (done) break
       }
-      if (done) break
+      if (!completed) throw new Error('Incomplete response')
+    } catch {
+      throw new Error('这次回答中途断开了，请重新发送一次。')
+    } finally {
+      reader.releaseLock()
     }
   },
 }

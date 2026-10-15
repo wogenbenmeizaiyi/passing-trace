@@ -13,7 +13,7 @@ using Xunit;
 
 namespace PassingTrace.Identity.IntegrationTests;
 
-public sealed class IdentityFlowTests(IdentityWebApplicationFactory factory)
+public sealed partial class IdentityFlowTests(IdentityWebApplicationFactory factory)
     : IClassFixture<IdentityWebApplicationFactory>
 {
     [Fact]
@@ -38,6 +38,20 @@ public sealed class IdentityFlowTests(IdentityWebApplicationFactory factory)
         Assert.Contains("--primary: #2f6b57", css, StringComparison.Ordinal);
         Assert.Contains(".qr-login__visual", css, StringComparison.Ordinal);
         Assert.DoesNotContain("#cf4a36", css, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Registration_IsOpen_WithoutQuotaOrInvitation()
+    {
+        using var client = CreateBrowserClient();
+        for (var index = 0; index < 3; index++)
+        {
+            var account = await RegisterMobileAsync(client, Unique("invited"));
+            Assert.False(string.IsNullOrWhiteSpace(account.Tokens.AccessToken));
+        }
+        using var legacy = await BeginAndCompleteRegistrationAsync(
+            client, Unique("legacy"), "a secure passing trace phrase", bootstrapCode: "unused-legacy-code");
+        Assert.Equal(HttpStatusCode.Created, legacy.StatusCode);
     }
 
     [Fact]
@@ -100,6 +114,10 @@ public sealed class IdentityFlowTests(IdentityWebApplicationFactory factory)
         Assert.Contains("class=\"qr-login__visual\"", qrHtml, StringComparison.Ordinal);
         Assert.Contains("data-state=\"waiting\"", qrHtml, StringComparison.Ordinal);
         Assert.Contains("role=\"status\"", qrHtml, StringComparison.Ordinal);
+        Assert.Contains("class=\"qr-download\"", qrHtml, StringComparison.Ordinal);
+        Assert.Contains("href=\"http://localhost:5173/product\"", qrHtml, StringComparison.Ordinal);
+        Assert.Contains("target=\"_blank\" rel=\"noopener noreferrer\"", qrHtml, StringComparison.Ordinal);
+        Assert.Contains("无需登录即可下载", qrHtml, StringComparison.Ordinal);
         var antiforgery = ExtractAntiforgeryToken(qrHtml);
         var parsedQr = ParseQrLocation(qrLocation);
 
@@ -306,7 +324,8 @@ public sealed class IdentityFlowTests(IdentityWebApplicationFactory factory)
     }
 
     [Fact]
-    public async Task WebClient_LogoutAcceptsRegisteredCallbackAndReturnsState()    {
+    public async Task WebClient_LogoutAcceptsRegisteredCallbackAndReturnsState()
+    {
         using var client = CreateBrowserClient();
         await RegisterMobileAsync(client, Unique("logout"));
         var grant = await AuthorizeWithCookieAsync(
@@ -385,7 +404,8 @@ public sealed class IdentityFlowTests(IdentityWebApplicationFactory factory)
         HttpClient client,
         string username,
         string password,
-        AuthorizationRequest? authorization = null)
+        AuthorizationRequest? authorization = null,
+        string? bootstrapCode = null)
     {
         authorization ??= CreateAuthorizationRequest(
             "passingtrace-mobile",
@@ -403,16 +423,15 @@ public sealed class IdentityFlowTests(IdentityWebApplicationFactory factory)
             });
         intentResponse.EnsureSuccessStatusCode();
         var intent = await intentResponse.Content.ReadFromJsonAsync<JsonElement>();
-        return await client.PostAsJsonAsync(
-            "/api/mobile/registrations",
-            new
-            {
-                intentId = intent.GetProperty("intentId").GetGuid(),
-                username,
-                password,
-                bootstrapCode = "testing-bootstrap",
-                deviceName = "Integration Android"
-            });
+        var registration = new Dictionary<string, object?>
+        {
+            ["intentId"] = intent.GetProperty("intentId").GetGuid(),
+            ["username"] = username,
+            ["password"] = password,
+            ["deviceName"] = "Integration Android"
+        };
+        if (bootstrapCode is not null) registration["bootstrapCode"] = bootstrapCode;
+        return await client.PostAsJsonAsync("/api/mobile/registrations", registration);
     }
 
     private static async Task<AuthorizationGrant> AuthorizeWithCookieAsync(

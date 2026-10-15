@@ -144,6 +144,26 @@ class EventApiClient {
     );
   }
 
+  /// Shared authenticated transport for the independent subject module.
+  Future<dynamic> requestJson(
+    AuthSession session,
+    String method,
+    String path, {
+    Object? body,
+    Map<String, String>? headers,
+    Map<String, Object?>? query,
+  }) async => _decode<dynamic>(
+    await _send(
+      session,
+      method,
+      _resolve(path, query),
+      body: body,
+      extraHeaders: headers,
+    ),
+    {200, 201, 204},
+    (value) => value,
+  );
+
   Future<EventPage> list(
     AuthSession session, {
     int limit = 50,
@@ -193,6 +213,8 @@ class EventApiClient {
     DateTime? plannedAt,
     required String timezone,
     required String idempotencyKey,
+    List<String>? participantIds,
+    List<String>? subjectIds,
     List<String> mediaIds = const [],
     ManualClassification? classification,
     List<EventLocationModel>? locations,
@@ -202,6 +224,8 @@ class EventApiClient {
     }
     final body = <String, Object?>{
       'kind': kind.value,
+      'participantIds': ?participantIds,
+      'subjectIds': ?subjectIds,
       'title': title,
       'rawContent': rawContent,
       'happenedAt': happenedAt?.toUtc().toIso8601String(),
@@ -234,6 +258,8 @@ class EventApiClient {
     DateTime? plannedAt,
     required String timezone,
     required int version,
+    List<String>? participantIds,
+    List<String>? subjectIds,
     List<String> mediaIds = const [],
     ManualClassification? classification,
     List<EventLocationModel>? locations,
@@ -243,6 +269,8 @@ class EventApiClient {
     }
     final body = <String, Object?>{
       'title': title,
+      'participantIds': ?participantIds,
+      'subjectIds': ?subjectIds,
       'rawContent': rawContent,
       'happenedAt': happenedAt?.toUtc().toIso8601String(),
       'plannedAt': plannedAt?.toUtc().toIso8601String(),

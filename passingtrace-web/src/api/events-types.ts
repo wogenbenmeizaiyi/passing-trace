@@ -21,7 +21,7 @@ export const EventVisibility = {
 
 export type EventVisibility = (typeof EventVisibility)[keyof typeof EventVisibility]
 
-export const MediaKind = { Image: 1, Video: 2, File: 3 } as const
+export const MediaKind = { Image: 1, Video: 2, File: 3, Model: 4 } as const
 export type MediaKind = (typeof MediaKind)[keyof typeof MediaKind]
 
 export interface MediaResponse {
@@ -105,6 +105,8 @@ export const EventStatusLabel: Record<EventStatus, string> = {
 }
 
 export interface EventResponse {
+  subjectIds?: string[]
+  participantIds?: string[]
   id: number
   kind: EventKind
   status: EventStatus
@@ -135,6 +137,8 @@ export interface EventResponse {
 }
 
 export interface CreateEventRequest {
+  subjectIds?: string[]
+  participantIds?: string[]
   kind: EventKind
   title?: string | null
   rawContent?: string | null
@@ -147,6 +151,8 @@ export interface CreateEventRequest {
 }
 
 export interface UpdateEventRequest {
+  subjectIds?: string[]
+  participantIds?: string[]
   title?: string | null
   rawContent?: string | null
   happenedAt?: string | null

@@ -1,9 +1,43 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
+import { defaultWebEntry } from '@/utils/device'
+
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
-    { path: '/', name: 'home', component: () => import('@/views/HomeView.vue') },
+    { path: '/subjects', component: () => import('@/features/subjects/SubjectsGraphView.vue') },
+    { path: '/subjects/new', component: () => import('@/features/subjects/SubjectFormView.vue') },
+    {
+      path: '/subjects/entries/:entryId',
+      component: () => import('@/features/subjects/SubjectEntryView.vue'),
+    },
+    {
+      path: '/subjects/:id/entries/new',
+      component: () => import('@/features/subjects/SubjectEntryView.vue'),
+    },
+    {
+      path: '/subjects/:id/edit',
+      component: () => import('@/features/subjects/SubjectFormView.vue'),
+    },
+    { path: '/subjects/:id', component: () => import('@/features/subjects/SubjectDetailView.vue') },
+    {
+      path: '/messages/:id?',
+      name: 'messages',
+      component: () => import('@/views/MessagesView.vue'),
+    },
+    {
+      path: '/shares/:id',
+      name: 'shared-detail',
+      component: () => import('@/views/SharedDocumentView.vue'),
+    },
+    {
+      path: '/joint-records/:id',
+      name: 'joint-detail',
+      component: () => import('@/views/SharedDocumentView.vue'),
+    },
+    { path: '/account', name: 'account', component: () => import('@/views/AccountView.vue') },
+    { path: '/', name: 'entry', redirect: () => defaultWebEntry() },
+    { path: '/product', name: 'product', component: () => import('@/views/HomeView.vue') },
     { path: '/events', name: 'events', component: () => import('@/views/EventsListView.vue') },
     {
       path: '/events/new',

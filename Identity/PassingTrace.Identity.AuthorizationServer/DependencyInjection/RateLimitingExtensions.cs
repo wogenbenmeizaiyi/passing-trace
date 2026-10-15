@@ -19,6 +19,12 @@ public static class RateLimitingExtensions
         services.AddRateLimiter(options =>
         {
             options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+            options.AddFixedWindowLimiter("profile-update", limiter =>
+            {
+                limiter.PermitLimit = isTesting ? 1_000 : 60;
+                limiter.Window = TimeSpan.FromMinutes(1);
+                limiter.QueueLimit = 0;
+            });
 
             options.AddFixedWindowLimiter("mobile-registration", limiter =>
             {

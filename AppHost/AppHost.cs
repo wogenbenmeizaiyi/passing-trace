@@ -14,7 +14,7 @@ var objectStoragePublicEndpoint = builder.AddParameter(
     "object-storage-public-endpoint",
     "http://localhost:9000");
 var qwenApiKey = builder.AddParameter("qwen-api-key", secret: true);
-var miniMaxApiKey = builder.AddParameter("minimax-api-key", secret: true);
+var deepSeekApiKey = builder.AddParameter("deepseek-api-key", secret: true);
 var amapWebServiceKey = builder.AddParameter("amap-web-service-key", secret: true);
 var amapMcpKey = builder.Configuration["AMAP_MCP_KEY"];
 
@@ -52,6 +52,10 @@ var identity = builder.AddProject<Projects.PassingTrace_Identity_AuthorizationSe
     // 手机内部测试包使用固定 HTTP 端口，避免每次重启 Aspire 后旧登录令牌和 APK 指向失效。
     .WithEndpoint("http", endpoint => endpoint.Port = 56229)
     .WithReference(identityDatabase)
+    .WithEnvironment("ObjectStorage__Endpoint", minio.GetEndpoint("api"))
+    .WithEnvironment("ObjectStorage__AccessKey", minioAccessKey)
+    .WithEnvironment("ObjectStorage__SecretKey", minioSecretKey)
+    .WaitFor(minio)
     .WaitFor(identityDatabase);
 
 // 业务 API 使用独立数据库，并通过 Identity 的发现文档离线验证 Access Token。
@@ -68,7 +72,7 @@ var api = builder.AddProject<Projects.PassingTrace_Events_Api>("passingtrace-eve
     .WithEnvironment("ObjectStorage__AccessKey", minioAccessKey)
     .WithEnvironment("ObjectStorage__SecretKey", minioSecretKey)
     .WithEnvironment("AiModels__Providers__Qwen__ApiKey", qwenApiKey)
-    .WithEnvironment("AiModels__Providers__MiniMax__ApiKey", miniMaxApiKey)
+    .WithEnvironment("AiModels__Providers__DeepSeek__ApiKey", deepSeekApiKey)
     .WithEnvironment("Amap__WebServiceKey", amapWebServiceKey)
     .WaitFor(identity)
     .WaitFor(traceDatabase)
@@ -85,7 +89,7 @@ var aiWorker = builder.AddProject<Projects.PassingTrace_Ai_Worker>("passingtrace
     .WithEnvironment("ObjectStorage__AccessKey", minioAccessKey)
     .WithEnvironment("ObjectStorage__SecretKey", minioSecretKey)
     .WithEnvironment("AiModels__Providers__Qwen__ApiKey", qwenApiKey)
-    .WithEnvironment("AiModels__Providers__MiniMax__ApiKey", miniMaxApiKey)
+    .WithEnvironment("AiModels__Providers__DeepSeek__ApiKey", deepSeekApiKey)
     .WaitFor(traceDatabase)
     .WaitFor(minio)
     .WaitFor(api);
@@ -110,6 +114,19 @@ else
         .WaitFor(api)
         .WithExternalHttpEndpoints();
 
+    if (builder.Environment.IsDevelopment() &&
+        !string.Equals(builder.Configuration["DevelopmentDemo:Enabled"], "false", StringComparison.OrdinalIgnoreCase))
+    {
+        // One-shot, idempotent local fixture bootstrap; uses the same automatic dev login
+        // as the Web client, without storing or forwarding a password/token in AppHost.
+        builder.AddExecutable("development-demo-data",
+                OperatingSystem.IsWindows() ? "python" : "python3", "../tools",
+                "seed_development_demo.py")
+            .WithEnvironment("DEVELOPMENT_IDENTITY_URL", identity.GetEndpoint("http"))
+            .WithEnvironment("DEVELOPMENT_API_URL", api.GetEndpoint("http"))
+            .WaitFor(identity)
+            .WaitFor(api);
+    }
 }
 
 

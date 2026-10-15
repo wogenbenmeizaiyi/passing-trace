@@ -32,6 +32,7 @@ public static class ApplicationServicesExtensions
         services.AddScoped<MobileFlowService>();
         services.AddScoped<QrLoginService>();
         services.AddScoped<DevelopmentAutoLoginService>();
+        services.AddSingleton<Profile.IAvatarStorage, Profile.AvatarStorage>();
         services.AddControllersWithViews();
         services.AddRazorPages();
 

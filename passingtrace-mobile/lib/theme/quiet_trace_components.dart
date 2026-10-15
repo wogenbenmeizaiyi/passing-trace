@@ -137,10 +137,12 @@ class TraceBottomNavigation extends StatelessWidget {
     super.key,
     required this.selectedIndex,
     required this.onSelected,
+    this.unreadMessages = 0,
   });
 
   final int selectedIndex;
   final ValueChanged<int> onSelected;
+  final int unreadMessages;
 
   @override
   Widget build(BuildContext context) {
@@ -183,6 +185,30 @@ class TraceBottomNavigation extends StatelessWidget {
                       label: '问 AI',
                       selected: selectedIndex == 2,
                       onTap: () => onSelected(2),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Badge(
+                      isLabelVisible: unreadMessages > 0,
+                      label: Text(
+                        unreadMessages > 99 ? '99+' : '$unreadMessages',
+                      ),
+                      child: _TraceNavigationItem(
+                        glyph: TraceGlyph.newChat,
+                        label: '消息',
+                        selected: selectedIndex == 3,
+                        onTap: () => onSelected(3),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _TraceNavigationItem(
+                      glyph: TraceGlyph.people,
+                      label: '人物',
+                      selected: selectedIndex == 4,
+                      onTap: () => onSelected(4),
                     ),
                   ),
                 ],
@@ -239,6 +265,8 @@ class _TraceNavigationItem extends StatelessWidget {
               const SizedBox(height: 1),
               Text(
                 label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   color: color,
                   fontSize: 11,

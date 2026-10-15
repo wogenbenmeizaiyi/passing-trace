@@ -2,6 +2,8 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using PassingTrace.Infrastructure;
+using PassingTrace.Events.Api.Development;
+using PassingTrace.Events.Api.Subjects;
 
 namespace PassingTrace.Events.Api.DependencyInjection;
 
@@ -35,7 +37,17 @@ public static class WebApplicationExtensions
         app.UseCors(ApplicationExtensions.WebClientCorsPolicy);
         app.UseAuthentication();
         app.UseAuthorization();
+        app.Use(async (context, next) =>
+        {
+            // Identity uses a separate database. First authenticated API use
+            // completes initialization for new and previously inactive accounts.
+            if (context.User.Identity?.IsAuthenticated == true &&
+                long.TryParse(context.User.FindFirst("sub")?.Value, out var userId))
+                await context.RequestServices.GetRequiredService<SubjectService>().EnsureSelfAsync(userId, context.RequestAborted);
+            await next(context);
+        });
         app.MapControllers();
+        app.MapDevelopmentDemo();
 
         return app;
     }

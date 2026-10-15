@@ -5,6 +5,8 @@ using PassingTrace.Identity.AuthorizationServer.QrLogin;
 using PassingTrace.Identity.AuthorizationServer.Setup;
 using PassingTrace.Identity.Domain.Entities;
 using QRCoder;
+using Microsoft.AspNetCore.RateLimiting;
+using PassingTrace.Identity.Domain.Enums;
 
 namespace PassingTrace.Identity.AuthorizationServer.Controllers;
 
@@ -18,7 +20,7 @@ public sealed class QrLoginBrowserController(
 {
     [HttpGet("{id:guid}")]
     [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
-    public async Task<IActionResult> Index(Guid id, string code, CancellationToken cancellationToken)
+    public async Task<IActionResult> Index(Guid id, string code, CancellationToken cancellationToken, string? mode = null)
     {
         var transaction = await qrLogin.GetByIdAndCodeAsync(id, code, cancellationToken);
         if (transaction is null)
@@ -37,8 +39,47 @@ public sealed class QrLoginBrowserController(
             renderer.GetGraphic(8),
             clients.GetRequired(transaction.ClientId).DisplayName,
             transaction.ExpiresAt,
-            options.Value.PollIntervalSeconds);
-        return View(model);
+            options.Value.PollIntervalSeconds,
+            clients.GetWebProductUrl(), code, mode == "password");
+        return View("Index", model);
+    }
+
+    [HttpPost("{id:guid}/password")]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
+    [ValidateAntiForgeryToken]
+    [EnableRateLimiting("mobile-registration")]
+    public async Task<IActionResult> Password(Guid id, string code, string? username, string? password,
+        CancellationToken cancellationToken)
+    {
+        var binding = Request.Cookies[QrLoginService.CookieName(id)];
+        if (await qrLogin.GetByIdAndCodeAsync(id, code, cancellationToken) is null ||
+            await qrLogin.GetStatusAsync(id, binding, cancellationToken) != QrLoginStatus.Pending)
+            return BadRequest("本次登录已过期或已完成，请返回网站重新登录。");
+
+        var user = string.IsNullOrWhiteSpace(username) || username.Length > 256
+            ? null : await userManager.FindByNameAsync(username.Trim());
+        var valid = user is not null && user.Status == UserStatus.Active && !string.IsNullOrEmpty(password) &&
+            password.Length <= 4096 && (await signInManager.CheckPasswordSignInAsync(user, password, lockoutOnFailure: true)).Succeeded;
+        if (!valid)
+        {
+            ModelState.Clear();
+            ViewData["LoginUsername"] = username?.Trim();
+            ModelState.AddModelError(string.Empty, "账号或密码错误，或账号暂时不可用，请检查后重试。");
+            return await Index(id, code, cancellationToken, "password");
+        }
+        try
+        {
+            var result = await qrLogin.ConsumePasswordLoginAsync(id, binding, user!.Id, cancellationToken);
+            user.LastLoginAt = user.UpdatedAt = DateTimeOffset.UtcNow;
+            await userManager.UpdateAsync(user);
+            await signInManager.SignInAsync(user, isPersistent: false);
+            Response.Cookies.Delete(QrLoginService.CookieName(id), new CookieOptions { Path = $"/account/qr-login/{id}" });
+            return LocalRedirect(result.AuthorizeRequest);
+        }
+        catch (QrLoginException)
+        {
+            return BadRequest("本次登录已过期或已完成，请返回网站重新登录。");
+        }
     }
 
     [HttpGet("{id:guid}/status")]
@@ -82,4 +123,7 @@ public sealed record QrLoginPageModel(
     string Svg,
     string ClientDisplayName,
     DateTimeOffset ExpiresAt,
-    int PollIntervalSeconds);
+    int PollIntervalSeconds,
+    string? ProductUrl,
+    string Code,
+    bool PasswordMode);

@@ -8,6 +8,28 @@ import 'package:passingtrace_mobile/theme/quiet_trace_icons.dart';
 import 'package:passingtrace_mobile/views/assistant_view.dart';
 
 void main() {
+  testWidgets('回答失败用文字说明并可关闭', (tester) async {
+    var dismissed = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: PassingTraceTheme.light(PassingTracePalette.pine),
+        home: Scaffold(
+          body: AssistantErrorNotice(
+            message: 'AI 服务刚才返回了不完整结果，请重新发送一次。',
+            onDismiss: () => dismissed = true,
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('这次没有完成'), findsOneWidget);
+    expect(find.textContaining('请重新发送一次'), findsOneWidget);
+    expect(find.byTooltip('关闭提示'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('关闭提示'));
+    expect(dismissed, isTrue);
+  });
+
   testWidgets('AI 回答按 Markdown 渲染标题、粗体和列表', (tester) async {
     await tester.pumpWidget(
       const MaterialApp(
@@ -87,6 +109,33 @@ void main() {
     expect(text, isNot(contains('记录 #13')));
   });
 
+  testWidgets('Storyline 引用显示故事线标题并可点击', (tester) async {
+    String? openedStorylineId;
+    const storylineId = '9b31d202-7ad3-4b76-8677-5a711f245da0';
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: AssistantMessageContent(
+            isUser: false,
+            text: '这个月仍在执行 [Storyline #$storylineId]',
+            storylineTitles: const {storylineId: '从三公里慢慢跑到十公里'},
+            onOpenStoryline: (id) => openedStorylineId = id,
+          ),
+        ),
+      ),
+    );
+
+    expect(find.textContaining('Storyline #'), findsNothing);
+    final richText = tester
+        .widgetList<SelectableText>(find.byType(SelectableText))
+        .singleWhere(
+          (widget) => widget.textSpan!.toPlainText().contains('从三公里慢慢跑到十公里'),
+        );
+    final link = _findTappableSpan(richText.textSpan!)!;
+    (link.recognizer! as TapGestureRecognizer).onTap!.call();
+    expect(openedStorylineId, storylineId);
+  });
+
   testWidgets('回答依据默认收起，展开后才显示记录卡片', (tester) async {
     int? openedEventId;
     await tester.pumpWidget(
@@ -153,6 +202,48 @@ void main() {
 
     expect(find.bySemanticsLabel('新建会话'), findsOneWidget);
     expect(find.bySemanticsLabel('聊天记录'), findsOneWidget);
+  });
+
+  testWidgets('聊天记录按月份分组且旧月份默认收起', (tester) async {
+    final conversations = [
+      AiConversationModel(
+        id: 'september',
+        title: '九月的新对话',
+        updatedAt: DateTime(2026, 9, 11, 13, 19),
+      ),
+      AiConversationModel(
+        id: 'august',
+        title: '八月的旧对话',
+        updatedAt: DateTime(2026, 8, 21, 18, 30),
+      ),
+    ];
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: PassingTraceTheme.light(PassingTracePalette.pine),
+        home: Scaffold(
+          body: SizedBox(
+            height: 500,
+            child: AssistantConversationHistory(
+              conversations: conversations,
+              selectedConversationId: 'september',
+              onOpen: (_) async {},
+              onDelete: (_) async {},
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('2026年9月'), findsOneWidget);
+    expect(find.text('2026年8月'), findsOneWidget);
+    expect(find.text('九月的新对话'), findsOneWidget);
+    expect(find.text('八月的旧对话'), findsNothing);
+
+    await tester.tap(find.text('2026年8月'));
+    await tester.pump();
+
+    expect(find.text('八月的旧对话'), findsOneWidget);
   });
 
   testWidgets('高德动作卡明确区分外部结果和个人记录地点', (tester) async {

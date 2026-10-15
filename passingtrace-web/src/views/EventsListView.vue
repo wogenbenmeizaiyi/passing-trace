@@ -1,6 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { RouterLink } from 'vue-router'
+import FloatingFilters from '@/components/FloatingFilters.vue'
+import { dateBoundary, type FilterField, type FilterValues } from '@/components/filter-types'
+import type { EventTaxonomyResponse } from '@/api/events-types'
+import JointRecordsList from '@/components/JointRecordsList.vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { RouterLink, useRoute } from 'vue-router'
 
 import { eventsApi } from '@/api/events'
 import { HttpError } from '@/api/http-client'
@@ -17,6 +21,14 @@ import WebAppHeader from '@/components/WebAppHeader.vue'
 import { useAuthStore } from '@/stores/auth'
 
 const auth = useAuthStore()
+const route = useRoute()
+const recordScope = ref(route.query.scope === 'joint' ? 'joint' : 'own')
+watch(
+  () => route.query.scope,
+  (value) => {
+    recordScope.value = value === 'joint' ? 'joint' : 'own'
+  },
+)
 const items = ref<EventResponse[]>([])
 const nextCursor = ref<number | null>(null)
 const loading = ref(false)
@@ -24,6 +36,89 @@ const loadingMore = ref(false)
 const error = ref<string | null>(null)
 const filterKind = ref<EventKindT | ''>('')
 const filterStatus = ref<EventStatusT | ''>('')
+const extraFilters = ref({ from: '', to: '', category: '', tags: [] as string[] })
+const taxonomy = ref<EventTaxonomyResponse | null>(null)
+const filterFields = computed<FilterField[]>(() => [
+  {
+    key: 'scope',
+    label: '记录来源',
+    defaultValue: 'own',
+    options: [
+      { value: 'own', label: '我创建的' },
+      { value: 'joint', label: '共同参与的' },
+    ],
+  },
+  { key: 'from', label: '开始日期', type: 'date', ownOnly: true },
+  { key: 'to', label: '结束日期', type: 'date', ownOnly: true },
+  {
+    key: 'kind',
+    label: '记录类型',
+    ownOnly: true,
+    options: [EventKind.Trace, EventKind.Plan].map((value) => ({
+      value: String(value),
+      label: EventKindLabel[value],
+    })),
+  },
+  {
+    key: 'status',
+    label: '记录状态',
+    ownOnly: true,
+    options: [EventStatus.Planned, EventStatus.Completed, EventStatus.Cancelled].map((value) => ({
+      value: String(value),
+      label: EventStatusLabel[value],
+    })),
+  },
+  {
+    key: 'category',
+    label: '主分类',
+    ownOnly: true,
+    unavailable: !taxonomy.value,
+    options: taxonomy.value?.categories.map((v) => ({ value: v.key, label: v.label })),
+  },
+  {
+    key: 'tags',
+    label: '行为标签',
+    type: 'tags',
+    ownOnly: true,
+    unavailable: !taxonomy.value,
+    options: taxonomy.value?.behaviorTags.map((v) => ({ value: v.key, label: v.label })),
+  },
+])
+const filterValues = computed<FilterValues>(() => ({
+  scope: recordScope.value,
+  kind: String(filterKind.value),
+  status: String(filterStatus.value),
+  ...extraFilters.value,
+}))
+async function loadTaxonomy() {
+  if (!auth.isAuthenticated || taxonomy.value) return
+  try {
+    taxonomy.value = await eventsApi.taxonomy()
+  } catch {
+    /* Other filters remain available. */
+  }
+}
+function applyFilters(values: FilterValues) {
+  recordScope.value = String(values.scope || 'own')
+  filterKind.value = values.kind === '' ? '' : (Number(values.kind) as EventKindT)
+  filterStatus.value = values.status === '' ? '' : (Number(values.status) as EventStatusT)
+  extraFilters.value = {
+    from: String(values.from || ''),
+    to: String(values.to || ''),
+    category: String(values.category || ''),
+    tags: Array.isArray(values.tags) ? [...values.tags] : [],
+  }
+  if (recordScope.value === 'own' && auth.isAuthenticated) void reload()
+}
+const hasFilters = computed(
+  () =>
+    filterKind.value !== '' ||
+    filterStatus.value !== '' ||
+    !!extraFilters.value.from ||
+    !!extraFilters.value.to ||
+    !!extraFilters.value.category ||
+    extraFilters.value.tags.length > 0,
+)
 const collapsedYears = ref(new Set<number>())
 const collapsedMonths = ref(new Set<string>())
 const knownYears = new Set<number>()
@@ -106,6 +201,10 @@ const archiveGroups = computed<YearGroup[]>(() => {
 
 function buildQuery(cursor: number | null) {
   return {
+    from: dateBoundary(extraFilters.value.from),
+    to: dateBoundary(extraFilters.value.to, true),
+    categoryKey: extraFilters.value.category || undefined,
+    tagKeys: extraFilters.value.tags.length ? extraFilters.value.tags : undefined,
     limit: 20,
     cursor: cursor ?? undefined,
     kind: filterKind.value === '' ? undefined : filterKind.value,
@@ -235,6 +334,15 @@ function toggleMonth(key: string) {
   collapsedMonths.value = next
 }
 
+async function openMonth(year: number, key: string) {
+  collapsedYears.value.delete(year)
+  collapsedMonths.value.delete(key)
+  await nextTick()
+  const heading = document.getElementById(`archive-${key}`)
+  heading?.focus({ preventScroll: true })
+  heading?.scrollIntoView({ block: 'start' })
+}
+
 onMounted(() => {
   if (auth.isAuthenticated) void reload()
 })
@@ -251,7 +359,7 @@ onUnmounted(() => activeController?.abort())
   <div class="app-shell">
     <WebAppHeader />
 
-    <main class="records-page">
+    <main class="workspace-main records-page">
       <header class="records-heading">
         <div>
           <p class="eyebrow">YOUR TIMELINE</p>
@@ -266,140 +374,158 @@ onUnmounted(() => activeController?.abort())
         </RouterLink>
       </header>
 
-      <section class="record-toolbar" aria-label="记录筛选">
-        <label
-          ><span>类型</span
-          ><select v-model="filterKind" @change="reload">
-            <option value="">全部</option>
-            <option :value="EventKind.Trace">{{ EventKindLabel[EventKind.Trace] }}</option>
-            <option :value="EventKind.Plan">{{ EventKindLabel[EventKind.Plan] }}</option>
-          </select></label
-        >
-        <label
-          ><span>状态</span
-          ><select v-model="filterStatus" @change="reload">
-            <option value="">全部</option>
-            <option :value="EventStatus.Planned">
-              {{ EventStatusLabel[EventStatus.Planned] }}
-            </option>
-            <option :value="EventStatus.Completed">
-              {{ EventStatusLabel[EventStatus.Completed] }}
-            </option>
-            <option :value="EventStatus.Cancelled">
-              {{ EventStatusLabel[EventStatus.Cancelled] }}
-            </option>
-          </select></label
-        >
-        <button class="toolbar-refresh" :disabled="loading" @click="reload">
-          <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M20 11a8 8 0 1 0-2.3 5.7M20 5v6h-6" />
-          </svg>
-          刷新
-        </button>
-      </section>
-
-      <section v-if="!auth.isAuthenticated" class="empty-panel">
-        <h2>登录后查看你的时间线</h2>
-        <p>网页端会跳转到安全登录页，并支持手机扫码批准。</p>
-        <button class="button button-primary" @click="auth.login('/events')">扫码登录</button>
-      </section>
-      <section v-else-if="error" class="error-banner" role="alert">
-        <span>{{ error }}</span
-        ><button @click="reload">重试</button>
-      </section>
-      <section v-else-if="loading && items.length === 0" class="empty-panel" aria-live="polite">
-        <span class="loading-ring" aria-hidden="true"></span>
-        <h2>正在整理时间线</h2>
-      </section>
-      <section v-else-if="isEmpty" class="empty-panel">
-        <h2>记忆盒还是空的</h2>
-        <p>从一段文字、一张照片或一个地点开始。</p>
-        <RouterLink class="button button-primary" to="/events/new">写下第一条</RouterLink>
-      </section>
-
-      <div v-else class="archive-groups">
-        <section v-for="year in archiveGroups" :key="year.year" class="year-group">
-          <button
-            class="year-heading"
-            :aria-expanded="!collapsedYears.has(year.year)"
-            @click="toggleYear(year.year)"
+      <FloatingFilters
+        title="筛选记录"
+        :fields="filterFields"
+        :values="filterValues"
+        @apply="applyFilters"
+        @open="loadTaxonomy"
+      />
+      <div class="records-workspace">
+        <details v-if="recordScope === 'own' && items.length" class="records-calendar">
+          <summary>按月回看</summary>
+          <nav
+            v-if="recordScope === 'own' && items.length"
+            class="archive-nav"
+            aria-label="按月份查找记录"
           >
-            <strong>{{ year.year || '时间未定' }}<template v-if="year.year"> 年</template></strong>
-            <span>{{ year.count }} 条记录</span>
-            <svg class="ui-icon archive-chevron" viewBox="0 0 24 24" aria-hidden="true">
-              <path d="m6 9 6 6 6-6" />
-            </svg>
-          </button>
-          <div v-if="!collapsedYears.has(year.year)" class="month-groups">
-            <section v-for="month in year.months" :key="month.key" class="month-group">
+            <h2>按月回看</h2>
+            <p>已加载 {{ items.length }} 条记录</p>
+            <section v-for="year in archiveGroups" :key="year.year">
+              <h3>{{ year.year ? `${year.year} 年` : '时间未定' }}</h3>
               <button
-                class="month-heading"
-                :aria-expanded="!collapsedMonths.has(month.key)"
-                @click="toggleMonth(month.key)"
+                v-for="month in year.months"
+                :key="month.key"
+                type="button"
+                :aria-label="`查看${year.year || ''}年${month.title}记录`"
+                @click="openMonth(year.year, month.key)"
               >
-                <strong>{{ month.title }}</strong>
-                <span>{{ month.count }} 条</span>
+                <span>{{ month.title }}</span
+                ><span>{{ month.count }}</span>
+              </button>
+            </section>
+          </nav>
+        </details>
+
+        <JointRecordsList v-if="recordScope === 'joint'" />
+        <div v-else class="records-content">
+          <section v-if="!auth.isAuthenticated" class="empty-panel">
+            <h2>登录后查看你的时间线</h2>
+            <p>使用账号密码登录，或用手机扫码确认。</p>
+            <button class="button button-primary" @click="auth.login('/events')">登录</button>
+          </section>
+          <section v-else-if="error" class="error-banner" role="alert">
+            <span>{{ error }}</span
+            ><button @click="reload">重试</button>
+          </section>
+          <section v-else-if="loading && items.length === 0" class="empty-panel" aria-live="polite">
+            <span class="loading-ring" aria-hidden="true"></span>
+            <h2>正在整理时间线</h2>
+          </section>
+          <section v-else-if="isEmpty" class="empty-panel">
+            <h2>{{ hasFilters ? '没有符合条件的记录' : '记忆盒还是空的' }}</h2>
+            <p>
+              {{
+                hasFilters
+                  ? '试试调整筛选条件，或清除全部条件。'
+                  : '从一段文字、一张照片或一个地点开始。'
+              }}
+            </p>
+            <RouterLink v-if="!hasFilters" class="button button-primary" to="/events/new"
+              >写下第一条</RouterLink
+            >
+          </section>
+
+          <div v-else class="archive-groups">
+            <section v-for="year in archiveGroups" :key="year.year" class="year-group">
+              <button
+                class="year-heading"
+                :aria-expanded="!collapsedYears.has(year.year)"
+                @click="toggleYear(year.year)"
+              >
+                <strong
+                  >{{ year.year || '时间未定' }}<template v-if="year.year"> 年</template></strong
+                >
+                <span>{{ year.count }} 条记录</span>
                 <svg class="ui-icon archive-chevron" viewBox="0 0 24 24" aria-hidden="true">
                   <path d="m6 9 6 6 6-6" />
                 </svg>
               </button>
-              <div v-if="!collapsedMonths.has(month.key)" class="day-groups">
-                <section v-for="group in month.days" :key="group.key" class="day-group">
-                  <header class="day-heading">
-                    <strong>{{ group.title }}</strong
-                    ><span>{{ group.subtitle }}</span>
-                  </header>
-                  <ul class="record-timeline">
-                    <li v-for="item in group.items" :key="item.id">
-                      <RouterLink class="record-card" :to="`/events/${item.id}`">
-                        <div class="record-card__meta">
-                          <span>{{ timeLabel(item) }}</span>
-                          <span
-                            >{{ EventKindLabel[item.kind] }} ·
-                            {{ EventStatusLabel[item.status] }}</span
-                          >
-                        </div>
-                        <h2>{{ item.title || '未命名记录' }}</h2>
-                        <p>{{ summary(item) }}</p>
-                        <footer class="record-card__footer">
-                          <span class="record-tags">
-                            <span
-                              v-if="item.effectiveClassification.primaryCategory"
-                              class="record-tag record-tag--category"
-                              >{{ item.effectiveClassification.primaryCategory.displayName }}</span
-                            >
-                            <span
-                              v-for="tag in item.effectiveClassification.tags.slice(0, 2)"
-                              :key="tag.taxonomyKey ?? tag.displayName"
-                              class="record-tag"
-                              >{{ tag.origin === 'ai' ? '✦ ' : '' }}{{ tag.displayName }}</span
-                            >
-                          </span>
-                          <span class="record-context">
-                            <span v-if="item.locations[0]">{{ item.locations[0].name }}</span>
-                            <span v-if="item.media.length">{{ item.media.length }} 个附件</span>
-                          </span>
-                        </footer>
-                      </RouterLink>
-                    </li>
-                  </ul>
+              <div v-if="!collapsedYears.has(year.year)" class="month-groups">
+                <section v-for="month in year.months" :key="month.key" class="month-group">
+                  <button
+                    :id="`archive-${month.key}`"
+                    class="month-heading"
+                    :aria-expanded="!collapsedMonths.has(month.key)"
+                    @click="toggleMonth(month.key)"
+                  >
+                    <strong>{{ month.title }}</strong>
+                    <span>{{ month.count }} 条</span>
+                    <svg class="ui-icon archive-chevron" viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="m6 9 6 6 6-6" />
+                    </svg>
+                  </button>
+                  <div v-if="!collapsedMonths.has(month.key)" class="day-groups">
+                    <section v-for="group in month.days" :key="group.key" class="day-group">
+                      <header class="day-heading">
+                        <strong>{{ group.title }}</strong
+                        ><span>{{ group.subtitle }}</span>
+                      </header>
+                      <ul class="record-timeline">
+                        <li v-for="item in group.items" :key="item.id">
+                          <RouterLink class="record-card" :to="`/events/${item.id}`">
+                            <div class="record-card__meta">
+                              <span>{{ timeLabel(item) }}</span>
+                              <span
+                                >{{ EventKindLabel[item.kind] }} ·
+                                {{ EventStatusLabel[item.status] }}</span
+                              >
+                            </div>
+                            <h2>{{ item.title || '未命名记录' }}</h2>
+                            <p>{{ summary(item) }}</p>
+                            <footer class="record-card__footer">
+                              <span class="record-tags">
+                                <span
+                                  v-if="item.effectiveClassification.primaryCategory"
+                                  class="record-tag record-tag--category"
+                                  >{{
+                                    item.effectiveClassification.primaryCategory.displayName
+                                  }}</span
+                                >
+                                <span
+                                  v-for="tag in item.effectiveClassification.tags.slice(0, 2)"
+                                  :key="tag.taxonomyKey ?? tag.displayName"
+                                  class="record-tag"
+                                  >{{ tag.origin === 'ai' ? '✦ ' : '' }}{{ tag.displayName }}</span
+                                >
+                              </span>
+                              <span class="record-context">
+                                <span v-if="item.locations[0]">{{ item.locations[0].name }}</span>
+                                <span v-if="item.media.length">{{ item.media.length }} 个附件</span>
+                              </span>
+                            </footer>
+                          </RouterLink>
+                        </li>
+                      </ul>
+                    </section>
+                  </div>
                 </section>
               </div>
             </section>
           </div>
-        </section>
-      </div>
 
-      <div v-if="items.length" class="load-more">
-        <button
-          v-if="canLoadMore"
-          class="button button-secondary"
-          :disabled="loadingMore"
-          @click="loadMore"
-        >
-          {{ loadingMore ? '加载中…' : '加载更多' }}
-        </button>
-        <p v-else>已经看到这段时间线的起点。</p>
+          <div v-if="items.length" class="load-more">
+            <button
+              v-if="canLoadMore"
+              class="button button-secondary"
+              :disabled="loadingMore"
+              @click="loadMore"
+            >
+              {{ loadingMore ? '加载中…' : '加载更多' }}
+            </button>
+            <p v-else>已经看到这段时间线的起点。</p>
+          </div>
+        </div>
       </div>
     </main>
 
@@ -409,9 +535,66 @@ onUnmounted(() => activeController?.abort())
 
 <style scoped>
 .records-page {
-  width: min(1040px, calc(100% - 48px));
-  margin: 0 auto;
-  padding: 64px 0 104px;
+  min-height: calc(100dvh - 152px);
+  padding-bottom: 100px;
+}
+.records-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--workspace-gap);
+  align-items: start;
+}
+.records-calendar {
+  margin-bottom: 16px;
+}
+.records-calendar > summary {
+  cursor: pointer;
+  width: fit-content;
+  padding: 12px 16px;
+  color: var(--ink-secondary);
+}
+.records-content,
+.year-group,
+.month-group,
+.day-group {
+  min-width: 0;
+}
+.archive-nav {
+  padding: 20px 16px;
+  border-top: 1px solid var(--line);
+}
+.archive-nav h2 {
+  margin: 0;
+  font-size: 15px;
+}
+.archive-nav p {
+  margin: 6px 0 20px;
+  color: var(--ink-tertiary);
+  font-size: 12px;
+}
+.archive-nav h3 {
+  margin: 16px 8px 6px;
+  color: var(--ink-secondary);
+  font-size: 12px;
+}
+.archive-nav button {
+  width: 100%;
+  min-height: 44px;
+  padding: 8px;
+  display: flex;
+  justify-content: space-between;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  text-align: left;
+}
+.archive-nav button:hover {
+  color: var(--primary-strong);
+  background: var(--primary-soft);
+}
+.archive-nav button span:last-child {
+  color: var(--ink-tertiary);
+  font-size: 12px;
 }
 .records-heading {
   margin-bottom: 34px;
@@ -430,58 +613,13 @@ onUnmounted(() => activeController?.abort())
   margin: 10px 0 0;
   color: var(--ink-secondary);
 }
-.record-toolbar {
-  min-height: 72px;
-  margin-bottom: 44px;
-  padding: 12px 16px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  background: var(--surface);
-  box-shadow: var(--shadow-1);
-}
-.record-toolbar label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--ink-tertiary);
-  font-size: 12px;
-}
-.record-toolbar select {
-  min-height: 42px;
-  padding: 0 36px 0 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  color: var(--ink);
-  background: var(--surface-soft);
-}
-.toolbar-refresh {
-  min-height: 44px;
-  margin-left: auto;
-  padding: 0 10px;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  border: 0;
-  border-radius: var(--radius-md);
-  color: var(--primary-strong);
-  background: transparent;
-}
-.toolbar-refresh:hover {
-  background: var(--primary-soft);
-}
-.toolbar-refresh .ui-icon {
-  width: 18px;
-  height: 18px;
-}
 .archive-groups {
   display: grid;
   gap: 30px;
 }
 .year-heading,
 .month-heading {
+  scroll-margin-top: 88px;
   width: 100%;
   min-height: 48px;
   display: flex;
@@ -540,7 +678,8 @@ onUnmounted(() => activeController?.abort())
 .day-groups {
   margin-top: 22px;
   display: grid;
-  gap: 42px;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 23rem), 1fr));
+  gap: 28px var(--workspace-gap);
 }
 .day-heading {
   margin: 0 0 14px 26px;
@@ -589,6 +728,7 @@ onUnmounted(() => activeController?.abort())
   box-shadow: 0 0 0 1px var(--primary);
 }
 .record-card {
+  overflow-wrap: anywhere;
   padding: 20px 22px;
   display: block;
   border: 1px solid var(--line);
@@ -708,28 +848,21 @@ onUnmounted(() => activeController?.abort())
   color: var(--ink-tertiary);
   font-size: 12px;
 }
-@media (max-width: 700px) {
-  .records-page {
-    width: calc(100% - 32px);
-    padding: 40px 0 72px;
+@media (max-width: 1000px) {
+  .records-workspace {
+    grid-template-columns: minmax(0, 1fr);
   }
+  .archive-nav {
+    display: none;
+  }
+}
+@media (max-width: 700px) {
   .records-heading {
     align-items: flex-start;
     flex-direction: column;
   }
-  .record-toolbar {
-    align-items: stretch;
-    flex-direction: column;
-  }
-  .record-toolbar label {
-    justify-content: space-between;
-  }
-  .record-toolbar select {
-    flex: 1;
-  }
-  .toolbar-refresh {
-    margin-left: 0;
-    justify-content: center;
+  .month-heading {
+    scroll-margin-top: 148px;
   }
   .record-card__footer {
     align-items: flex-start;

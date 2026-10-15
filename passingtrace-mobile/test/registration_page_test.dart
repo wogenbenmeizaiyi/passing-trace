@@ -16,7 +16,7 @@ void main() {
     expect(find.text('星期八'), findsOneWidget);
     expect(find.text('欢迎回来'), findsOneWidget);
     expect(find.text('第一次使用？'), findsOneWidget);
-    expect(find.text('初始注册码'), findsNothing);
+    expect(find.text('邀请码'), findsNothing);
 
     final modeSwitch = find.byKey(const Key('auth-mode-switch'));
     await tester.ensureVisible(modeSwitch);
@@ -25,12 +25,13 @@ void main() {
     expect(find.text('创建账号'), findsNWidgets(2));
     expect(find.text('已经有账号？'), findsOneWidget);
     expect(find.text('返回登录'), findsOneWidget);
-    expect(find.text('初始注册码'), findsOneWidget);
+    expect(find.text('邀请码'), findsNothing);
+    expect(find.byType(TextFormField), findsNWidgets(3));
 
     await tester.ensureVisible(modeSwitch);
     await tester.tap(modeSwitch);
     await tester.pump();
     expect(find.text('欢迎回来'), findsOneWidget);
-    expect(find.text('初始注册码'), findsNothing);
+    expect(find.text('邀请码'), findsNothing);
   });
 }

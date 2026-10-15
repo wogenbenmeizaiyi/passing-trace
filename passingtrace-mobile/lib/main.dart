@@ -1,5 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+
+import 'profile/profile_api.dart';
+import 'profile/profile_controller.dart';
+import 'profile/account_avatar.dart';
+import 'profile/account_center_view.dart';
 
 import 'auth_service.dart';
 import 'theme/appearance_controller.dart';
@@ -9,10 +16,15 @@ import 'theme/quiet_trace_components.dart';
 import 'theme/quiet_trace_icons.dart';
 import 'build_environment.dart';
 import 'update_service.dart';
+import 'user_facing_error.dart';
 import 'views/assistant_view.dart';
 import 'views/events_list_view.dart';
 import 'views/settings_view.dart';
 import 'views/storylines_list_view.dart';
+import 'social/social_api.dart';
+import 'social/messages_view.dart';
+import 'social/social_widgets.dart';
+import 'subjects/subjects_view.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -109,7 +121,6 @@ class _RegistrationPageState extends State<RegistrationPage> {
   final _username = TextEditingController();
   final _password = TextEditingController();
   final _confirmPassword = TextEditingController();
-  final _bootstrapCode = TextEditingController();
   bool _busy = false;
   bool _obscure = true;
   bool _creating = false;
@@ -119,7 +130,6 @@ class _RegistrationPageState extends State<RegistrationPage> {
     _username.dispose();
     _password.dispose();
     _confirmPassword.dispose();
-    _bootstrapCode.dispose();
     super.dispose();
   }
 
@@ -131,7 +141,6 @@ class _RegistrationPageState extends State<RegistrationPage> {
         identityBaseUrl: AuthService.defaultIdentityUrl,
         username: _username.text.trim(),
         password: _password.text,
-        bootstrapCode: _bootstrapCode.text.trim(),
         deviceName: 'Android 手机',
       );
       widget.onRegistered(session);
@@ -172,8 +181,13 @@ class _RegistrationPageState extends State<RegistrationPage> {
   void _showError(Object error) {
     debugPrint('Mobile account action failed: $error');
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(error.toString())));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          userFacingErrorMessage(error, fallback: '登录没有完成，请检查网络后重试。'),
+        ),
+      ),
+    );
   }
 
   @override
@@ -279,25 +293,11 @@ class _RegistrationPageState extends State<RegistrationPage> {
                       TextFormField(
                         controller: _confirmPassword,
                         obscureText: true,
-                        textInputAction: TextInputAction.next,
+                        textInputAction: TextInputAction.done,
+                        onFieldSubmitted: (_) => _submit(),
                         decoration: _fieldDecoration('再次输入密码'),
                         validator: (value) =>
                             value != _password.text ? '两次密码不一致' : null,
-                      ),
-                      const SizedBox(height: 14),
-                      const TraceFieldLabel('初始注册码'),
-                      TextFormField(
-                        controller: _bootstrapCode,
-                        obscureText: true,
-                        autocorrect: false,
-                        enableSuggestions: false,
-                        textInputAction: TextInputAction.done,
-                        onFieldSubmitted: (_) => _submit(),
-                        decoration: _fieldDecoration('输入部署者提供的注册码'),
-                        validator: (value) =>
-                            value == null || value.trim().isEmpty
-                            ? '请输入部署者提供的初始注册码'
-                            : null,
                       ),
                     ],
                     const SizedBox(height: 26),
@@ -382,16 +382,73 @@ class AccountHome extends StatefulWidget {
   State<AccountHome> createState() => _AccountHomeState();
 }
 
-class _AccountHomeState extends State<AccountHome> {
+class _AccountHomeState extends State<AccountHome> with WidgetsBindingObserver {
+  late final SocialFeed _social;
+  late final ProfileController _profile;
   bool _busy = false;
   int _section = 1;
 
   @override
   void initState() {
     super.initState();
+    _profile = ProfileController(
+      api: ProfileApi(widget.auth),
+      session: () => widget.session,
+    )..addListener(_profileChanged);
+    _social = SocialFeed(widget.auth, widget.session)
+      ..addListener(_profileChanged)
+      ..start();
+    WidgetsBinding.instance.addObserver(this);
+    unawaited(_profile.refresh().catchError((Object _) {}));
     if (BuildEnvironment.current.isProduction) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _checkForUpdate());
     }
+  }
+
+  void _profileChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _social.start();
+      unawaited(_profile.refresh().catchError((Object _) {}));
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      _social.stop();
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _profile.dispose();
+    _social.dispose();
+    super.dispose();
+  }
+
+  Future<void> _openProfile({bool fromDrawer = true}) async {
+    if (fromDrawer) Navigator.of(context).pop();
+    if (!mounted) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => AccountCenterView(
+          controller: _profile,
+          onFriendCode: () async {
+            final api = SocialApi(widget.auth, widget.session);
+            await Navigator.of(context).push<void>(
+              MaterialPageRoute(builder: (_) => FriendCodeView(api: api)),
+            );
+            api.close();
+          },
+          onSignOut: () async {
+            Navigator.of(context).popUntil((route) => route.isFirst);
+            await _clear();
+          },
+        ),
+      ),
+    );
   }
 
   Future<void> _checkForUpdate() async {
@@ -467,7 +524,12 @@ class _AccountHomeState extends State<AccountHome> {
     await Future<void>.delayed(const Duration(milliseconds: 160));
     if (!mounted) return;
     await Navigator.of(context).push<void>(
-      MaterialPageRoute(builder: (_) => SettingsView(onSignOut: _clear)),
+      MaterialPageRoute(
+        builder: (_) => SettingsView(
+          onSignOut: _clear,
+          onOpenProfile: () => _openProfile(fromDrawer: false),
+        ),
+      ),
     );
   }
 
@@ -530,7 +592,7 @@ class _AccountHomeState extends State<AccountHome> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('移除此手机凭据？'),
-        content: const Text('这会清除本机 Token 和设备密钥，但不会删除服务器账号。'),
+        content: const Text('退出后需要重新登录，你的账号和记录会保留。'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -558,7 +620,7 @@ class _AccountHomeState extends State<AccountHome> {
     } catch (error, stackTrace) {
       debugPrint('Account action failed: $error');
       debugPrintStack(stackTrace: stackTrace);
-      _message(error.toString());
+      _message(userFacingErrorMessage(error, fallback: '操作没有完成，请稍后重试。'));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -596,6 +658,23 @@ class _AccountHomeState extends State<AccountHome> {
           bottomNavigationBar: _buildPrimaryNavigation(),
           onSessionExpired: () => _restoreAfterSessionExpiry(true),
         )
+      else if (_section == 4)
+        MessagesView(
+          auth: widget.auth,
+          session: widget.session,
+          feed: _social,
+          drawer: _buildDrawer(),
+          bottomNavigationBar: _buildPrimaryNavigation(),
+        )
+      else if (_section == 5)
+        SubjectsView(
+          auth: widget.auth,
+          session: widget.session,
+          nickname: _profile.nickname,
+          avatar: _profile.avatar,
+          drawer: _buildDrawer(),
+          bottomNavigationBar: _buildPrimaryNavigation(),
+        )
       else
         MemoriesView(
           auth: widget.auth,
@@ -614,16 +693,25 @@ class _AccountHomeState extends State<AccountHome> {
   );
 
   Widget _buildPrimaryNavigation() => TraceBottomNavigation(
+    unreadMessages: _social.unread,
     selectedIndex: _section == 1
         ? 0
         : _section == 3
         ? 1
+        : _section == 4
+        ? 3
+        : _section == 5
+        ? 4
         : 2,
     onSelected: (index) {
       final section = index == 0
           ? 1
           : index == 1
           ? 3
+          : index == 3
+          ? 4
+          : index == 4
+          ? 5
           : 0;
       if (_section != section) setState(() => _section = section);
     },
@@ -642,13 +730,25 @@ class _AccountHomeState extends State<AccountHome> {
                 padding: const EdgeInsets.fromLTRB(10, 2, 2, 14),
                 child: Row(
                   children: [
+                    Semantics(
+                      label: '进入用户中心',
+                      button: true,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(28),
+                        onTap: _openProfile,
+                        child: AccountAvatar(bytes: _profile.avatar),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
                     Expanded(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            '我的星期八',
+                            _profile.nickname,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               color: context.traceColors.ink,
                               fontSize: 17,
@@ -706,6 +806,12 @@ class _AccountHomeState extends State<AccountHome> {
               label: '我的记忆',
               selected: _section == 2,
               onTap: () => _selectSection(2),
+            ),
+            TraceDrawerItem(
+              glyph: TraceGlyph.people,
+              label: '人物',
+              selected: _section == 5,
+              onTap: () => _selectSection(5),
             ),
             const Spacer(),
             Divider(height: 1, color: context.traceColors.line),

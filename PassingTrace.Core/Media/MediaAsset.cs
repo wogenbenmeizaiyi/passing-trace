@@ -6,6 +6,7 @@ public enum MediaKind
     Image = 1,
     Video = 2,
     File = 3,
+    Model = 4,
 }
 
 /// <summary>对象从申请上传到可被 Event 使用的生命周期。</summary>

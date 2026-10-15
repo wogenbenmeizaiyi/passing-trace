@@ -124,6 +124,91 @@ namespace PassingTrace.Infrastructure.Persistence.Migrations
                     b.ToTable("ai_message", (string)null);
                 });
 
+            modelBuilder.Entity("PassingTrace.Core.Ai.AiMutationOperation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ConversationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("conversation_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<long?>("ExpectedVersion")
+                        .HasColumnType("bigint")
+                        .HasColumnName("expected_version");
+
+                    b.Property<DateTimeOffset?>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<string>("Operation")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("operation");
+
+                    b.Property<string>("OperationKey")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("operation_key");
+
+                    b.Property<DateTimeOffset?>("ResolvedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("resolved_at");
+
+                    b.Property<string>("ResultJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("result");
+
+                    b.Property<long>("SourceMessageId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("source_message_id");
+
+                    b.Property<int>("State")
+                        .HasColumnType("integer")
+                        .HasColumnName("state");
+
+                    b.Property<string>("TargetId")
+                        .HasMaxLength(36)
+                        .HasColumnType("character varying(36)")
+                        .HasColumnName("target_id");
+
+                    b.Property<string>("TargetType")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("target_type");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("title");
+
+                    b.Property<long>("UserId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConversationId");
+
+                    b.HasIndex("SourceMessageId");
+
+                    b.HasIndex("UserId", "OperationKey")
+                        .IsUnique();
+
+                    b.HasIndex("UserId", "ConversationId", "State", "CreatedAt");
+
+                    b.ToTable("ai_mutation_operation", (string)null);
+                });
+
             modelBuilder.Entity("PassingTrace.Core.Ai.ConversationSummary", b =>
                 {
                     b.Property<Guid>("ConversationId")
@@ -746,6 +831,10 @@ namespace PassingTrace.Infrastructure.Persistence.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("status");
 
+                    b.Property<string>("SubjectIdsJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<string>("Timezone")
                         .IsRequired()
                         .HasMaxLength(64)
@@ -1003,6 +1092,10 @@ namespace PassingTrace.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("happened_at");
 
+                    b.Property<string>("ParticipantIdsJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<DateTimeOffset?>("PlannedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("planned_at");
@@ -1014,6 +1107,10 @@ namespace PassingTrace.Infrastructure.Persistence.Migrations
                     b.Property<int>("Revision")
                         .HasColumnType("integer")
                         .HasColumnName("revision");
+
+                    b.Property<string>("SubjectIdsJson")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.Property<string>("Title")
                         .HasMaxLength(512)
@@ -1352,6 +1449,325 @@ namespace PassingTrace.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("uk_event_source_revision_media_order");
 
                     b.ToTable("event_source_revision_media", (string)null);
+                });
+
+            modelBuilder.Entity("PassingTrace.Core.Social.ContentShare", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ContentJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long?>("EventId")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid>("FriendshipId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<long>("OwnerId")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("RecipientId")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("Revision")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("RevokedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SearchText")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("StorylineId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OwnerId", "EventId");
+
+                    b.HasIndex("RecipientId", "CreatedAt");
+
+                    b.ToTable("social_share", (string)null);
+                });
+
+            modelBuilder.Entity("PassingTrace.Core.Social.ConversationMember", b =>
+                {
+                    b.Property<Guid>("ConversationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("UserId")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("ClearedThroughId")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("ReadThroughId")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("ConversationId", "UserId");
+
+                    b.ToTable("social_conversation_member", (string)null);
+                });
+
+            modelBuilder.Entity("PassingTrace.Core.Social.DirectConversation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("FirstUserId")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid>("FriendshipId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("SecondUserId")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FriendshipId")
+                        .IsUnique();
+
+                    b.HasIndex("FirstUserId", "UpdatedAt");
+
+                    b.HasIndex("SecondUserId", "UpdatedAt");
+
+                    b.ToTable("social_conversation", (string)null);
+                });
+
+            modelBuilder.Entity("PassingTrace.Core.Social.DirectMessage", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<Guid>("ClientMessageId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ConversationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<long>("SenderId")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid?>("ShareId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Text")
+                        .HasMaxLength(8000)
+                        .HasColumnType("character varying(8000)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConversationId", "Id");
+
+                    b.HasIndex("SenderId", "ClientMessageId")
+                        .IsUnique();
+
+                    b.ToTable("social_message", (string)null);
+                });
+
+            modelBuilder.Entity("PassingTrace.Core.Social.EventParticipant", b =>
+                {
+                    b.Property<long>("EventId")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("UserId")
+                        .HasColumnType("bigint");
+
+                    b.Property<bool>("Active")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("Declined")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("FriendshipId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid");
+
+                    b.HasKey("EventId", "UserId");
+
+                    b.HasIndex("UserId", "Active", "EventId");
+
+                    b.ToTable("social_event_participant", (string)null);
+                });
+
+            modelBuilder.Entity("PassingTrace.Core.Social.FriendPreference", b =>
+                {
+                    b.Property<Guid>("FriendshipId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("UserId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Label")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("Remark")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("FriendshipId", "UserId");
+
+                    b.ToTable("social_friend_preference", (string)null);
+                });
+
+            modelBuilder.Entity("PassingTrace.Core.Social.FriendRequest", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("RecipientId")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("SenderId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<Guid>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SenderId", "RecipientId")
+                        .IsUnique()
+                        .HasFilter("\"Status\" = 'pending'");
+
+                    b.ToTable("social_friend_request", (string)null);
+                });
+
+            modelBuilder.Entity("PassingTrace.Core.Social.Friendship", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("Active")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("FirstUserId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("ProposedRelationship")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("Relationship")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<long?>("RelationshipRequestedBy")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("SecondUserId")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FirstUserId", "SecondUserId")
+                        .IsUnique()
+                        .HasFilter("\"Active\" = true");
+
+                    b.ToTable("social_friendship", (string)null);
+                });
+
+            modelBuilder.Entity("PassingTrace.Core.Social.SocialNotification", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<bool>("Read")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Target")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<long>("UserId")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "Id");
+
+                    b.ToTable("social_notification", (string)null);
+                });
+
+            modelBuilder.Entity("PassingTrace.Core.Social.UserBlock", b =>
+                {
+                    b.Property<long>("UserId")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("BlockedUserId")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("UserId", "BlockedUserId");
+
+                    b.ToTable("social_user_block", (string)null);
                 });
 
             modelBuilder.Entity("PassingTrace.Core.Storylines.Storyline", b =>
@@ -1908,6 +2324,396 @@ namespace PassingTrace.Infrastructure.Persistence.Migrations
                     b.ToTable("storyline_web_stage_layout", (string)null);
                 });
 
+            modelBuilder.Entity("PassingTrace.Core.Subjects.Subject", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("CoverMediaId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<string>("EndReason")
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset?>("EndedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FieldsJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("IdempotencyKey")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsSelf")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("ItemType")
+                        .HasColumnType("text");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("MediaIdsJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("RequestHash")
+                        .HasColumnType("text");
+
+                    b.Property<int>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("State")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Timezone")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("UserId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("ValuesJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId")
+                        .IsUnique()
+                        .HasFilter("\"IsSelf\" = TRUE");
+
+                    b.HasIndex("UserId", "DeletedAt");
+
+                    b.HasIndex("UserId", "IdempotencyKey")
+                        .IsUnique()
+                        .HasFilter("\"IdempotencyKey\" IS NOT NULL");
+
+                    b.ToTable("subject", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_subject_self", "NOT \"IsSelf\" OR (\"DeletedAt\" IS NULL AND \"State\" = 0 AND \"Kind\" = 0)");
+                        });
+                });
+
+            modelBuilder.Entity("PassingTrace.Core.Subjects.SubjectEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ActualFieldChangesJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Content")
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FieldChangesJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("FieldDefinitionsJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset?>("HappenedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("IdempotencyKey")
+                        .HasColumnType("text");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("MediaIdsJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset?>("PlannedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RequestHash")
+                        .HasColumnType("text");
+
+                    b.Property<int>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer");
+
+                    b.Property<int>("State")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("SubjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Timezone")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("UserId")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SubjectId");
+
+                    b.HasIndex("UserId", "IdempotencyKey")
+                        .IsUnique()
+                        .HasFilter("\"IdempotencyKey\" IS NOT NULL");
+
+                    b.HasIndex("UserId", "SubjectId", "CreatedAt");
+
+                    b.ToTable("subject_entry", (string)null);
+                });
+
+            modelBuilder.Entity("PassingTrace.Core.Subjects.SubjectHistory", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Revision")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SnapshotJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("TargetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("TargetType")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<long>("UserId")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "TargetType", "TargetId", "Revision")
+                        .IsUnique();
+
+                    b.ToTable("subject_history", (string)null);
+                });
+
+            modelBuilder.Entity("PassingTrace.Core.Subjects.SubjectMediaReference", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<Guid>("MediaId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Revision")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("TargetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("TargetType")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<long>("UserId")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MediaId");
+
+                    b.HasIndex("UserId", "TargetType", "TargetId", "MediaId", "Revision")
+                        .IsUnique();
+
+                    b.ToTable("subject_media_reference", (string)null);
+                });
+
+            modelBuilder.Entity("PassingTrace.Core.Subjects.SubjectMilestone", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("EffectiveAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Note")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Operation")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Reason")
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("SubjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("UserId")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset?>("VoidedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SubjectId");
+
+                    b.HasIndex("UserId", "SubjectId", "EffectiveAt");
+
+                    b.ToTable("subject_milestone", (string)null);
+                });
+
+            modelBuilder.Entity("PassingTrace.Core.Subjects.SubjectRelation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("Directed")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTimeOffset?>("EndedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("FromSubjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Label")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTimeOffset?>("RemovedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("ToSubjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("UserId")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FromSubjectId");
+
+                    b.HasIndex("ToSubjectId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("subject_relation", (string)null);
+                });
+
+            modelBuilder.Entity("PassingTrace.Core.Subjects.SubjectTimelineReference", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("EntryId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long?>("EventId")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset?>("RemovedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("SubjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("UserId")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EntryId");
+
+                    b.HasIndex("EventId");
+
+                    b.HasIndex("SubjectId");
+
+                    b.HasIndex("UserId", "SubjectId", "EntryId")
+                        .IsUnique()
+                        .HasFilter("\"EntryId\" IS NOT NULL AND \"RemovedAt\" IS NULL");
+
+                    b.HasIndex("UserId", "SubjectId", "EventId")
+                        .IsUnique()
+                        .HasFilter("\"EventId\" IS NOT NULL AND \"RemovedAt\" IS NULL");
+
+                    b.ToTable("subject_timeline_reference", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_subject_reference_source", "(\"EventId\" IS NULL) <> (\"EntryId\" IS NULL)");
+                        });
+                });
+
             modelBuilder.Entity("PassingTrace.Core.Ai.AiMessage", b =>
                 {
                     b.HasOne("PassingTrace.Core.Ai.AiConversation", "Conversation")
@@ -1917,6 +2723,21 @@ namespace PassingTrace.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Conversation");
+                });
+
+            modelBuilder.Entity("PassingTrace.Core.Ai.AiMutationOperation", b =>
+                {
+                    b.HasOne("PassingTrace.Core.Ai.AiConversation", null)
+                        .WithMany()
+                        .HasForeignKey("ConversationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("PassingTrace.Core.Ai.AiMessage", null)
+                        .WithMany()
+                        .HasForeignKey("SourceMessageId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("PassingTrace.Core.Ai.ConversationSummary", b =>
@@ -2085,6 +2906,17 @@ namespace PassingTrace.Infrastructure.Persistence.Migrations
                     b.Navigation("SourceRevision");
                 });
 
+            modelBuilder.Entity("PassingTrace.Core.Social.EventParticipant", b =>
+                {
+                    b.HasOne("PassingTrace.Core.Events.Event", "Event")
+                        .WithMany("Participants")
+                        .HasForeignKey("EventId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Event");
+                });
+
             modelBuilder.Entity("PassingTrace.Core.Storylines.StorylineEdge", b =>
                 {
                     b.HasOne("PassingTrace.Core.Storylines.StorylineRevision", "Revision")
@@ -2192,6 +3024,69 @@ namespace PassingTrace.Infrastructure.Persistence.Migrations
                     b.Navigation("Layout");
                 });
 
+            modelBuilder.Entity("PassingTrace.Core.Subjects.SubjectEntry", b =>
+                {
+                    b.HasOne("PassingTrace.Core.Subjects.Subject", null)
+                        .WithMany()
+                        .HasForeignKey("SubjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("PassingTrace.Core.Subjects.SubjectMediaReference", b =>
+                {
+                    b.HasOne("PassingTrace.Core.Media.MediaAsset", null)
+                        .WithMany()
+                        .HasForeignKey("MediaId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("PassingTrace.Core.Subjects.SubjectMilestone", b =>
+                {
+                    b.HasOne("PassingTrace.Core.Subjects.Subject", null)
+                        .WithMany()
+                        .HasForeignKey("SubjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("PassingTrace.Core.Subjects.SubjectRelation", b =>
+                {
+                    b.HasOne("PassingTrace.Core.Subjects.Subject", null)
+                        .WithMany()
+                        .HasForeignKey("FromSubjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("PassingTrace.Core.Subjects.Subject", null)
+                        .WithMany()
+                        .HasForeignKey("ToSubjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("PassingTrace.Core.Subjects.SubjectTimelineReference", b =>
+                {
+                    b.HasOne("PassingTrace.Core.Subjects.SubjectEntry", null)
+                        .WithMany()
+                        .HasForeignKey("EntryId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("PassingTrace.Core.Events.Event", "Event")
+                        .WithMany()
+                        .HasForeignKey("EventId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("PassingTrace.Core.Subjects.Subject", null)
+                        .WithMany()
+                        .HasForeignKey("SubjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Event");
+                });
+
             modelBuilder.Entity("PassingTrace.Core.Ai.AiConversation", b =>
                 {
                     b.Navigation("Messages");
@@ -2218,6 +3113,8 @@ namespace PassingTrace.Infrastructure.Persistence.Migrations
                     b.Navigation("Locations");
 
                     b.Navigation("MediaAssets");
+
+                    b.Navigation("Participants");
 
                     b.Navigation("SearchIndexes");
 

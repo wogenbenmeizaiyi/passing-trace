@@ -6,7 +6,9 @@ import { Controls } from '@vue-flow/controls'
 import { MiniMap } from '@vue-flow/minimap'
 import {
   ConnectionMode,
+  ConnectionLineType,
   MarkerType,
+  useVueFlow,
   VueFlow,
   type Connection,
   type Edge,
@@ -19,6 +21,7 @@ import '@vue-flow/controls/dist/style.css'
 import '@vue-flow/minimap/dist/style.css'
 import WebAppHeader from '@/components/WebAppHeader.vue'
 import StorylineFlowNode from '@/components/StorylineFlowNode.vue'
+import { connectionProblem } from '@/utils/storyline-connections'
 import { eventsApi } from '@/api/events'
 import {
   EventKind,
@@ -119,6 +122,30 @@ const revisionHistoryOpen = ref(false),
   >([])
 let queryTimer: number | undefined
 const nodeTypes = { story: markRaw(StorylineFlowNode) as never }
+const {
+  connectionClickStartHandle,
+  connectionStartHandle,
+  vueFlowRef,
+  startConnection,
+  updateConnection,
+  endConnection,
+} = useVueFlow('storyline-editor')
+const selectedEdgeId = ref<string | null>(null)
+const selectedEdge = computed(() =>
+  flowEdges.value.find((edge) => edge.id === selectedEdgeId.value),
+)
+const connectionHint = ref('')
+const defaultEdgeOptions = {
+  interactionWidth: 28,
+  selectable: true,
+  focusable: true,
+}
+const relationOptions = [
+  [StorylineRelationType.Sequence, '先后'],
+  [StorylineRelationType.Branch, '分支'],
+  [StorylineRelationType.Parallel, '并行'],
+  [StorylineRelationType.Related, '关联'],
+] as const
 const selected = computed(() => flowNodes.value.find((x) => x.id === selectedId.value) ?? null)
 const coverOptions = computed(() =>
   flowNodes.value.filter(
@@ -154,9 +181,13 @@ function checkpoint() {
   future.value = []
 }
 function applyState(raw: string) {
+  cancelConnection()
+  connectionHint.value = ''
+  selectedEdgeId.value = null
+  selectedId.value = null
   const data = JSON.parse(raw)
-  flowNodes.value = data.nodes
-  flowEdges.value = data.edges
+  flowNodes.value = data.nodes.map((node: StoryNode) => ({ ...node, selected: false }))
+  flowEdges.value = data.edges.map((edge: Edge) => ({ ...edge, selected: false }))
   stages.value = data.stages
   dirty.value = true
 }
@@ -287,6 +318,7 @@ function removeSelected() {
   if (!selected.value) return
   checkpoint()
   const id = selected.value.id
+  cancelConnection()
   if (coverMediaAssetId.value === selected.value.data.imageMediaAssetId) {
     coverMediaAssetId.value = null
   }
@@ -305,20 +337,117 @@ function addStage() {
   markDirty()
 }
 function onConnect(connection: Connection) {
-  if (!connection.source || !connection.target || connection.source === connection.target) return
+  const problem = connectionProblem(
+    connection.source,
+    connection.target,
+    flowNodes.value,
+    flowEdges.value,
+  )
+  if (problem) {
+    connectionHint.value = problem
+    return
+  }
   checkpoint()
+  const id = uuid()
   flowEdges.value = [
     ...flowEdges.value,
     {
-      id: uuid(),
+      id,
       source: connection.source,
       target: connection.target,
+      ariaLabel: `从“${nodeTitle(connection.source)}”连接到“${nodeTitle(connection.target)}”`,
       type: 'smoothstep',
       markerEnd: MarkerType.ArrowClosed,
       data: { relationType: StorylineRelationType.Sequence },
     },
   ]
   markDirty()
+  selectEdge(id)
+  connectionHint.value = '连接已添加，可在右侧设置关系或删除。'
+}
+function nodeTitle(id: string) {
+  return flowNodes.value.find((node) => node.id === id)?.data.title ?? '未命名节点'
+}
+function selectEdge(id: string) {
+  selectedId.value = null
+  selectedEdgeId.value = id
+  flowEdges.value = flowEdges.value.map((edge) => ({ ...edge, selected: edge.id === id }))
+  flowNodes.value = flowNodes.value.map((node) => ({ ...node, selected: false }))
+}
+function selectNode(id: string) {
+  selectedEdgeId.value = null
+  selectedId.value = id
+  flowEdges.value = flowEdges.value.map((edge) => ({ ...edge, selected: false }))
+}
+function removeConnection() {
+  if (!selectedEdge.value) return
+  checkpoint()
+  const id = selectedEdge.value.id
+  flowEdges.value = flowEdges.value.filter((edge) => edge.id !== id)
+  selectedEdgeId.value = null
+  markDirty()
+  connectionHint.value = '已删除连接，节点仍保留。可点击顶部“撤销”恢复。'
+}
+function updateConnectionRelation(event: Event) {
+  if (!selectedEdge.value) return
+  checkpoint()
+  const relationType = Number((event.target as HTMLSelectElement).value)
+  flowEdges.value = flowEdges.value.map((edge) =>
+    edge.id === selectedEdgeId.value ? { ...edge, data: { ...edge.data, relationType } } : edge,
+  )
+  markDirty()
+}
+function cancelConnection() {
+  endConnection(undefined, true)
+  endConnection()
+}
+// Vue Flow keeps click-to-connect state separately from its drag preview.
+// Bridge the click state to the same preview so it follows the pointer without holding a button.
+watch(connectionClickStartHandle, (handle) => {
+  if (!handle) {
+    endConnection()
+    return
+  }
+  connectionHint.value = ''
+  const bounds = vueFlowRef.value?.getBoundingClientRect()
+  startConnection(handle, { x: handle.x - (bounds?.left ?? 0), y: handle.y - (bounds?.top ?? 0) })
+})
+function moveConnectionPreview(event: MouseEvent) {
+  const handle = connectionClickStartHandle.value
+  const bounds = vueFlowRef.value?.getBoundingClientRect()
+  if (!handle || !bounds) return
+  if (!connectionStartHandle.value) startConnection(handle)
+  updateConnection({ x: event.clientX - bounds.left, y: event.clientY - bounds.top })
+}
+function onCanvasClick(event: MouseEvent) {
+  if (!(event.target instanceof Element) || !event.target.classList.contains('vue-flow__pane'))
+    return
+  cancelConnection()
+  selectedEdgeId.value = null
+  selectedId.value = null
+  connectionHint.value = ''
+}
+function onEditorKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape') {
+    cancelConnection()
+    connectionHint.value = ''
+    return
+  }
+  const target = event.target as HTMLElement | null
+  if (target?.closest('input, textarea, select, [contenteditable="true"]')) return
+  const focusedEdge = target?.closest('.vue-flow__edge')?.getAttribute('data-id')
+  if (focusedEdge && (event.key === 'Enter' || event.key === ' ')) {
+    event.preventDefault()
+    event.stopPropagation()
+    selectEdge(focusedEdge)
+    return
+  }
+  if (event.key !== 'Delete' && event.key !== 'Backspace') return
+  if (focusedEdge) selectEdge(focusedEdge)
+  if (!selectedEdge.value) return
+  event.preventDefault()
+  event.stopPropagation()
+  removeConnection()
 }
 function moveSelected(dx: number, dy: number) {
   if (!selected.value) return
@@ -375,6 +504,9 @@ async function loadImages() {
   }
 }
 function fromResponse(value: StorylineRevisionResponse) {
+  cancelConnection()
+  selectedEdgeId.value = null
+  selectedId.value = null
   title.value = value.title
   titleError.value = ''
   description.value = value.description || ''
@@ -391,6 +523,7 @@ function fromResponse(value: StorylineRevisionResponse) {
     id: edge.key,
     source: edge.sourceNodeKey,
     target: edge.targetNodeKey,
+    ariaLabel: `从“${nodeTitle(edge.sourceNodeKey)}”连接到“${nodeTitle(edge.targetNodeKey)}”`,
     type: 'smoothstep',
     markerEnd: MarkerType.ArrowClosed,
     label: edge.label || undefined,
@@ -619,7 +752,7 @@ onUnmounted(() => window.removeEventListener('beforeunload', beforeUnload))
 <template>
   <div class="app-shell story-editor-shell">
     <WebAppHeader />
-    <main class="story-editor">
+    <main class="story-editor" @keydown.capture="onEditorKeydown">
       <header class="editor-top">
         <div class="editor-title-summary">
           <p class="eyebrow">STORYLINE EDITOR</p>
@@ -754,17 +887,30 @@ onUnmounted(() => window.removeEventListener('beforeunload', beforeUnload))
             <p v-if="!bankLoading && !recordBank.length" class="bank-hint">没有更多可添加记录</p>
           </div>
         </aside>
-        <section class="flow-canvas" aria-label="故事线流程画布">
+        <section
+          class="flow-canvas"
+          aria-label="故事线流程画布"
+          @mousemove="moveConnectionPreview"
+          @click.capture="onCanvasClick"
+        >
           <VueFlow
+            id="storyline-editor"
             v-model:nodes="flowNodes"
             v-model:edges="flowEdges"
             :node-types="nodeTypes"
-            :connection-mode="ConnectionMode.Loose"
+            :connection-mode="ConnectionMode.Strict"
+            :connect-on-click="true"
+            :connection-line-options="{ type: ConnectionLineType.SmoothStep }"
+            :default-edge-options="defaultEdgeOptions"
+            :delete-key-code="null"
+            :edges-updatable="false"
+            default-marker-color="var(--primary)"
             fit-view-on-init
             :min-zoom="0.2"
             :max-zoom="2"
             @connect="onConnect"
-            @node-click="({ node }) => (selectedId = node.id)"
+            @node-click="({ node }) => selectNode(node.id)"
+            @edge-click="({ edge }) => selectEdge(edge.id)"
             @node-drag-start="checkpoint"
             @node-drag-stop="markDirty"
             ><Background :gap="24" color="var(--line)" /><MiniMap
@@ -773,6 +919,21 @@ onUnmounted(() => window.removeEventListener('beforeunload', beforeUnload))
               node-color="var(--primary)"
               mask-color="color-mix(in srgb, var(--canvas) 76%, transparent)" /><Controls
           /></VueFlow>
+          <div class="canvas-connection-tools" role="status" aria-live="polite">
+            <template v-if="connectionClickStartHandle">
+              <span
+                >再点击另一个节点的{{
+                  connectionClickStartHandle.type === 'source' ? '左侧' : '右侧'
+                }}圆点完成连接</span
+              >
+              <button type="button" @click="cancelConnection">取消 <kbd>Esc</kbd></button>
+            </template>
+            <template v-else-if="selectedEdge">
+              <span>已选中连接</span>
+              <button type="button" class="danger-link" @click="removeConnection">删除连接</button>
+            </template>
+            <span v-else>{{ connectionHint || '点击右侧圆点开始连线 · 点选连线可删除' }}</span>
+          </div>
           <div v-if="!flowNodes.length" class="canvas-empty">
             <strong>从左侧添加第一条记录</strong><span>也可以先创建一个轻量计划</span>
           </div>
@@ -782,6 +943,27 @@ onUnmounted(() => window.removeEventListener('beforeunload', beforeUnload))
             <div><span>整理</span><small>故事线与节点属性</small></div>
           </div>
           <div class="property-scroll">
+            <section v-if="selectedEdge" class="connection-editor" aria-label="当前连接">
+              <div class="section-title"><strong>当前连接</strong></div>
+              <p class="connection-endpoints">
+                {{ nodeTitle(selectedEdge.source) }}<span aria-label="连接到">↓</span
+                >{{ nodeTitle(selectedEdge.target) }}
+              </p>
+              <label
+                >关系类型<select
+                  :value="selectedEdge.data?.relationType ?? StorylineRelationType.Sequence"
+                  @change="updateConnectionRelation"
+                >
+                  <option v-for="option in relationOptions" :key="option[0]" :value="option[0]">
+                    {{ option[1] }}
+                  </option>
+                </select></label
+              >
+              <button type="button" class="connection-delete danger-link" @click="removeConnection">
+                删除连接 <kbd>Delete</kbd>
+              </button>
+              <p class="field-hint">只解除连接，保留两侧节点。删除后可以撤销。</p>
+            </section>
             <section class="story-properties">
               <div class="story-title-field" :class="{ 'has-error': titleError }">
                 <label for="storyline-title">故事线名称 <span>必填</span></label>
@@ -881,9 +1063,9 @@ onUnmounted(() => window.removeEventListener('beforeunload', beforeUnload))
                 >打开原记录</RouterLink
               >
             </section>
-            <section v-else class="property-placeholder">
-              <strong>选择一个节点</strong>
-              <p>可设置阶段、重要性或用按钮微调位置。</p>
+            <section v-else-if="!selectedEdge" class="property-placeholder">
+              <strong>选择节点或连接线</strong>
+              <p>点击节点可整理属性；点击连接线可调整关系或删除。</p>
             </section>
           </div>
         </aside>
@@ -948,10 +1130,13 @@ onUnmounted(() => window.removeEventListener('beforeunload', beforeUnload))
 <style scoped>
 .story-editor-shell {
   height: 100dvh;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
 }
 .story-editor {
-  height: calc(100dvh - 72px);
+  min-height: 0;
+  flex: 1;
   display: flex;
   flex-direction: column;
 }
@@ -999,7 +1184,7 @@ onUnmounted(() => window.removeEventListener('beforeunload', beforeUnload))
   min-height: 0;
   flex: 1;
   display: grid;
-  grid-template-columns: 280px minmax(420px, 1fr) 300px;
+  grid-template-columns: clamp(16rem, 18%, 23rem) minmax(0, 1fr) clamp(17rem, 20%, 25rem);
 }
 .record-bank,
 .property-panel {
@@ -1252,6 +1437,106 @@ onUnmounted(() => window.removeEventListener('beforeunload', beforeUnload))
 .flow-canvas :deep(.vue-flow__node) {
   border: 0;
   background: transparent;
+}
+.flow-canvas :deep(.vue-flow__edge-path) {
+  stroke: var(--ink-tertiary);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+.flow-canvas :deep(.vue-flow__edge-interaction) {
+  cursor: pointer;
+  vector-effect: non-scaling-stroke;
+}
+.flow-canvas :deep(.vue-flow__edge-text) {
+  fill: var(--ink);
+}
+.flow-canvas :deep(.vue-flow__edge-textbg) {
+  fill: var(--surface-soft);
+  stroke: var(--line-strong);
+  stroke-width: 1;
+  rx: 5px;
+  ry: 5px;
+  vector-effect: non-scaling-stroke;
+}
+.flow-canvas :deep(.vue-flow__edge:hover .vue-flow__edge-text),
+.flow-canvas :deep(.vue-flow__edge.selected .vue-flow__edge-text),
+.flow-canvas :deep(.vue-flow__edge:focus-visible .vue-flow__edge-text) {
+  fill: var(--primary-strong);
+}
+.flow-canvas :deep(.vue-flow__edge:hover .vue-flow__edge-textbg),
+.flow-canvas :deep(.vue-flow__edge.selected .vue-flow__edge-textbg),
+.flow-canvas :deep(.vue-flow__edge:focus-visible .vue-flow__edge-textbg) {
+  fill: var(--primary-soft);
+  stroke: var(--primary);
+}
+.flow-canvas :deep(.vue-flow__edge:hover .vue-flow__edge-path),
+.flow-canvas :deep(.vue-flow__edge.selected .vue-flow__edge-path),
+.flow-canvas :deep(.vue-flow__edge:focus-visible .vue-flow__edge-path) {
+  stroke: var(--primary);
+  stroke-width: 4;
+}
+.flow-canvas :deep(.vue-flow__connection-path) {
+  stroke: var(--primary);
+  stroke-width: 3;
+  stroke-dasharray: 7 5;
+  vector-effect: non-scaling-stroke;
+}
+.canvas-connection-tools {
+  position: absolute;
+  z-index: 6;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: calc(100% - 28px);
+  padding: 8px 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  color: var(--ink-secondary);
+  background: var(--surface);
+  box-shadow: var(--shadow-1);
+  font-size: 12px;
+}
+.canvas-connection-tools > span {
+  min-width: 0;
+}
+.canvas-connection-tools button,
+.connection-delete {
+  min-height: 36px;
+  padding: 6px 10px;
+  flex-shrink: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  color: var(--primary-strong);
+  background: var(--surface-soft);
+  cursor: pointer;
+}
+.canvas-connection-tools button:focus-visible,
+.connection-delete:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
+}
+.connection-endpoints {
+  margin: 0 0 16px;
+  display: grid;
+  gap: 6px;
+  overflow-wrap: anywhere;
+  color: var(--ink);
+  font-size: 14px;
+}
+.connection-endpoints span {
+  color: var(--primary);
+}
+.connection-delete {
+  width: 100%;
+}
+kbd {
+  margin-left: 4px;
+  font-size: 11px;
+  font-family: inherit;
+  opacity: 0.8;
 }
 .flow-canvas :deep(.vue-flow__controls) {
   overflow: hidden;

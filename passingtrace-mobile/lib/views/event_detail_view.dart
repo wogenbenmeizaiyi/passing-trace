@@ -1,6 +1,10 @@
 // 详情页：拉取并展示 Event 完整字段，编辑 / 删除入口。
 
 import 'package:flutter/material.dart';
+
+import '../social/social_api.dart';
+import '../social/shared_content_view.dart';
+
 import 'package:url_launcher/url_launcher.dart';
 import 'package:video_player/video_player.dart';
 
@@ -12,6 +16,7 @@ import '../events/media_api.dart';
 import '../theme/passingtrace_theme.dart';
 import '../theme/quiet_trace_components.dart';
 import '../theme/quiet_trace_icons.dart';
+import '../user_facing_error.dart';
 import 'event_form_view.dart';
 import 'event_widgets.dart';
 
@@ -89,10 +94,14 @@ class _EventDetailViewState extends State<EventDetailView> {
       setState(() => _event = event);
     } on EventApiException catch (e) {
       if (!mounted) return;
-      setState(() => _error = e.message);
+      setState(
+        () => _error = userFacingErrorMessage(e, fallback: '暂时无法加载这条记录，请稍后重试。'),
+      );
     } catch (e) {
       if (!mounted) return;
-      setState(() => _error = '加载失败：$e');
+      setState(
+        () => _error = userFacingErrorMessage(e, fallback: '暂时无法加载这条记录，请稍后重试。'),
+      );
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -162,8 +171,13 @@ class _EventDetailViewState extends State<EventDetailView> {
           .showSnackBar(SnackBar(content: Text(message)));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('删除失败：$e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            userFacingErrorMessage(e, fallback: '暂时无法删除这条记录，请稍后重试。'),
+          ),
+        ),
+      );
     } finally {
       if (mounted) setState(() => _deleting = false);
     }
@@ -174,6 +188,7 @@ class _EventDetailViewState extends State<EventDetailView> {
     return Scaffold(
       appBar: TraceAppBar(
         title: '记录详情',
+        trailingWidth: 96,
         leading: TraceIconButton(
           glyph: TraceGlyph.chevronLeft,
           tooltip: '返回',
@@ -181,10 +196,27 @@ class _EventDetailViewState extends State<EventDetailView> {
         ),
         trailing: _event == null
             ? null
-            : TraceIconButton(
-                glyph: TraceGlyph.edit,
-                tooltip: '编辑',
-                onPressed: _edit,
+            : Row(
+                children: [
+                  IconButton(
+                    tooltip: '分享给好友',
+                    icon: const Icon(Icons.share_outlined),
+                    onPressed: () async {
+                      final api = SocialApi(widget.auth, widget.session);
+                      await shareSocialContent(
+                        context,
+                        api,
+                        eventId: _event!.id,
+                      );
+                      api.close();
+                    },
+                  ),
+                  TraceIconButton(
+                    glyph: TraceGlyph.edit,
+                    tooltip: '编辑',
+                    onPressed: _edit,
+                  ),
+                ],
               ),
       ),
       body: _buildBody(),
@@ -419,8 +451,13 @@ class _EventDetailViewState extends State<EventDetailView> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('导航失败：$e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              userFacingErrorMessage(e, fallback: '暂时无法打开导航，请稍后重试。'),
+            ),
+          ),
+        );
       }
     }
   }
@@ -703,8 +740,13 @@ class _EventDetailViewState extends State<EventDetailView> {
       }
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('打开附件失败：$error')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              userFacingErrorMessage(error, fallback: '暂时无法打开这个附件，请稍后重试。'),
+            ),
+          ),
+        );
       }
     }
   }

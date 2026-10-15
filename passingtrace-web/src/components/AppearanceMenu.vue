@@ -10,6 +10,7 @@ import {
   type AppearancePalette,
 } from '@/theme/appearance'
 
+defineProps<{ inline?: boolean }>()
 const open = ref(false)
 const root = ref<HTMLElement | null>(null)
 
@@ -44,8 +45,9 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div ref="root" class="appearance-menu">
+  <div ref="root" class="appearance-menu" :class="{ 'appearance-menu--inline': inline }">
     <button
+      v-if="!inline"
       class="appearance-trigger"
       type="button"
       aria-label="主题与外观"
@@ -63,7 +65,12 @@ onBeforeUnmount(() => {
         <circle cx="17" cy="9.3" r=".8" />
       </svg>
     </button>
-    <section v-if="open" class="appearance-popover" role="dialog" aria-label="主题与外观">
+    <section
+      v-if="inline || open"
+      class="appearance-popover"
+      :role="inline ? 'region' : 'dialog'"
+      aria-label="主题与外观"
+    >
       <header><strong>主题与外观</strong><small>只保存在这台设备</small></header>
       <fieldset>
         <legend>显示模式</legend>
@@ -114,6 +121,18 @@ onBeforeUnmount(() => {
 <style scoped>
 .appearance-menu {
   position: relative;
+}
+.appearance-menu--inline .appearance-popover {
+  position: static;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 20px 0 0;
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+}
+.appearance-menu--inline .appearance-popover header {
+  flex-wrap: wrap;
 }
 .appearance-trigger {
   width: 44px;

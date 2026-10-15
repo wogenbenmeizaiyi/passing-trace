@@ -1,22 +1,20 @@
+using PassingTrace.Events.Api.Ai.Models;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Options;
 using PassingTrace.Core.Ai;
 using PassingTrace.Core.Events;
 using PassingTrace.Core.Media;
 using PassingTrace.Core.Storylines;
-using PassingTrace.Events.Api.Ai;
 using PassingTrace.Events.Api.Media;
-using PassingTrace.Infrastructure;
-using Pgvector;
 
 namespace PassingTrace.Ai.Worker;
 
 public sealed class SemanticPipeline(
-    TraceDbContext db,
+    ISemanticPipelineRepository repository,
+    IAnalysisOutbox outbox,
     IObjectStorage storage,
     ImageDerivativeProcessor imageProcessor,
     IChatClient chatClient,
@@ -41,6 +39,8 @@ public sealed class SemanticPipeline(
         PrimaryCategory.taxonomyKey 必须从 food,shopping,travel,scenery,entertainment,exercise,work,study,social,home,health,transport,other 中选择一个。
         BehaviorTags 最多 5 个，taxonomyKey 必须从系统提供的行为标签 Key 中选择，不得自创；每个分类和标签必须给出置信度及正文位置或 mediaId 证据。
         expenses 仅在金额和币种足够明确时输出；memories 只输出可由本记录证据支持、以后有稳定价值的偏好/背景/习惯/目标/约束。
+        金额是跨分类标签 amount，不替代美食、购物、交通等主分类。有明确金额事实时提取 expenses 并标记 amount；日期、人数、距离、编号不是金额。
+        同一笔金额不要把合计和其明细重复提取；未发生的预算、标价或他人的消费不能当作本人实际支出，不明确时保留在摘要中说明，不猜测金额。
         每条 memory 的 evidence 必须说明来自正文或哪个 mediaId。图片描述写入 images，不能把图片里看不清的内容当事实。
         """;
 
@@ -49,27 +49,19 @@ public sealed class SemanticPipeline(
         using var payload = JsonDocument.Parse(message.PayloadJson);
         var storylineId = payload.RootElement.GetProperty("storylineId").GetGuid();
         var revision = payload.RootElement.GetProperty("revision").GetInt32();
-        var storyline = await db.Storylines.AsNoTracking().FirstOrDefaultAsync(
-            x => x.Id == storylineId && x.UserId == message.UserId, cancellationToken);
-        if (storyline is null || storyline.DeletedAt is not null || storyline.CurrentRevision != revision) return;
-        var index = await db.StorylineSearchIndexes.FirstOrDefaultAsync(
-            x => x.StorylineId == storylineId && x.UserId == message.UserId && x.Revision == revision && x.IsCurrent,
-            cancellationToken);
+        var index = await repository.FindCurrentStorylineIndexAsync(message.UserId, storylineId, revision, cancellationToken);
         if (index is null || string.IsNullOrWhiteSpace(index.RetrievalText)) return;
         var generated = await embeddingGenerator.GenerateAsync([index.RetrievalText], cancellationToken: cancellationToken);
-        db.Entry(index).Property<Vector?>("Embedding").CurrentValue = new Vector(generated[0].Vector);
+        repository.SetEmbedding(index, generated[0].Vector.ToArray());
         index.UpdatedAt = DateTimeOffset.UtcNow;
-        await db.SaveChangesAsync(cancellationToken);
+        await repository.SaveChangesAsync(cancellationToken);
     }
 
     public async Task RemoveStorylineFromSearchAsync(OutboxMessage message, CancellationToken cancellationToken)
     {
         using var payload = JsonDocument.Parse(message.PayloadJson);
         var storylineId = payload.RootElement.GetProperty("storylineId").GetGuid();
-        var indexes = await db.StorylineSearchIndexes.Where(x => x.StorylineId == storylineId && x.UserId == message.UserId)
-            .ToListAsync(cancellationToken);
-        foreach (var index in indexes) index.IsCurrent = false;
-        await db.SaveChangesAsync(cancellationToken);
+        await repository.DisableStorylineIndexesAsync(message.UserId, storylineId, cancellationToken);
     }
 
     public async Task ProcessMediaAsync(OutboxMessage message, CancellationToken cancellationToken)
@@ -79,7 +71,7 @@ public sealed class SemanticPipeline(
             throw new InvalidOperationException("media.process 缺少 mediaAssetId。");
         }
 
-        var asset = await db.MediaAssets.FirstOrDefaultAsync(x => x.Id == message.MediaAssetId, cancellationToken);
+        var asset = await repository.FindMediaAsync(message.UserId, message.MediaAssetId.Value, cancellationToken);
         if (asset is null || asset.DeletedAt is not null || asset.Kind != MediaKind.Image)
         {
             return;
@@ -87,7 +79,7 @@ public sealed class SemanticPipeline(
 
         asset.Status = MediaAssetStatus.Processing;
         asset.UpdatedAt = DateTimeOffset.UtcNow;
-        await db.SaveChangesAsync(cancellationToken);
+        await repository.SaveChangesAsync(cancellationToken);
 
         try
         {
@@ -107,14 +99,14 @@ public sealed class SemanticPipeline(
             asset.ProcessingError = null;
             asset.UpdatedAt = DateTimeOffset.UtcNow;
             await IncrementWatermarkAsync(asset.UserId, cancellationToken);
-            await db.SaveChangesAsync(cancellationToken);
+            await repository.SaveChangesAsync(cancellationToken);
         }
         catch (Exception exception)
         {
             asset.Status = MediaAssetStatus.Failed;
             asset.ProcessingError = Limit(exception.Message, 2048);
             asset.UpdatedAt = DateTimeOffset.UtcNow;
-            await db.SaveChangesAsync(cancellationToken);
+            await repository.SaveChangesAsync(cancellationToken);
             throw;
         }
     }
@@ -126,27 +118,17 @@ public sealed class SemanticPipeline(
             throw new InvalidOperationException("event.analyze 缺少 eventId/sourceRevision。");
         }
 
-        var evt = await db.Events
-            .Include(x => x.SourceRevisions)
-                .ThenInclude(x => x.MediaAssets)
-                .ThenInclude(x => x.MediaAsset)
-            .Include(x => x.SourceRevisions)
-                .ThenInclude(x => x.Labels)
-            .Include(x => x.SourceRevisions)
-                .ThenInclude(x => x.Locations)
-            .FirstOrDefaultAsync(x => x.Id == message.EventId && x.UserId == message.UserId, cancellationToken);
+        var evt = await repository.FindEventAsync(message.UserId, message.EventId.Value, cancellationToken);
         if (evt is null || evt.DeletedAt is not null || evt.CurrentSourceRevision != message.SourceRevision)
         {
-            await MarkStaleAsync(message.UserId, message.EventId.Value, message.SourceRevision.Value, cancellationToken);
+            await repository.MarkStaleAsync(message.UserId, message.EventId.Value, message.SourceRevision.Value, cancellationToken);
             return;
         }
 
         var pipeline = options.Value;
         var force = message.PayloadJson.Contains("\"force\":true", StringComparison.OrdinalIgnoreCase);
-        var alreadyDone = !force && await db.EventSemanticRuns.AnyAsync(x =>
-            x.EventId == evt.Id && x.SourceRevision == message.SourceRevision &&
-            x.PipelineVersion == pipeline.PipelineVersion && x.Status == SemanticRunStatus.Completed,
-            cancellationToken);
+        var alreadyDone = !force && await repository.HasCompletedRunAsync(evt.UserId, evt.Id,
+            message.SourceRevision.Value, pipeline.PipelineVersion, cancellationToken);
         if (alreadyDone)
         {
             return;
@@ -165,19 +147,19 @@ public sealed class SemanticPipeline(
             Status = SemanticRunStatus.Running,
             CreatedAt = DateTimeOffset.UtcNow,
         };
-        db.EventSemanticRuns.Add(run);
-        await db.SaveChangesAsync(cancellationToken);
+        repository.Add(run);
+        await repository.SaveChangesAsync(cancellationToken);
         var started = TimeProvider.System.GetTimestamp();
 
         try
         {
-            var envelope = await ExtractSemanticAsync(source, cancellationToken);
-            await db.Entry(evt).ReloadAsync(cancellationToken);
+            var envelope = (await ExtractSemanticAsync(source, cancellationToken)).WithAmountTag();
+            await repository.ReloadEventAsync(evt, cancellationToken);
             if (evt.DeletedAt is not null || evt.CurrentSourceRevision != source.Revision)
             {
                 run.Status = SemanticRunStatus.Stale;
                 run.CompletedAt = DateTimeOffset.UtcNow;
-                await db.SaveChangesAsync(cancellationToken);
+                await repository.SaveChangesAsync(cancellationToken);
                 return;
             }
 
@@ -191,9 +173,8 @@ public sealed class SemanticPipeline(
             await PublishEffectiveLabelsAsync(evt, source, run, envelope, cancellationToken);
 
             var imageDescriptions = string.Join('\n', envelope.Images.Select(x => x.Description));
-            var effectiveLabels = await db.EventLabelIndexes.Where(x => x.UserId == evt.UserId && x.EventId == evt.Id &&
-                    x.SourceRevision == source.Revision && x.IsCurrent)
-                .Select(x => x.DisplayName).ToListAsync(cancellationToken);
+            var effectiveLabels = (await repository.ReadCurrentLabelsAsync(evt.UserId, evt.Id, source.Revision, cancellationToken))
+                .Select(x => x.DisplayName);
             var locationText = source.Locations.SelectMany(x => new[] { x.Name, x.Address, x.City, x.District, x.PoiType });
             var retrievalText = string.Join('\n', new[]
             {
@@ -206,15 +187,12 @@ public sealed class SemanticPipeline(
                 string.Join(' ', locationText.Where(x => !string.IsNullOrWhiteSpace(x))),
             }.Where(x => !string.IsNullOrWhiteSpace(x)));
             var embedding = await embeddingGenerator.GenerateAsync([retrievalText], cancellationToken: cancellationToken);
-            await db.EventSearchIndexes.Where(x => x.UserId == evt.UserId && x.EventId == evt.Id &&
-                    x.SourceRevision != source.Revision && x.IsCurrent)
-                .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.IsCurrent, false), cancellationToken);
-            var searchIndex = await db.EventSearchIndexes.FirstOrDefaultAsync(x => x.UserId == evt.UserId &&
-                x.EventId == evt.Id && x.SourceRevision == source.Revision, cancellationToken);
+            await repository.DisableOlderEventIndexesAsync(evt.UserId, evt.Id, source.Revision, cancellationToken);
+            var searchIndex = await repository.FindEventIndexAsync(evt.UserId, evt.Id, source.Revision, cancellationToken);
             if (searchIndex is null)
             {
                 searchIndex = new EventSearchIndex { UserId = evt.UserId, EventId = evt.Id, SourceRevision = source.Revision };
-                db.EventSearchIndexes.Add(searchIndex);
+                repository.Add(searchIndex);
             }
             searchIndex.SemanticRunId = run.Id;
             searchIndex.Title = source.Title ?? string.Empty;
@@ -224,12 +202,12 @@ public sealed class SemanticPipeline(
             searchIndex.RetrievalText = retrievalText;
             searchIndex.IsCurrent = true;
             searchIndex.UpdatedAt = DateTimeOffset.UtcNow;
-            db.Entry(searchIndex).Property<Vector?>("Embedding").CurrentValue = new Vector(embedding[0].Vector);
+            repository.SetEmbedding(searchIndex, embedding[0].Vector.ToArray());
 
             await PublishUserPlaceAsync(evt, source, cancellationToken);
             await PublishMemoriesAsync(evt.UserId, evt.Id, source.Revision, run, envelope.Memories, cancellationToken);
             await IncrementWatermarkAsync(evt.UserId, cancellationToken);
-            await db.SaveChangesAsync(cancellationToken);
+            await repository.SaveChangesAsync(cancellationToken);
         }
         catch (Exception exception)
         {
@@ -238,7 +216,7 @@ public sealed class SemanticPipeline(
             run.ErrorMessage = Limit(exception.Message, 2048);
             run.DurationMilliseconds = (long)TimeProvider.System.GetElapsedTime(started).TotalMilliseconds;
             run.CompletedAt = DateTimeOffset.UtcNow;
-            await db.SaveChangesAsync(cancellationToken);
+            await repository.SaveChangesAsync(cancellationToken);
             throw;
         }
     }
@@ -246,9 +224,7 @@ public sealed class SemanticPipeline(
     public async Task RemoveEventFromSearchAsync(OutboxMessage message, CancellationToken cancellationToken)
     {
         if (message.EventId is null) return;
-        await db.EventSearchIndexes
-            .Where(x => x.UserId == message.UserId && x.EventId == message.EventId && x.IsCurrent)
-            .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.IsCurrent, false), cancellationToken);
+        await repository.DisableEventIndexesAsync(message.UserId, message.EventId.Value, cancellationToken);
     }
 
     private async Task<SemanticEnvelope> ExtractSemanticAsync(
@@ -369,18 +345,15 @@ public sealed class SemanticPipeline(
     private async Task PublishEffectiveLabelsAsync(Event evt, SourceRevision source, EventSemanticRun run,
         SemanticEnvelope envelope, CancellationToken cancellationToken)
     {
-        await db.EventLabelIndexes.Where(x => x.UserId == evt.UserId && x.EventId == evt.Id && x.IsCurrent &&
-                x.SourceRevision != source.Revision)
-            .ExecuteUpdateAsync(x => x.SetProperty(y => y.IsCurrent, false), cancellationToken);
-        var current = await db.EventLabelIndexes.Where(x => x.UserId == evt.UserId && x.EventId == evt.Id &&
-            x.SourceRevision == source.Revision && x.IsCurrent).ToListAsync(cancellationToken);
+        await repository.DisableOlderLabelsAsync(evt.UserId, evt.Id, source.Revision, cancellationToken);
+        var current = await repository.ReadCurrentLabelsAsync(evt.UserId, evt.Id, source.Revision, cancellationToken);
         var manualPrimary = current.Any(x => x.Type == EventLabelType.PrimaryCategory && x.Origin == EventLabelOrigin.Manual);
         if (!manualPrimary)
         {
             foreach (var old in current.Where(x => x.Type == EventLabelType.PrimaryCategory)) old.IsCurrent = false;
             var key = envelope.PrimaryCategory is { } candidate && candidate.Confidence >= 0.60m && EventTaxonomy.IsCategory(candidate.TaxonomyKey)
                 ? candidate.TaxonomyKey.ToLowerInvariant() : "other";
-            db.EventLabelIndexes.Add(NewAiLabel(evt, source.Revision, run.Id, EventLabelType.PrimaryCategory,
+            repository.Add(NewAiLabel(evt, source.Revision, run.Id, EventLabelType.PrimaryCategory,
                 key, EventTaxonomy.CategoryLabel(key), envelope.PrimaryCategory?.Confidence ?? 0));
         }
 
@@ -396,10 +369,10 @@ public sealed class SemanticPipeline(
             var key = tag.TaxonomyKey.ToLowerInvariant();
             var display = EventTaxonomy.BehaviorTagLabel(key);
             if (!normalized.Add(EventTaxonomy.NormalizedValue(display))) continue;
-            db.EventLabelIndexes.Add(NewAiLabel(evt, source.Revision, run.Id, EventLabelType.BehaviorTag,
+            repository.Add(NewAiLabel(evt, source.Revision, run.Id, EventLabelType.BehaviorTag,
                 key, display, tag.Confidence));
         }
-        await db.SaveChangesAsync(cancellationToken);
+        await repository.SaveChangesAsync(cancellationToken);
     }
 
     private static EventLabelIndex NewAiLabel(Event evt, int revision, long runId, EventLabelType type,
@@ -425,7 +398,7 @@ public sealed class SemanticPipeline(
         {
             var key = !string.IsNullOrWhiteSpace(location.ProviderPoiId)
                 ? $"amap:{location.ProviderPoiId}" : $"text:{location.AdCode}:{EventTaxonomy.NormalizedValue(location.Name)}";
-            var place = await db.UserPlaces.FirstOrDefaultAsync(x => x.UserId == evt.UserId && x.CanonicalKey == key, cancellationToken);
+            var place = await repository.FindPlaceAsync(evt.UserId, key, cancellationToken);
             var visitedAt = source.HappenedAt ?? source.CreatedAt;
             if (place is null)
             {
@@ -437,26 +410,18 @@ public sealed class SemanticPipeline(
                     FirstVisitedAt = visitedAt,
                     LastVisitedAt = visitedAt
                 };
-                db.UserPlaces.Add(place);
+                repository.Add(place);
             }
             place.Name = location.Name; place.Address = location.Address; place.AdCode = location.AdCode;
             place.ProviderPoiId = location.ProviderPoiId; place.Latitude = location.Latitude;
             place.Longitude = location.Longitude; place.CoordinateSystem = location.CoordinateSystem;
-            place.VisitCount = await (
-                from candidate in db.EventLocations
-                join candidateEvent in db.Events on candidate.EventId equals candidateEvent.Id
-                where candidate.UserId == evt.UserId && candidateEvent.UserId == evt.UserId &&
-                      candidateEvent.DeletedAt == null && candidate.UserConfirmed &&
-                      candidate.SourceRevision == candidateEvent.CurrentSourceRevision &&
-                      ((location.ProviderPoiId != null && candidate.ProviderPoiId == location.ProviderPoiId) ||
-                       (location.ProviderPoiId == null && candidate.Name == location.Name && candidate.AdCode == location.AdCode))
-                select candidate.Id).CountAsync(cancellationToken);
+            place.VisitCount = await repository.CountPlaceVisitsAsync(evt.UserId, location, cancellationToken);
             place.FirstVisitedAt = visitedAt < place.FirstVisitedAt ? visitedAt : place.FirstVisitedAt;
             place.LastVisitedAt = visitedAt > place.LastVisitedAt ? visitedAt : place.LastVisitedAt;
             place.RetrievalText = string.Join(' ', new[] { location.Name, location.Address, location.City, location.District }.Where(x => !string.IsNullOrWhiteSpace(x)));
             place.UpdatedAt = DateTimeOffset.UtcNow;
             var vector = await embeddingGenerator.GenerateAsync([place.RetrievalText], cancellationToken: cancellationToken);
-            db.Entry(place).Property<Vector?>("Embedding").CurrentValue = new Vector(vector[0].Vector);
+            repository.SetEmbedding(place, vector[0].Vector.ToArray());
         }
     }
 
@@ -493,9 +458,7 @@ public sealed class SemanticPipeline(
             if (content.Length == 0) continue;
             var fingerprint = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"{memoryType}:{content}")))
                 .ToLowerInvariant();
-            var existing = await db.UserMemories
-                .Include(x => x.Evidence)
-                .FirstOrDefaultAsync(x => x.UserId == userId && x.Fingerprint == fingerprint, cancellationToken);
+            var existing = await repository.FindMemoryAsync(userId, fingerprint, cancellationToken);
             if (existing?.Status == UserMemoryStatus.Rejected &&
                 existing.Evidence.Any(x => x.EventId == eventId && x.SourceRevision == sourceRevision))
             {
@@ -517,8 +480,8 @@ public sealed class SemanticPipeline(
                     CreatedAt = DateTimeOffset.UtcNow,
                     UpdatedAt = DateTimeOffset.UtcNow,
                 };
-                db.UserMemories.Add(memory);
-                db.Entry(memory).Property<Vector?>("Embedding").CurrentValue = new Vector(vector[0].Vector);
+                repository.Add(memory);
+                repository.SetEmbedding(memory, vector[0].Vector.ToArray());
             }
             else
             {
@@ -551,35 +514,8 @@ public sealed class SemanticPipeline(
         }
     }
 
-    private async Task MarkStaleAsync(long userId, long eventId, int sourceRevision, CancellationToken cancellationToken)
-    {
-        await db.EventSemanticRuns
-            .Where(x => x.UserId == userId && x.EventId == eventId && x.SourceRevision == sourceRevision &&
-                (x.Status == SemanticRunStatus.Pending || x.Status == SemanticRunStatus.Running || x.Status == SemanticRunStatus.Completed))
-            .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.Status, SemanticRunStatus.Stale), cancellationToken);
-        await db.EventSearchIndexes
-            .Where(x => x.UserId == userId && x.EventId == eventId && x.SourceRevision == sourceRevision)
-            .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.IsCurrent, false), cancellationToken);
-    }
-
-    private async Task IncrementWatermarkAsync(long userId, CancellationToken cancellationToken)
-    {
-        var watermark = await db.UserDataWatermarks.FindAsync([userId], cancellationToken);
-        if (watermark is null)
-        {
-            db.UserDataWatermarks.Add(new UserDataWatermark
-            {
-                UserId = userId,
-                Version = 1,
-                UpdatedAt = DateTimeOffset.UtcNow,
-            });
-        }
-        else
-        {
-            watermark.Version++;
-            watermark.UpdatedAt = DateTimeOffset.UtcNow;
-        }
-    }
+    private Task IncrementWatermarkAsync(long userId, CancellationToken cancellationToken) =>
+        outbox.IncrementWatermarkAsync(userId, DateTimeOffset.UtcNow, cancellationToken);
 
     private static bool TryDeserialize(string json, out SemanticEnvelope? envelope)
     {

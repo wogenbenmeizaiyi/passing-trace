@@ -1,14 +1,15 @@
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using PassingTrace.Core.Ai;
 using PassingTrace.Events.Api.Ai;
-using PassingTrace.Events.Api.Ai.Amap;
-using PassingTrace.Events.Api.Ai.Capabilities;
 using PassingTrace.Events.Api.Common;
+using PassingTrace.Events.Api.Development;
 using PassingTrace.Events.Api.Events;
 using PassingTrace.Events.Api.Media;
-using PassingTrace.Events.Api.Places;
-using PassingTrace.Events.Api.Updates;
+using PassingTrace.Events.Api.Social;
 using PassingTrace.Events.Api.Storylines;
+using PassingTrace.Events.Api.Updates;
+using PassingTrace.Infrastructure.Persistence.Ai;
 
 namespace PassingTrace.Events.Api.DependencyInjection;
 
@@ -41,37 +42,23 @@ public static class ApplicationExtensions
             }
         }));
         services.AddSingleton(TimeProvider.System);
+        services.Configure<DevelopmentDemoOptions>(configuration.GetSection(DevelopmentDemoOptions.SectionName));
+        services.AddScoped<DevelopmentDemoSeeder>();
+        services.AddScoped<SocialDemoSeeder>();
         services.Configure<ObjectStorageOptions>(configuration.GetSection(ObjectStorageOptions.SectionName));
-        services.Configure<AiModelOptions>(configuration.GetSection(AiModelOptions.SectionName));
-        services.AddOptions<AmapOptions>()
-            .Bind(configuration.GetSection(AmapOptions.SectionName))
-            .PostConfigure(options =>
-            {
-                options.McpKey = FirstConfigured(configuration["AMAP_MCP_KEY"], options.McpKey);
-                options.WebServiceKey = FirstConfigured(configuration["AMAP_WEB_SERVICE_KEY"], options.WebServiceKey);
-            });
-        services.AddHttpClient<AmapPlaceService>(client =>
-        {
-            client.BaseAddress = new Uri("https://restapi.amap.com");
-            client.Timeout = TimeSpan.FromSeconds(8);
-        }).RemoveAllLoggers();
-        services.AddHttpClient<AmapMcpGateway>(client =>
-        {
-            client.Timeout = TimeSpan.FromSeconds(12);
-        }).RemoveAllLoggers();
-        services.AddScoped<IAmapMcpGateway>(provider => provider.GetRequiredService<AmapMcpGateway>());
-        services.AddScoped<IAmapQuotaGuard, RedisAmapQuotaGuard>();
-        services.AddSingleton<AiClientFactory>();
-        services.AddSingleton(provider => provider.GetRequiredService<AiClientFactory>().AssistantChatClient);
-        services.AddSingleton(provider => provider.GetRequiredService<AiClientFactory>().EmbeddingGenerator);
+        services.AddTraceAi(configuration);
         services.AddHttpContextAccessor();
+        services.AddHttpClient<ISocialIdentityClient, SocialIdentityClient>(client =>
+        {
+            client.BaseAddress = new Uri(configuration["Identity:Authority"]!.TrimEnd('/') + "/");
+            client.Timeout = TimeSpan.FromSeconds(10);
+        }).RemoveAllLoggers();
+        services.AddScoped<FriendService>();
+        services.AddScoped<SharedContentService>();
+        services.AddScoped<DirectChatService>();
+        services.AddScoped<EventParticipationService>();
+        services.AddScoped<IEventParticipationService>(p => p.GetRequiredService<EventParticipationService>());
         services.AddScoped<CurrentUserContext>();
-        services.AddScoped<PersonalRecordTools>();
-        services.AddScoped<AmapAiTools>();
-        services.AddScoped<IAiCapabilityPackage, PersonalRecordsCapabilityPackage>();
-        services.AddScoped<IAiCapabilityPackage, AmapCapabilityPackage>();
-        services.AddScoped<AssistantService>();
-        services.AddScoped<UserMemoryService>();
         services.AddSingleton<IObjectStorage, S3ObjectStorage>();
         services.Configure<AppUpdateOptions>(configuration.GetSection(AppUpdateOptions.SectionName));
         services.AddSingleton<AppUpdateService>();
@@ -80,6 +67,10 @@ public static class ApplicationExtensions
         services.AddScoped<IEventMediaService>(provider => provider.GetRequiredService<MediaService>());
         services.AddScoped<EventService>();
         services.AddScoped<StorylineService>();
+        services.AddScoped<Core.Subjects.ISubjectRepository, Infrastructure.Persistence.Subjects.SubjectRepository>();
+        services.AddScoped<Core.Subjects.ISubjectMediaQueries, Infrastructure.Persistence.Subjects.SubjectRepository>();
+        services.AddScoped<Subjects.SubjectService>();
+        services.AddScoped<Core.Subjects.IEventSubjectService>(p => p.GetRequiredService<Subjects.SubjectService>());
         // 保留 action 名中的 Async 后缀，使 CreatedAtAction(nameof(...)) 生成的路由能匹配。
         services.AddControllers(options =>
             options.SuppressAsyncSuffixInActionNames = false);
@@ -89,7 +80,4 @@ public static class ApplicationExtensions
 
         return services;
     }
-
-    private static string FirstConfigured(string? preferred, string fallback) =>
-        string.IsNullOrWhiteSpace(preferred) ? fallback : preferred.Trim();
 }

@@ -1,3 +1,6 @@
+using PassingTrace.Events.Api.Ai.Memories;
+using PassingTrace.Events.Api.Common;
+using PassingTrace.Infrastructure.Persistence.Ai;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using Microsoft.AspNetCore.Http;
@@ -10,7 +13,6 @@ using PassingTrace.Infrastructure.Persistence;
 using PassingTrace.Core.Events;
 using PassingTrace.Core.Ai;
 using PassingTrace.Core.Media;
-using PassingTrace.Events.Api.Ai;
 using PassingTrace.Events.Api.Media;
 using Xunit;
 
@@ -275,7 +277,7 @@ public sealed class EventServiceTimeZoneTests : IDisposable
         };
         _db.UserMemories.AddRange(mine, foreign);
         await _db.SaveChangesAsync();
-        var service = new UserMemoryService(_db, CreateCurrentUser(51), null!, TimeProvider.System);
+        var service = new UserMemoryService(new UserMemoryRepository(_db), CreateCurrentUser(51), null!, TimeProvider.System);
 
         var updated = await service.UpdateAsync(
             mine.Id,

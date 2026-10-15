@@ -4,11 +4,23 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../auth_service.dart';
 import '../events/ai_api.dart';
+import '../events/location_service.dart';
+import 'assistant_location_picker.dart';
 import '../events/events_api.dart';
 import '../theme/passingtrace_theme.dart';
 import '../theme/quiet_trace_components.dart';
 import '../theme/quiet_trace_icons.dart';
+import '../user_facing_error.dart';
 import 'event_detail_view.dart';
+import 'storyline_detail_view.dart';
+import 'assistant_approval_panel.dart';
+import '../social/social_api.dart';
+import '../social/friends_view.dart';
+import '../social/shared_content_view.dart';
+import '../social/messages_view.dart';
+import '../subjects/subject_detail_view.dart';
+import '../subjects/subject_entry_view.dart';
+import '../subjects/subjects_view.dart';
 
 class AssistantView extends StatefulWidget {
   const AssistantView({
@@ -18,15 +30,89 @@ class AssistantView extends StatefulWidget {
     this.drawer,
     this.bottomNavigationBar,
     this.onSessionExpired,
+    this.apiClient,
+    this.initialConversationId,
   });
   final AuthService auth;
   final AuthSession session;
   final Widget? drawer;
   final Widget? bottomNavigationBar;
   final Future<void> Function()? onSessionExpired;
+  final AiApiClient? apiClient;
+  final String? initialConversationId;
 
   @override
   State<AssistantView> createState() => _AssistantViewState();
+}
+
+class AssistantErrorNotice extends StatelessWidget {
+  const AssistantErrorNotice({
+    super.key,
+    required this.message,
+    required this.onDismiss,
+  });
+
+  final String message;
+  final VoidCallback onDismiss;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.traceColors;
+    return Semantics(
+      liveRegion: true,
+      container: true,
+      label: '回答失败：$message',
+      child: Material(
+        color: colors.surface,
+        shape: RoundedRectangleBorder(
+          side: BorderSide(color: colors.danger),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 10, 4, 10),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '这次没有完成',
+                      style: TextStyle(
+                        color: colors.ink,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      message,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: colors.inkSecondary,
+                        fontSize: 12,
+                        height: 1.4,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox.square(
+                dimension: 48,
+                child: TraceIconButton(
+                  glyph: TraceGlyph.close,
+                  tooltip: '关闭提示',
+                  onPressed: onDismiss,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _AssistantViewState extends State<AssistantView> {
@@ -37,6 +123,12 @@ class _AssistantViewState extends State<AssistantView> {
   String? _conversationId;
   bool _initialLoading = true;
   bool _busy = false;
+  DeviceLocation? _location;
+  bool _locationBusy = false;
+  bool _approvalBusy = false;
+  List<AiApprovalModel> _approvals = [];
+  String? _approvalError;
+  int _conversationRequest = 0;
   String? _error;
 
   @override
@@ -46,11 +138,21 @@ class _AssistantViewState extends State<AssistantView> {
   }
 
   Future<void> _initialize() async {
-    final baseUrl = await widget.auth.getEventsApiBaseUrl();
-    _api = AiApiClient(auth: widget.auth, baseUrl: baseUrl);
+    _api =
+        widget.apiClient ??
+        AiApiClient(
+          auth: widget.auth,
+          baseUrl: await widget.auth.getEventsApiBaseUrl(),
+        );
     try {
       var conversations = await _api.listConversations(widget.session);
-      final conversation = conversations.isEmpty
+      final conversation = widget.initialConversationId != null
+          ? AiConversationModel(
+              id: widget.initialConversationId!,
+              title: '删除授权',
+              updatedAt: DateTime.now(),
+            )
+          : conversations.isEmpty
           ? await _api.createConversation(widget.session)
           : conversations.first;
       if (conversations.isEmpty) conversations = [conversation];
@@ -61,15 +163,21 @@ class _AssistantViewState extends State<AssistantView> {
       if (mounted) {
         setState(() {
           _conversationId = conversation.id;
-          _conversations = conversations;
+          _conversations = [
+            detail.conversation,
+            ...conversations.where((x) => x.id != detail.conversation.id),
+          ];
           _messages
             ..clear()
             ..addAll(
               detail.messages.map(
                 (message) => _ChatBubble(
                   role: message.role,
+                  id: message.id,
                   text: message.content,
                   evidenceRecords: message.evidenceRecords,
+                  evidenceStorylines: message.evidenceStorylines,
+                  socialEvidence: message.socialEvidence,
                   amapPlaces: message.amapPlaces,
                   actions: message.actions,
                 ),
@@ -77,6 +185,7 @@ class _AssistantViewState extends State<AssistantView> {
             );
           _initialLoading = false;
         });
+        await _loadApprovals(conversation.id);
       }
     } catch (error) {
       _handleError(error);
@@ -94,11 +203,27 @@ class _AssistantViewState extends State<AssistantView> {
   Future<void> _send() async {
     final question = _input.text.trim();
     final conversationId = _conversationId;
-    if (question.isEmpty || conversationId == null || _busy) return;
+    if (question.isEmpty ||
+        conversationId == null ||
+        _busy ||
+        _locationBusy ||
+        _approvalBusy ||
+        _initialLoading) {
+      return;
+    }
+    if (_location != null && !_location!.isFresh) {
+      setState(() {
+        _location = null;
+        _error = '位置已过期，请重新定位后发送。';
+      });
+      return;
+    }
+    final location = _location;
     _input.clear();
     final answer = _ChatBubble(role: 'assistant', text: '');
     setState(() {
       _busy = true;
+      _location = null;
       _error = null;
       _messages.add(_ChatBubble(role: 'user', text: question));
       _messages.add(answer);
@@ -108,8 +233,9 @@ class _AssistantViewState extends State<AssistantView> {
         widget.session,
         conversationId,
         question,
+        location: location,
       )) {
-        if (!mounted) return;
+        if (!mounted || _conversationId != conversationId) return;
         if (chunk.type == 'delta') {
           final raw = chunk.data as Map<String, dynamic>;
           setState(() {
@@ -119,15 +245,39 @@ class _AssistantViewState extends State<AssistantView> {
         } else if (chunk.type == 'evidence') {
           final raw = chunk.data as Map<String, dynamic>;
           final records = AiEvidenceRecord.fromEnvelope(raw);
+          final storylines = AiEvidenceStoryline.fromEnvelope(raw);
           final places = AmapPlaceModel.fromEnvelope(raw);
           final actions = AssistantActionModel.fromEnvelope(raw);
           setState(() {
             answer.eventTitles = {
               for (final record in records) record.eventId: record.displayTitle,
             };
+            answer.socialEvidence = raw;
+            answer.accessPaths = {
+              for (final record in records)
+                if (record.accessPath != null)
+                  record.eventId: record.accessPath!,
+            };
+            answer.storylineTitles = {
+              for (final storyline in storylines)
+                storyline.storylineId.toLowerCase(): storyline.displayTitle,
+            };
             answer.amapPlaces = places;
             answer.actions = actions;
           });
+        } else if (chunk.type == 'mutation-result') {
+          final result = AiMutationResultModel.fromJson(
+            chunk.data as Map<String, dynamic>,
+          );
+          setState(() => _addMutation(result, before: answer));
+        } else if (chunk.type == 'approval-request') {
+          final approval = AiApprovalModel.fromJson(
+            chunk.data as Map<String, dynamic>,
+          );
+          if (approval.conversationId == conversationId &&
+              !_approvals.any((item) => item.id == approval.id)) {
+            setState(() => _approvals = [..._approvals, approval]);
+          }
         } else if (chunk.type == 'action') {
           final action = AssistantActionModel.fromJson(
             chunk.data as Map<String, dynamic>,
@@ -144,8 +294,10 @@ class _AssistantViewState extends State<AssistantView> {
             });
           }
         } else if (chunk.type == 'error') {
-          throw StateError(
-            (chunk.data as Map<String, dynamic>)['message'] as String,
+          final raw = chunk.data as Map<String, dynamic>;
+          throw EventApiException(
+            status: 503,
+            message: raw['message'] as String? ?? '暂时没能完成这次回答，请稍后重试。',
           );
         }
       }
@@ -169,8 +321,11 @@ class _AssistantViewState extends State<AssistantView> {
   }
 
   Future<void> _newConversation() async {
-    if (_busy) return;
+    if (_busy || _approvalBusy || _initialLoading) return;
+    ++_conversationRequest;
     setState(() {
+      _location = null;
+      _locationBusy = false;
       _busy = true;
       _error = null;
     });
@@ -180,6 +335,8 @@ class _AssistantViewState extends State<AssistantView> {
       setState(() {
         _conversationId = conversation.id;
         _messages.clear();
+        _approvals = [];
+        _approvalError = null;
         _conversations = [conversation, ..._conversations];
       });
     } catch (error) {
@@ -190,10 +347,16 @@ class _AssistantViewState extends State<AssistantView> {
   }
 
   Future<void> _openConversation(AiConversationModel conversation) async {
+    if (_busy || _approvalBusy || _initialLoading) return;
+    ++_conversationRequest;
     Navigator.of(context).pop();
     setState(() {
+      _location = null;
+      _locationBusy = false;
       _initialLoading = true;
       _error = null;
+      _approvals = [];
+      _approvalError = null;
     });
     try {
       final detail = await _api.getConversation(
@@ -209,14 +372,18 @@ class _AssistantViewState extends State<AssistantView> {
             detail.messages.map(
               (message) => _ChatBubble(
                 role: message.role,
+                id: message.id,
                 text: message.content,
                 evidenceRecords: message.evidenceRecords,
+                evidenceStorylines: message.evidenceStorylines,
+                socialEvidence: message.socialEvidence,
                 amapPlaces: message.amapPlaces,
                 actions: message.actions,
               ),
             ),
           );
       });
+      await _loadApprovals(conversation.id);
     } catch (error) {
       _handleError(error);
     } finally {
@@ -231,6 +398,9 @@ class _AssistantViewState extends State<AssistantView> {
         .where((item) => item.id != conversation.id)
         .toList(growable: false);
     if (conversation.id == _conversationId) {
+      ++_conversationRequest;
+      _location = null;
+      _locationBusy = false;
       final next = conversations.isEmpty
           ? await _api.createConversation(widget.session)
           : conversations.first;
@@ -239,20 +409,26 @@ class _AssistantViewState extends State<AssistantView> {
       if (!mounted) return;
       setState(() {
         _conversationId = next.id;
+        _approvals = [];
+        _approvalError = null;
         _messages
           ..clear()
           ..addAll(
             detail.messages.map(
               (message) => _ChatBubble(
                 role: message.role,
+                id: message.id,
                 text: message.content,
                 evidenceRecords: message.evidenceRecords,
+                evidenceStorylines: message.evidenceStorylines,
+                socialEvidence: message.socialEvidence,
                 amapPlaces: message.amapPlaces,
                 actions: message.actions,
               ),
             ),
           );
       });
+      await _loadApprovals(next.id);
     }
     if (mounted) setState(() => _conversations = conversations);
   }
@@ -260,6 +436,7 @@ class _AssistantViewState extends State<AssistantView> {
   Future<void> _showConversations() async {
     await showModalBottomSheet<void>(
       context: context,
+      showDragHandle: true,
       backgroundColor: context.traceColors.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -268,33 +445,30 @@ class _AssistantViewState extends State<AssistantView> {
         final colors = sheetContext.traceColors;
         return SafeArea(
           child: SizedBox(
-            height: MediaQuery.sizeOf(context).height * 0.68,
+            height: MediaQuery.sizeOf(context).height * 0.52,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Center(
-                  child: Container(
-                    width: 36,
-                    height: 4,
-                    margin: const EdgeInsets.only(top: 10, bottom: 18),
-                    decoration: BoxDecoration(
-                      color: colors.lineStrong,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Text(
-                    '聊天记录',
-                    style: TextStyle(
-                      color: colors.ink,
-                      fontSize: 20,
-                      fontWeight: FontWeight.w700,
-                    ),
+                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 14),
+                  child: Row(
+                    children: [
+                      Text(
+                        '聊天记录',
+                        style: TextStyle(
+                          color: colors.ink,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        '按月份整理',
+                        style: TextStyle(color: colors.inkMuted, fontSize: 12),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 8),
                 Divider(height: 1, color: colors.line),
                 Expanded(
                   child: _conversations.isEmpty
@@ -304,86 +478,13 @@ class _AssistantViewState extends State<AssistantView> {
                             style: TextStyle(color: colors.inkSecondary),
                           ),
                         )
-                      : ListView.separated(
-                          padding: const EdgeInsets.symmetric(vertical: 8),
-                          itemCount: _conversations.length,
-                          separatorBuilder: (_, _) => Divider(
-                            height: 1,
-                            indent: 20,
-                            endIndent: 20,
-                            color: colors.line,
-                          ),
-                          itemBuilder: (_, index) {
-                            final conversation = _conversations[index];
-                            final selected = conversation.id == _conversationId;
-                            return InkWell(
-                              onTap: () => _openConversation(conversation),
-                              child: ConstrainedBox(
-                                constraints: const BoxConstraints(
-                                  minHeight: 64,
-                                ),
-                                child: Padding(
-                                  padding: const EdgeInsets.only(
-                                    left: 20,
-                                    right: 8,
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      TraceIcon(
-                                        TraceGlyph.sparkle,
-                                        size: 20,
-                                        color: selected
-                                            ? colors.primary
-                                            : colors.inkSecondary,
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: Column(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.center,
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              conversation.title,
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: TextStyle(
-                                                color: colors.ink,
-                                                fontWeight: selected
-                                                    ? FontWeight.w700
-                                                    : FontWeight.w500,
-                                              ),
-                                            ),
-                                            const SizedBox(height: 3),
-                                            Text(
-                                              _formatConversationTime(
-                                                conversation.updatedAt,
-                                              ),
-                                              style: TextStyle(
-                                                color: colors.inkMuted,
-                                                fontSize: 12,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      TraceIconButton(
-                                        glyph: TraceGlyph.delete,
-                                        tooltip: '删除对话',
-                                        color: colors.inkMuted,
-                                        onPressed: () async {
-                                          Navigator.of(sheetContext).pop();
-                                          await _deleteConversation(
-                                            conversation,
-                                          );
-                                        },
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            );
+                      : AssistantConversationHistory(
+                          conversations: _conversations,
+                          selectedConversationId: _conversationId,
+                          onOpen: _openConversation,
+                          onDelete: (conversation) async {
+                            Navigator.of(sheetContext).pop();
+                            await _deleteConversation(conversation);
                           },
                         ),
                 ),
@@ -393,13 +494,6 @@ class _AssistantViewState extends State<AssistantView> {
         );
       },
     );
-  }
-
-  String _formatConversationTime(DateTime value) {
-    final local = value.toLocal();
-    return '${local.month}月${local.day}日 '
-        '${local.hour.toString().padLeft(2, '0')}:'
-        '${local.minute.toString().padLeft(2, '0')}';
   }
 
   void _handleError(Object error) {
@@ -413,7 +507,10 @@ class _AssistantViewState extends State<AssistantView> {
       }
       return;
     }
-    setState(() => _error = error.toString());
+    setState(
+      () =>
+          _error = userFacingErrorMessage(error, fallback: '暂时没能完成这次回答，请稍后重试。'),
+    );
   }
 
   @override
@@ -457,43 +554,195 @@ class _AssistantViewState extends State<AssistantView> {
 
   Widget _buildChat() {
     final colors = context.traceColors;
-    return Stack(
-      children: [
-        Positioned.fill(
-          child: _initialLoading
-              ? Center(child: CircularProgressIndicator(color: colors.primary))
-              : _messages.isEmpty
-              ? _buildEmptyChat()
-              : ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(16, 20, 16, 112),
-                  itemCount: _messages.length,
-                  itemBuilder: (_, index) => _buildMessage(_messages[index]),
-                ),
-        ),
-        if (_error != null)
-          Positioned(
-            left: 16,
-            right: 16,
-            bottom: 88,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.errorContainer,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Text(
-                _error!,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.onErrorContainer,
-                  fontSize: 12,
-                ),
+    return LayoutBuilder(
+      builder: (context, constraints) => Column(
+        children: [
+          Expanded(
+            child: _initialLoading
+                ? Center(
+                    child: CircularProgressIndicator(color: colors.primary),
+                  )
+                : _messages.isEmpty
+                ? _buildEmptyChat()
+                : ListView.builder(
+                    padding: const EdgeInsets.fromLTRB(16, 20, 16, 16),
+                    itemCount: _messages.length,
+                    itemBuilder: (_, index) => _buildMessage(_messages[index]),
+                  ),
+          ),
+          ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: constraints.maxHeight * .6),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (_error != null)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                      child: AssistantErrorNotice(
+                        message: _error!,
+                        onDismiss: () => setState(() => _error = null),
+                      ),
+                    ),
+                  if (_approvals.isNotEmpty) _buildApproval(),
+                  if (_approvals.isEmpty && _approvalError != null)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Semantics(
+                        liveRegion: true,
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                _approvalError!,
+                                style: TextStyle(color: colors.danger),
+                              ),
+                            ),
+                            TextButton(
+                              onPressed:
+                                  _busy ||
+                                      _approvalBusy ||
+                                      _conversationId == null
+                                  ? null
+                                  : () => _loadApprovals(_conversationId!),
+                              child: const Text('重试读取'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  AssistantLocationPicker(
+                    scopeKey: '${_conversationId ?? ''}:$_conversationRequest',
+                    disabled: _busy || _approvalBusy || _initialLoading,
+                    value: _location,
+                    onChanged: (value) => setState(() => _location = value),
+                    onBusy: (value) => setState(() => _locationBusy = value),
+                  ),
+                ],
               ),
             ),
           ),
-        Positioned(left: 10, right: 10, bottom: 10, child: _buildComposer()),
-      ],
+          Padding(
+            padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+            child: _buildComposer(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _loadApprovals(String id) async {
+    final request = _conversationRequest;
+    try {
+      final loaded = await _api.listApprovals(widget.session, id);
+      if (mounted && _conversationId == id && request == _conversationRequest) {
+        setState(() {
+          _approvals = loaded;
+          _approvalError = null;
+        });
+      }
+    } catch (_) {
+      if (mounted && _conversationId == id && request == _conversationRequest) {
+        setState(() => _approvalError = '删除授权暂时无法读取，请重新打开对话。');
+      }
+    }
+  }
+
+  void _addMutation(AiMutationResultModel result, {_ChatBubble? before}) {
+    final message = result.message;
+    if (_messages.any((item) => item.id != null && item.id == message.id)) {
+      return;
+    }
+    final bubble = _ChatBubble(
+      id: message.id,
+      role: message.role,
+      text: message.content,
+      evidenceRecords: message.evidenceRecords,
+      evidenceStorylines: message.evidenceStorylines,
+      socialEvidence: message.socialEvidence,
+      amapPlaces: message.amapPlaces,
+      actions: message.actions,
+    );
+    final index = before == null ? -1 : _messages.indexOf(before);
+    if (index < 0) {
+      _messages.add(bubble);
+    } else {
+      _messages.insert(index, bubble);
+    }
+  }
+
+  Future<void> _decideApproval(String decision) async {
+    final id = _conversationId;
+    if (id == null ||
+        _approvals.isEmpty ||
+        _approvalBusy ||
+        _busy ||
+        _initialLoading) {
+      return;
+    }
+    final approval = _approvals.first;
+    setState(() {
+      _approvalBusy = true;
+      _approvalError = null;
+    });
+    try {
+      final result = await _api.decideApproval(
+        widget.session,
+        id,
+        approval.id,
+        decision,
+      );
+      if (!mounted || _conversationId != id) return;
+      setState(() {
+        _approvals = _approvals
+            .where((item) => item.id != approval.id)
+            .toList();
+        _addMutation(result);
+      });
+    } catch (error) {
+      if (mounted && _conversationId == id) {
+        setState(
+          () =>
+              _approvalError = error is EventApiException && error.status < 500
+              ? error.message
+              : '未能处理授权，请重试；重复点击不会再次删除。',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _approvalBusy = false);
+    }
+  }
+
+  Widget _buildApproval() {
+    final approval = _approvals.first;
+    return AssistantApprovalPanel(
+      approval: approval,
+      remaining: _approvals.length,
+      busy: _busy || _approvalBusy || _initialLoading,
+      error: _approvalError,
+      onDecision: _decideApproval,
+      onOpen: () {
+        if (approval.targetType == 'Storyline') {
+          _openStoryline(approval.targetId);
+        } else if (approval.targetType == 'Subject') {
+          _openSocial('subject/${approval.targetId}');
+        } else if (approval.targetType == 'SubjectEntry') {
+          _openSocial('subjectentry/${approval.targetId}');
+        } else if (approval.targetType == 'SubjectRelation') {
+          Navigator.push<void>(
+            context,
+            MaterialPageRoute(
+              builder: (_) =>
+                  SubjectsView(auth: widget.auth, session: widget.session),
+            ),
+          );
+        } else {
+          _openEvidenceEvent(
+            _ChatBubble(role: 'assistant', text: ''),
+            int.parse(approval.targetId),
+          );
+        }
+      },
     );
   }
 
@@ -537,12 +786,16 @@ class _AssistantViewState extends State<AssistantView> {
               text: message.text,
               isUser: mine,
               eventTitles: message.eventTitles,
-              onOpenEvent: _openEvent,
+              storylineTitles: message.storylineTitles,
+              onOpenEvent: (id) => _openEvidenceEvent(message, id),
+              socialTitles: _socialTitles(message),
+              onOpenSocial: _openSocial,
+              onOpenStoryline: _openStoryline,
             ),
             if (message.eventTitles.isNotEmpty)
               AssistantEvidenceDisclosure(
                 records: message.eventTitles,
-                onOpenEvent: _openEvent,
+                onOpenEvent: (id) => _openEvidenceEvent(message, id),
               ),
             if (message.amapPlaces.isNotEmpty || message.actions.isNotEmpty)
               AmapActionCards(
@@ -553,6 +806,115 @@ class _AssistantViewState extends State<AssistantView> {
         ),
       ),
     );
+  }
+
+  Map<String, String> _socialTitles(_ChatBubble message) => {
+    for (final f in socialRows(message.socialEvidence['friends']))
+      'friend/${f['id']}': socialName(f),
+    for (final s in socialRows(message.socialEvidence['sharedContents']))
+      'share/${s['shareId']}': s['title'] as String,
+    for (final s in socialRows(message.socialEvidence['subjects']))
+      'subject/${s['subjectId']}': s['title'] as String,
+    for (final s in socialRows(message.socialEvidence['subjectEntries']))
+      'subjectentry/${s['entryId']}': s['title'] as String,
+  };
+  void _openEvidenceEvent(_ChatBubble message, int id) {
+    if (message.accessPaths[id] == '/joint-records/$id') {
+      Navigator.push<void>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => SharedContentView(
+            auth: widget.auth,
+            session: widget.session,
+            eventId: id,
+          ),
+        ),
+      );
+    } else {
+      _openEvent(id);
+    }
+  }
+
+  Future<void> _openSocial(String key) async {
+    if (key.startsWith('subject/')) {
+      await Navigator.push<void>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => SubjectDetailView(
+            auth: widget.auth,
+            session: widget.session,
+            subjectId: key.substring(8),
+          ),
+        ),
+      );
+      return;
+    }
+    if (key.startsWith('subjectentry/')) {
+      await Navigator.push<void>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => SubjectEntryView(
+            auth: widget.auth,
+            session: widget.session,
+            entryId: key.substring(13),
+          ),
+        ),
+      );
+      return;
+    }
+    if (key.startsWith('share/')) {
+      await Navigator.push<void>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => SharedContentView(
+            auth: widget.auth,
+            session: widget.session,
+            shareId: key.substring(6),
+          ),
+        ),
+      );
+      return;
+    }
+    if (!key.startsWith('friend/')) return;
+    final api = SocialApi(widget.auth, widget.session);
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => FriendsView(
+          api: api,
+          selectedId: key.substring(7),
+          onChat: (friendship) async {
+            try {
+              final c = await api.request(
+                'POST',
+                '/api/v1/conversations',
+                body: {'friendshipId': friendship},
+              );
+              final me = await api.request(
+                'GET',
+                '/api/v1/people/me',
+                identity: true,
+              );
+              if (mounted) {
+                await Navigator.push<void>(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => DirectChatView(
+                      api: api,
+                      conversationId: c['id'] as String,
+                      me: me['profile']['id'] as String,
+                    ),
+                  ),
+                );
+              }
+            } catch (error) {
+              if (mounted) _handleError(error);
+            }
+          },
+        ),
+      ),
+    );
+    api.close();
   }
 
   void _openEvent(int id) {
@@ -568,9 +930,27 @@ class _AssistantViewState extends State<AssistantView> {
     );
   }
 
+  void _openStoryline(String id) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => StorylineDetailView(
+          auth: widget.auth,
+          session: widget.session,
+          storylineId: id,
+        ),
+      ),
+    );
+  }
+
   Widget _buildComposer() {
     final colors = context.traceColors;
-    final enabled = !_busy && _conversationId != null;
+    final enabled =
+        !_busy &&
+        !_locationBusy &&
+        !_approvalBusy &&
+        !_initialLoading &&
+        _conversationId != null;
     return SafeArea(
       top: false,
       child: Material(
@@ -736,6 +1116,231 @@ class _AssistantViewState extends State<AssistantView> {
       ],
     );
   }
+}
+
+class AssistantConversationHistory extends StatefulWidget {
+  const AssistantConversationHistory({
+    super.key,
+    required this.conversations,
+    required this.selectedConversationId,
+    required this.onOpen,
+    required this.onDelete,
+  });
+
+  final List<AiConversationModel> conversations;
+  final String? selectedConversationId;
+  final Future<void> Function(AiConversationModel conversation) onOpen;
+  final Future<void> Function(AiConversationModel conversation) onDelete;
+
+  @override
+  State<AssistantConversationHistory> createState() =>
+      _AssistantConversationHistoryState();
+}
+
+class _AssistantConversationHistoryState
+    extends State<AssistantConversationHistory> {
+  late final Set<String> _expandedMonths;
+
+  @override
+  void initState() {
+    super.initState();
+    final groups = _groupConversations(widget.conversations);
+    _expandedMonths = {
+      if (groups.isNotEmpty) groups.first.key,
+      for (final group in groups)
+        if (group.conversations.any(
+          (conversation) => conversation.id == widget.selectedConversationId,
+        ))
+          group.key,
+    };
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.traceColors;
+    final groups = _groupConversations(widget.conversations);
+    final entries = <Object>[
+      for (final group in groups) ...[
+        group,
+        if (_expandedMonths.contains(group.key)) ...group.conversations,
+      ],
+    ];
+
+    return ListView.builder(
+      padding: EdgeInsets.zero,
+      itemCount: entries.length,
+      itemBuilder: (context, index) {
+        final entry = entries[index];
+        if (entry is _ConversationMonthGroup) {
+          final expanded = _expandedMonths.contains(entry.key);
+          return Semantics(
+            button: true,
+            expanded: expanded,
+            label: '${entry.label}，${entry.conversations.length}个会话',
+            child: Ink(
+              decoration: BoxDecoration(
+                color: colors.surfaceSoft,
+                border: Border(bottom: BorderSide(color: colors.line)),
+              ),
+              child: InkWell(
+                onTap: () => setState(() {
+                  if (expanded) {
+                    _expandedMonths.remove(entry.key);
+                  } else {
+                    _expandedMonths.add(entry.key);
+                  }
+                }),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 52),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            entry.label,
+                            style: TextStyle(
+                              color: colors.ink,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          '${entry.conversations.length} 个',
+                          style: TextStyle(
+                            color: colors.inkMuted,
+                            fontSize: 12,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        TraceIcon(
+                          expanded
+                              ? TraceGlyph.chevronUp
+                              : TraceGlyph.chevronDown,
+                          size: 18,
+                          color: colors.inkMuted,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
+
+        final conversation = entry as AiConversationModel;
+        final selected = conversation.id == widget.selectedConversationId;
+        return Ink(
+          key: ValueKey(conversation.id),
+          decoration: BoxDecoration(
+            color: selected ? colors.primarySoft : Colors.transparent,
+            border: Border(bottom: BorderSide(color: colors.line)),
+          ),
+          child: InkWell(
+            onTap: () => widget.onOpen(conversation),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 64),
+              child: Padding(
+                padding: const EdgeInsets.only(left: 20, right: 8),
+                child: Row(
+                  children: [
+                    TraceIcon(
+                      TraceGlyph.sparkle,
+                      size: 20,
+                      color: selected ? colors.primary : colors.inkSecondary,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            conversation.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: colors.ink,
+                              fontWeight: selected
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            _formatConversationTime(conversation.updatedAt),
+                            style: TextStyle(
+                              color: colors.inkMuted,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    TraceIconButton(
+                      glyph: TraceGlyph.delete,
+                      tooltip: '删除对话',
+                      color: colors.inkMuted,
+                      onPressed: () => widget.onDelete(conversation),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _ConversationMonthGroup {
+  const _ConversationMonthGroup({
+    required this.year,
+    required this.month,
+    required this.conversations,
+  });
+
+  final int year;
+  final int month;
+  final List<AiConversationModel> conversations;
+
+  String get key => '$year-${month.toString().padLeft(2, '0')}';
+  String get label => '$year年$month月';
+}
+
+List<_ConversationMonthGroup> _groupConversations(
+  List<AiConversationModel> conversations,
+) {
+  final sorted = [...conversations]
+    ..sort((left, right) => right.updatedAt.compareTo(left.updatedAt));
+  final grouped = <String, List<AiConversationModel>>{};
+  final monthValues = <String, ({int year, int month})>{};
+  for (final conversation in sorted) {
+    final local = conversation.updatedAt.toLocal();
+    final key = '${local.year}-${local.month.toString().padLeft(2, '0')}';
+    grouped.putIfAbsent(key, () => []).add(conversation);
+    monthValues[key] = (year: local.year, month: local.month);
+  }
+  return grouped.entries
+      .map((entry) {
+        final value = monthValues[entry.key]!;
+        return _ConversationMonthGroup(
+          year: value.year,
+          month: value.month,
+          conversations: entry.value,
+        );
+      })
+      .toList(growable: false);
+}
+
+String _formatConversationTime(DateTime value) {
+  final local = value.toLocal();
+  return '${local.month}月${local.day}日 '
+      '${local.hour.toString().padLeft(2, '0')}:'
+      '${local.minute.toString().padLeft(2, '0')}';
 }
 
 class AssistantEvidenceDisclosure extends StatefulWidget {
@@ -959,7 +1564,7 @@ class _MemoriesViewState extends State<MemoriesView> {
       }
       setState(() {
         _loading = false;
-        _error = error.toString();
+        _error = userFacingErrorMessage(error, fallback: '暂时无法加载记忆，请稍后重试。');
       });
     }
   }
@@ -1117,19 +1722,35 @@ class _MemoriesViewState extends State<MemoriesView> {
 class _ChatBubble {
   _ChatBubble({
     required this.role,
+    this.id,
     required this.text,
     List<AiEvidenceRecord>? evidenceRecords,
+    List<AiEvidenceStoryline>? evidenceStorylines,
     List<AmapPlaceModel>? amapPlaces,
     List<AssistantActionModel>? actions,
+    this.socialEvidence = const {},
   }) : eventTitles = {
          for (final record in evidenceRecords ?? const <AiEvidenceRecord>[])
            record.eventId: record.displayTitle,
        },
+       storylineTitles = {
+         for (final storyline
+             in evidenceStorylines ?? const <AiEvidenceStoryline>[])
+           storyline.storylineId.toLowerCase(): storyline.displayTitle,
+       },
+       accessPaths = {
+         for (final r in evidenceRecords ?? <AiEvidenceRecord>[])
+           if (r.accessPath != null) r.eventId: r.accessPath!,
+       },
        amapPlaces = amapPlaces ?? [],
        actions = actions ?? [];
   final String role;
+  final int? id;
   String text;
+  Map<String, dynamic> socialEvidence;
+  Map<int, String> accessPaths;
   Map<int, String> eventTitles;
+  Map<String, String> storylineTitles;
   List<AmapPlaceModel> amapPlaces;
   List<AssistantActionModel> actions;
 }
@@ -1382,13 +2003,21 @@ class AssistantMessageContent extends StatelessWidget {
     required this.text,
     required this.isUser,
     this.eventTitles = const {},
+    this.storylineTitles = const {},
     this.onOpenEvent,
+    this.onOpenStoryline,
+    this.socialTitles = const {},
+    this.onOpenSocial,
   });
 
   final String text;
   final bool isUser;
   final Map<int, String> eventTitles;
+  final Map<String, String> storylineTitles;
   final ValueChanged<int>? onOpenEvent;
+  final ValueChanged<String>? onOpenStoryline;
+  final Map<String, String> socialTitles;
+  final ValueChanged<String>? onOpenSocial;
 
   @override
   Widget build(BuildContext context) {
@@ -1401,13 +2030,31 @@ class AssistantMessageContent extends StatelessWidget {
     }
 
     return MarkdownBody(
-      data: _replaceEventCitations(text, eventTitles),
+      data: _replaceCitations(text, eventTitles, storylineTitles).replaceAllMapped(
+        RegExp(
+          r'\[(Friend|Share|Subject|SubjectEntry)\s*#([0-9a-f-]{36})\]',
+          caseSensitive: false,
+        ),
+        (match) {
+          final key = '${match[1]!.toLowerCase()}/${match[2]!.toLowerCase()}';
+          return socialTitles.containsKey(key)
+              ? '[${_escapeMarkdownLabel(socialTitles[key]!)}](passingtrace://$key)'
+              : '内容已不可查看';
+        },
+      ),
       selectable: true,
       onTapLink: (_, href, _) {
         final uri = Uri.tryParse(href ?? '');
-        if (uri?.scheme != 'passingtrace' || uri?.host != 'event') return;
-        final eventId = int.tryParse(uri!.pathSegments.firstOrNull ?? '');
-        if (eventId != null) onOpenEvent?.call(eventId);
+        if (uri?.scheme != 'passingtrace') return;
+        final id = uri!.pathSegments.firstOrNull;
+        if (uri.host == 'event') {
+          final eventId = int.tryParse(id ?? '');
+          if (eventId != null) onOpenEvent?.call(eventId);
+        } else if (uri.host == 'storyline' && id != null) {
+          onOpenStoryline?.call(id);
+        } else if (id != null && socialTitles.containsKey('${uri.host}/$id')) {
+          onOpenSocial?.call('${uri.host}/$id');
+        }
       },
       styleSheet: MarkdownStyleSheet(
         p: TextStyle(color: colors.ink, fontSize: 13, height: 1.7),
@@ -1450,20 +2097,36 @@ class AssistantMessageContent extends StatelessWidget {
     );
   }
 
-  static String _replaceEventCitations(
+  static String _replaceCitations(
     String source,
-    Map<int, String> titles,
-  ) => source.replaceAllMapped(
-    RegExp(r'\[Event\s*#(\d+)\]', caseSensitive: false),
-    (match) {
-      final id = int.parse(match.group(1)!);
-      final title = titles[id]?.trim();
-      final label = title == null || title.isEmpty ? '查看记录' : title;
-      final escaped = label
-          .replaceAll(r'\', r'\\')
-          .replaceAll('[', r'\[')
-          .replaceAll(']', r'\]');
-      return '[$escaped](passingtrace://event/$id)';
-    },
-  );
+    Map<int, String> eventTitles,
+    Map<String, String> storylineTitles,
+  ) {
+    final withEvents = source.replaceAllMapped(
+      RegExp(r'\[Event\s*#(\d+)\]', caseSensitive: false),
+      (match) {
+        final id = int.parse(match.group(1)!);
+        final title = eventTitles[id]?.trim();
+        final label = title == null || title.isEmpty ? '查看记录' : title;
+        return '[${_escapeMarkdownLabel(label)}](passingtrace://event/$id)';
+      },
+    );
+    return withEvents.replaceAllMapped(
+      RegExp(
+        r'\[Storyline\s*#([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\]',
+        caseSensitive: false,
+      ),
+      (match) {
+        final id = match.group(1)!.toLowerCase();
+        final title = storylineTitles[id]?.trim();
+        final label = title == null || title.isEmpty ? '查看故事线' : title;
+        return '[${_escapeMarkdownLabel(label)}](passingtrace://storyline/$id)';
+      },
+    );
+  }
+
+  static String _escapeMarkdownLabel(String label) => label
+      .replaceAll(r'\', r'\\')
+      .replaceAll('[', r'\[')
+      .replaceAll(']', r'\]');
 }

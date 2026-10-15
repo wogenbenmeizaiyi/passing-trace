@@ -7,9 +7,10 @@ import '../theme/quiet_trace_components.dart';
 import '../theme/quiet_trace_icons.dart';
 
 class SettingsView extends StatelessWidget {
-  const SettingsView({super.key, required this.onSignOut});
+  const SettingsView({super.key, required this.onSignOut, this.onOpenProfile});
 
   final Future<void> Function() onSignOut;
+  final VoidCallback? onOpenProfile;
 
   @override
   Widget build(BuildContext context) {
@@ -27,6 +28,17 @@ class SettingsView extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 24, 20, 40),
         children: [
+          if (onOpenProfile != null) ...[
+            const _SectionLabel('个人资料'),
+            const SizedBox(height: 8),
+            _SettingsRow(
+              leading: const TraceIcon(TraceGlyph.edit),
+              title: '用户中心',
+              subtitle: '头像、昵称与个人简介',
+              onTap: onOpenProfile!,
+            ),
+            const SizedBox(height: 28),
+          ],
           const _SectionLabel('外观'),
           const SizedBox(height: 8),
           _SettingsRow(

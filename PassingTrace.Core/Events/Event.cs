@@ -26,6 +26,7 @@ public sealed class Event
 
     /// <summary>当前 Source 的用户原始自然语言，AI 不得覆盖。</summary>
     public string? RawContent { get; set; }
+    public string SubjectIdsJson { get; set; } = "[]";
 
     /// <summary>当前 Source 的实际发生时间。</summary>
     public DateTimeOffset? HappenedAt { get; set; }
@@ -68,6 +69,7 @@ public sealed class Event
 
     /// <summary>当前 Source 使用的附件。</summary>
     public List<EventMediaAsset> MediaAssets { get; set; } = [];
+    public List<Social.EventParticipant> Participants { get; set; } = [];
 
     /// <summary>该 Event 的不可变语义分析历史。</summary>
     public List<EventSemanticRun> SemanticRuns { get; set; } = [];

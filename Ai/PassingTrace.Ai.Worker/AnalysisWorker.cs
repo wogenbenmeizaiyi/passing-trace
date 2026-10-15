@@ -1,8 +1,6 @@
-using Microsoft.EntityFrameworkCore;
 using PassingTrace.Core.Ai;
 using PassingTrace.Core.Media;
 using PassingTrace.Events.Api.Media;
-using PassingTrace.Infrastructure;
 
 namespace PassingTrace.Ai.Worker;
 
@@ -49,17 +47,11 @@ public sealed class AnalysisWorker(
     private async Task MaintainAsync(CancellationToken cancellationToken)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<TraceDbContext>();
+        var repository = scope.ServiceProvider.GetRequiredService<IAnalysisJobRepository>();
         var storage = scope.ServiceProvider.GetRequiredService<IObjectStorage>();
         var now = DateTimeOffset.UtcNow;
         var cutoff = now.AddHours(-24);
-        var orphans = await db.MediaAssets
-            .Include(x => x.EventLinks)
-            .Include(x => x.RevisionLinks)
-            .Where(x => x.DeletedAt == null && x.CreatedAt < cutoff &&
-                !x.EventLinks.Any() && !x.RevisionLinks.Any())
-            .Take(100)
-            .ToListAsync(cancellationToken);
+        var orphans = await repository.FindOrphanMediaAsync(cutoff, 100, cancellationToken);
         foreach (var asset in orphans)
         {
             try
@@ -88,54 +80,21 @@ public sealed class AnalysisWorker(
             }
         }
 
-        await db.AiMessages.Where(x => x.ExpiresAt != null && x.ExpiresAt < now)
-            .ExecuteDeleteAsync(cancellationToken);
-        await db.OutboxMessages.Where(x => x.Status == OutboxStatus.Completed && x.CompletedAt < now.AddDays(-30))
-            .ExecuteDeleteAsync(cancellationToken);
-        await db.SaveChangesAsync(cancellationToken);
+        await repository.PruneAsync(now, cancellationToken);
     }
 
     private async Task<Guid?> ClaimAsync(CancellationToken cancellationToken)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<TraceDbContext>();
-        var strategy = db.Database.CreateExecutionStrategy();
-        return await strategy.ExecuteAsync<Guid?>(async () =>
-        {
-            await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
-            var now = DateTimeOffset.UtcNow;
-            var message = await db.OutboxMessages
-                .FromSqlInterpolated($$"""
-                    SELECT * FROM outbox_message
-                    WHERE status = 1
-                      AND available_at <= {{now}}
-                      AND (lease_expires_at IS NULL OR lease_expires_at < {{now}})
-                    ORDER BY priority DESC, created_at
-                    FOR UPDATE SKIP LOCKED
-                    LIMIT 1
-                    """)
-                .FirstOrDefaultAsync(cancellationToken);
-            if (message is null)
-            {
-                await transaction.CommitAsync(cancellationToken);
-                return (Guid?)null;
-            }
-
-            message.Status = OutboxStatus.Processing;
-            message.LeaseOwner = _leaseOwner;
-            message.LeaseExpiresAt = now.AddMinutes(10);
-            message.Attempts++;
-            await db.SaveChangesAsync(cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
-            return message.Id;
-        });
+        var repository = scope.ServiceProvider.GetRequiredService<IAnalysisJobRepository>();
+        return await repository.ClaimAsync(_leaseOwner, DateTimeOffset.UtcNow, TimeSpan.FromMinutes(10), cancellationToken);
     }
 
     private async Task ProcessAsync(Guid id, CancellationToken cancellationToken)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<TraceDbContext>();
-        var message = await db.OutboxMessages.FirstAsync(x => x.Id == id, cancellationToken);
+        var repository = scope.ServiceProvider.GetRequiredService<IAnalysisJobRepository>();
+        var message = await repository.FindAsync(id, cancellationToken);
         try
         {
             var pipeline = scope.ServiceProvider.GetRequiredService<SemanticPipeline>();
@@ -164,7 +123,7 @@ public sealed class AnalysisWorker(
             message.CompletedAt = DateTimeOffset.UtcNow;
             message.LeaseOwner = null;
             message.LeaseExpiresAt = null;
-            await db.SaveChangesAsync(cancellationToken);
+            await repository.SaveChangesAsync(cancellationToken);
         }
         catch (Exception exception)
         {
@@ -181,7 +140,7 @@ public sealed class AnalysisWorker(
                 message.Status = OutboxStatus.Pending;
                 message.AvailableAt = DateTimeOffset.UtcNow.AddSeconds(Math.Pow(3, message.Attempts));
             }
-            await db.SaveChangesAsync(cancellationToken);
+            await repository.SaveChangesAsync(cancellationToken);
         }
     }
 
@@ -190,30 +149,8 @@ public sealed class AnalysisWorker(
         try
         {
             await using var scope = scopeFactory.CreateAsyncScope();
-            var db = scope.ServiceProvider.GetRequiredService<TraceDbContext>();
-            var existing = await db.OutboxMessages
-                .Where(x => x.EventId != null && x.MessageType == "event.analyze")
-                .Select(x => new { x.EventId, x.SourceRevision })
-                .ToListAsync(cancellationToken);
-            var keys = existing.Select(x => (x.EventId!.Value, x.SourceRevision!.Value)).ToHashSet();
-            var events = await db.Events.AsNoTracking().Where(x => x.DeletedAt == null).ToListAsync(cancellationToken);
-            var now = DateTimeOffset.UtcNow;
-            foreach (var evt in events.Where(x => !keys.Contains((x.Id, x.CurrentSourceRevision))))
-            {
-                db.OutboxMessages.Add(new OutboxMessage
-                {
-                    Id = Guid.NewGuid(),
-                    UserId = evt.UserId,
-                    MessageType = "event.analyze",
-                    EventId = evt.Id,
-                    SourceRevision = evt.CurrentSourceRevision,
-                    Priority = 10,
-                    Status = OutboxStatus.Pending,
-                    AvailableAt = now,
-                    CreatedAt = now,
-                });
-            }
-            await db.SaveChangesAsync(cancellationToken);
+            var repository = scope.ServiceProvider.GetRequiredService<IAnalysisJobRepository>();
+            await repository.BackfillAsync(DateTimeOffset.UtcNow, cancellationToken);
         }
         catch (Exception exception)
         {

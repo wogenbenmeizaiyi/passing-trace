@@ -7,6 +7,11 @@ import { eventsApi } from '@/api/events'
 import { EventKind, EventStatus, EventVisibility, type EventResponse } from '@/api/events-types'
 import { useAuthStore } from '@/stores/auth'
 import EventsListView from '@/views/EventsListView.vue'
+import FloatingFilters from '@/components/FloatingFilters.vue'
+vi.mock('vue-router', async (original) => ({
+  ...(await original<typeof import('vue-router')>()),
+  useRoute: () => ({ query: {} }),
+}))
 
 vi.mock('@/api/events', () => ({
   eventsApi: { list: vi.fn<typeof eventsApi.list>() },
@@ -38,7 +43,61 @@ function event(id: number, title: string, happenedAt: string): EventResponse {
 }
 
 describe('记录归档层级', () => {
+  it('记录来源在悬浮筛选中，切换共同记录后仍可切回个人时间线', async () => {
+    const wrapper = mount(EventsListView, {
+      global: {
+        stubs: {
+          WebAppHeader: true,
+          RouterLink: { props: ['to'], template: '<a><slot /></a>' },
+          JointRecordsList: true,
+        },
+      },
+    })
+    await flushPromises()
+    const filters = wrapper.getComponent(FloatingFilters)
+    expect(wrapper.find('.record-scope').exists()).toBe(false)
+    filters.vm.$emit('apply', { scope: 'joint', kind: '', status: '' })
+    await flushPromises()
+    expect(wrapper.findComponent({ name: 'JointRecordsList' }).exists()).toBe(true)
+    expect(wrapper.find('.archive-nav').exists()).toBe(false)
+    expect(wrapper.find('.records-content').exists()).toBe(false)
+    filters.vm.$emit('apply', { scope: 'own', kind: '', status: '' })
+    await flushPromises()
+    expect(wrapper.find('.archive-nav').exists()).toBe(true)
+    expect(wrapper.text()).toContain('九月记录')
+    wrapper.unmount()
+  })
+  it('组合日期分类与标签传给服务端，而非仅过滤已加载记录', async () => {
+    const wrapper = mount(EventsListView, {
+      global: { stubs: { WebAppHeader: true, RouterLink: true } },
+    })
+    await flushPromises()
+    wrapper.getComponent(FloatingFilters).vm.$emit('apply', {
+      scope: 'own',
+      kind: String(EventKind.Trace),
+      status: String(EventStatus.Completed),
+      from: '2026-09-01',
+      to: '2026-09-23',
+      category: 'food',
+      tags: ['dining', 'friends'],
+    })
+    await flushPromises()
+    expect(eventsApi.list).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        kind: EventKind.Trace,
+        status: EventStatus.Completed,
+        categoryKey: 'food',
+        tagKeys: ['dining', 'friends'],
+        from: new Date('2026-09-01T00:00:00').toISOString(),
+        to: new Date('2026-09-23T23:59:59.999').toISOString(),
+        cursor: undefined,
+      }),
+      expect.anything(),
+    )
+    wrapper.unmount()
+  })
   beforeEach(() => {
+    vi.clearAllMocks()
     setActivePinia(createPinia())
     useAuthStore().user = {
       access_token: 'token',
@@ -82,5 +141,37 @@ describe('记录归档层级', () => {
     expect(olderMonth.attributes('aria-expanded')).toBe('false')
     await olderMonth.trigger('click')
     expect(wrapper.text()).toContain('去年记录')
+  })
+
+  it('月份快捷入口展开对应年份和月份并聚焦标题', async () => {
+    const scrollIntoView = vi.fn<HTMLElement['scrollIntoView']>()
+    const original = HTMLElement.prototype.scrollIntoView
+    HTMLElement.prototype.scrollIntoView = scrollIntoView
+    const wrapper = mount(EventsListView, {
+      attachTo: document.body,
+      global: {
+        stubs: {
+          WebAppHeader: true,
+          RouterLink: { props: ['to'], template: '<a :href="to"><slot /></a>' },
+        },
+      },
+    })
+    try {
+      await flushPromises()
+      expect(wrapper.text()).not.toContain('去年记录')
+      await wrapper
+        .get('nav[aria-label="按月份查找记录"] button[aria-label="查看2025年12 月记录"]')
+        .trigger('click')
+      await flushPromises()
+      expect(wrapper.text()).toContain('去年记录')
+      const heading = wrapper.get('#archive-2025-12')
+      expect(heading.attributes('aria-expanded')).toBe('true')
+      expect(document.activeElement).toBe(heading.element)
+      expect(scrollIntoView).toHaveBeenCalledWith({ block: 'start' })
+      expect(eventsApi.list).toHaveBeenCalledTimes(1)
+    } finally {
+      wrapper.unmount()
+      HTMLElement.prototype.scrollIntoView = original
+    }
   })
 })

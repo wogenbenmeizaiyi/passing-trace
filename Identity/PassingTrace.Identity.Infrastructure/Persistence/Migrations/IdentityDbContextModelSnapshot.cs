@@ -399,10 +399,6 @@ namespace PassingTrace.Identity.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset>("ExpiresAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<string>("RequestHash")
-                        .HasMaxLength(43)
-                        .HasColumnType("character varying(43)");
-
                     b.Property<string>("Nonce")
                         .HasMaxLength(512)
                         .HasColumnType("character varying(512)");
@@ -415,6 +411,10 @@ namespace PassingTrace.Identity.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(512)
                         .HasColumnType("character varying(512)");
+
+                    b.Property<string>("RequestHash")
+                        .HasMaxLength(43)
+                        .HasColumnType("character varying(43)");
 
                     b.Property<string>("State")
                         .HasMaxLength(512)
@@ -571,6 +571,16 @@ namespace PassingTrace.Identity.Infrastructure.Persistence.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("access_failed_count");
 
+                    b.Property<string>("AvatarKey")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("avatar_key");
+
+                    b.Property<string>("Bio")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)")
+                        .HasColumnName("bio");
+
                     b.Property<string>("ConcurrencyStamp")
                         .IsConcurrencyToken()
                         .HasColumnType("text")
@@ -589,6 +599,12 @@ namespace PassingTrace.Identity.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("email_confirmed");
 
+                    b.Property<string>("FriendCode")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("friend_code");
+
                     b.Property<DateTimeOffset?>("LastLoginAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("last_login_at");
@@ -600,6 +616,11 @@ namespace PassingTrace.Identity.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset?>("LockoutEnd")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("lockout_end");
+
+                    b.Property<string>("Nickname")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("nickname");
 
                     b.Property<string>("NormalizedEmail")
                         .HasMaxLength(256)
@@ -625,6 +646,11 @@ namespace PassingTrace.Identity.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("phone_number_confirmed");
 
+                    b.Property<Guid>("ProfileVersion")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid")
+                        .HasColumnName("profile_version");
+
                     b.Property<string>("SecurityStamp")
                         .HasColumnType("text")
                         .HasColumnName("security_stamp");
@@ -648,6 +674,9 @@ namespace PassingTrace.Identity.Infrastructure.Persistence.Migrations
                         .HasColumnName("username");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("FriendCode")
+                        .IsUnique();
 
                     b.HasIndex("NormalizedEmail")
                         .HasDatabaseName("EmailIndex");

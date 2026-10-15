@@ -27,11 +27,27 @@ class DeviceLocation {
     required this.longitude,
     required this.accuracyMeters,
     required this.capturedAt,
+    this.coordinateSystem = 'GCJ02',
   });
   final double latitude;
   final double longitude;
   final double accuracyMeters;
   final DateTime capturedAt;
+  final String coordinateSystem;
+
+  bool get isFresh {
+    final now = DateTime.now().toUtc();
+    return !capturedAt.isBefore(now.subtract(const Duration(minutes: 5))) &&
+        !capturedAt.isAfter(now.add(const Duration(minutes: 1)));
+  }
+
+  Map<String, dynamic> toAssistantJson() => {
+    'latitude': latitude,
+    'longitude': longitude,
+    'accuracyMeters': accuracyMeters,
+    'capturedAt': capturedAt.toUtc().toIso8601String(),
+    'coordinateSystem': coordinateSystem,
+  };
 }
 
 class MapPoint {
@@ -60,6 +76,7 @@ class AmapLocationService {
         (raw['capturedAt'] as num).toInt(),
         isUtc: true,
       ),
+      coordinateSystem: raw['coordinateSystem'] as String? ?? 'GCJ02',
     );
   }
 
